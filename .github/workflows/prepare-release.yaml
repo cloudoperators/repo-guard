@@ -1,0 +1,47 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version (e.g., 1.5.1)'
+        required: true
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Update versions in Chart.yaml and Makefile
+        run: |
+          NEW_VERSION=${{ github.event.inputs.version }}
+          sed -i "s/^version: .*/version: $NEW_VERSION/" charts/repo-guard/Chart.yaml
+          sed -i "s/^appVersion: .*/appVersion: \"$NEW_VERSION\"/" charts/repo-guard/Chart.yaml
+          sed -i "s|^IMG ?= \(.*\):.*|IMG ?= \1:$NEW_VERSION|" Makefile
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION=${{ github.event.inputs.version }}
+          BRANCH_NAME="release-$NEW_VERSION"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout -b "$BRANCH_NAME"
+          git add charts/repo-guard/Chart.yaml Makefile
+          git commit -m "Prepare release $NEW_VERSION"
+          git push origin "$BRANCH_NAME"
+          
+          gh pr create \
+            --title "Prepare release $NEW_VERSION" \
+            --body "Automated version bump to $NEW_VERSION for release." \
+            --head "$BRANCH_NAME" \
+            --base main

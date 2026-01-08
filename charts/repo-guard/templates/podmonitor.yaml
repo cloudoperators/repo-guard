@@ -1,0 +1,29 @@
+{{- if and .Values.manager.enabled .Values.monitoring.podMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "repo-guard.fullname" . }}-manager
+  labels:
+    app.kubernetes.io/name: {{ include "repo-guard.name" . }}
+    helm.sh/chart: {{ include "repo-guard.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    {{- with .Values.monitoring.podMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      {{- include "repo-guard.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+      {{- with .Values.monitoring.podMonitor.interval }}
+      interval: {{ . | quote }}
+      {{- end }}
+      {{- with .Values.monitoring.podMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . | quote }}
+      {{- end }}
+{{- end }}

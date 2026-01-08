@@ -1,0 +1,27 @@
+# permissions for end users to view githubteamrepositories.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: githubteamrepository-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: github-guard-greenhouse
+    app.kubernetes.io/part-of: github-guard-greenhouse
+    app.kubernetes.io/managed-by: kustomize
+  name: githubteamrepository-viewer-role
+rules:
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - githubteamrepositories
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - githubteamrepositories/status
+  verbs:
+  - get

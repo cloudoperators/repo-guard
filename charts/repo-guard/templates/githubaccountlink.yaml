@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+{{- range $githubKey, $githubItem := .Values.githubs }}
+    {{- if $githubItem.githubAccountLinks }}
+      {{- /* Build per-org email check configuration map for all orgs under this GitHub */ -}}
+      {{- $emailCfgByOrg := dict -}}
+      {{- if $githubItem.organizations -}}
+        {{- range $oidx, $org := $githubItem.organizations -}}
+          {{- if and $org.githubAccountLinkEmailCheck (or ($org.githubAccountLinkEmailCheck.domain) ($org.githubAccountLinkEmailCheck.enabled) ($org.githubAccountLinkEmailCheck.ttl)) -}}
+            {{- $entry := dict -}}
+            {{- if $org.githubAccountLinkEmailCheck.domain -}}
+              {{- $_ := set $entry "domain" $org.githubAccountLinkEmailCheck.domain -}}
+            {{- end -}}
+            {{- if hasKey $org.githubAccountLinkEmailCheck "enabled" -}}
+              {{- $_ := set $entry "enabled" ($org.githubAccountLinkEmailCheck.enabled | default false) -}}
+            {{- else -}}
+              {{- $_ := set $entry "enabled" false -}}
+            {{- end -}}
+            {{- if $org.githubAccountLinkEmailCheck.ttl -}}
+              {{- $_ := set $entry "ttl" $org.githubAccountLinkEmailCheck.ttl -}}
+            {{- end -}}
+            {{- /* key by organization name */ -}}
+            {{- $_ := set $emailCfgByOrg $org.organization $entry -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{- range $uidx, $user := $githubItem.githubAccountLinks }}
+apiVersion: githubguard.sap/v1
+kind: GithubAccountLink
+metadata:
+  name: {{ $githubKey | lower }}--{{ $user.userID | lower }}
+  {{- $hasCfg := gt (len $emailCfgByOrg) 0 -}}
+  {{- if $hasCfg }}
+  annotations:
+    githubguard.sap/email-check-config: {{ toJson $emailCfgByOrg | quote }}
+  {{- end }}
+spec:
+  github: {{ $githubKey | lower }}
+  githubUserID: {{ $user.githubID | int64 | quote }}
+  userID: {{ $user.userID }}
+---
+      {{- end }}
+    {{- end }}
+{{- end }}

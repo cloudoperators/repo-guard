@@ -1,0 +1,152 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+manager:
+  enabled: true
+  image:
+      repository: ghcr.io/cloudoperators/repo-guard
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  replicas: 1
+
+## Global TTL defaults used by templates when org/team-specific overrides are not provided
+ttl:
+  team:
+    failed: "24h"
+    notfound: "24h"
+    skipped: "24h"
+    completed: "72h"
+  organization:
+    failed: "24h"
+    completed: "72h"
+
+monitoring:
+  # When enabled, install PrometheusRule alerts for the controller
+  enabled: true
+  # Default severity label for all rules in this chart (info by default)
+  severity: info
+  podMonitor:
+    enabled: true
+    # Optional scrape settings
+    interval: 30s
+    scrapeTimeout: 10s
+    # Additional labels to put on the PodMonitor resource
+    # Default includes the kube-monitoring plugin label as requested
+    additionalLabels:
+      plugin: kube-monitoring
+
+## Resources to be managed by the plugin
+
+# ldap:
+#  name: 
+#  host: 
+#  baseDN: 
+#  bindDN: 
+#  bindPW:
+
+# genericExternalMemberProviders:
+#  - name: 
+#    endpoint: 
+#    username:
+#    password:
+#    # below fields are optional, depending on provider response shape
+#    idField: id
+#    resultsField: results
+#    paginated: false
+#    pageParam: page
+#    totalPagesField: total_pages
+#    testConnectionURL:
+
+# staticMemberProviders:
+#  - name: 
+#    groups:
+#      - group: 
+#        members:
+#          - user1
+#          - user2
+
+# githubs:
+#  enterprise:
+#    webURL: 
+#    v3APIURL: 
+#    integrationID: 
+#    clientID:
+#    clientSecret: 
+#    privateKey: 
+#    
+#    githubAccountLinks:
+#    - userID: 
+#      githubUsername:
+#      githubID:
+
+#    organizations:
+#      - organization:
+#        installationID:
+#        # TTL overrides applied to this organization and all its teams
+#        # If omitted, chart-wide defaults in .Values.ttl are used.
+#        ttl:
+#          failed: 24h        # overrides ttl.team.failed and ttl.organization.failed where applicable
+#          notfound: 24h      # overrides ttl.team.notfound
+#          completed: 72h     # overrides ttl.team.completed and ttl.organization.completed where applicable
+#        addTeam:  
+#        removeTeam:  
+#        addOrganizationOwner:  
+#        removeOrganizationOwner:  
+#        addRepositoryTeam: 
+#        removeRepositoryTeam:  
+#        dryRun:  
+#        disableInternalUsernames:  
+#        # GithubAccountLink email verification settings applied to all GALs
+#        # associated with this GitHub (organization-level policy).
+#        # When set, the Helm chart will populate a JSON annotation on each
+#        # GithubAccountLink containing per-organization config entries:
+#        #   githubguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
+#        # The controller will write results into:
+#        #   githubguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","verified":true,"timestamp":"..."} }'
+#        githubAccountLinkEmailCheck:
+#          # Domain to require for verified email, e.g., example.com
+#          domain: ""
+#          # Whether to actively check email verification status
+#          enabled: false
+#          # Optional TTL for re-checking email status
+#          ttl: ""
+
+#        defaultPublicRepositoryTeams:  
+#        - team:
+#          permission:
+#       
+#        defaultPrivateRepositoryTeams: 
+#        - team:
+#          permission:
+#    
+#        organizationOwnerTeams:
+#          -
+
+#        teams:
+#        - name:  
+#          greenhouseTeam:
+#          # ldap group example referencing top-level ldap provider name:
+#          # ldapGroup: cn=my-group,ou=groups,dc=example,dc=org
+#          # ldap object example allowing provider override:
+#          # ldap:
+#          #   provider: corp-ldap   # defaults to .Values.ldap.name if omitted
+#          #   group: cn=my-group,ou=groups,dc=example,dc=org
+#          # generic http example:
+#          # genericHTTP:
+#          #   provider: my-http-provider  # must match an entry in genericExternalMemberProviders.name
+#          #   group: engineers
+#          # static example:
+#          # static:
+#          #   provider: my-static-provider # must match an entry in staticMemberProviders.name
+#          #   group: team-a
+
+#        teamRepositoryAssignments:
+#          - team: 
+#            repositories:
+#             - 
+#            permission: 

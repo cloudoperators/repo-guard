@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: github-guard-greenhouse-e2e
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: golangci-lint
+        run: make lint
+
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+      - name: Run Controller Tests
+        env:
+          TEST_GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
+          TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
+          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          TEST_GITHUB_INTEGRATION_ID: 420328
+          TEST_ORGANIZATION: greenhouse-sandbox
+          TEST_LDAP_GROUP_PROVIDER_HOST: "ldap://localhost:389"
+          TEST_LDAP_GROUP_PROVIDER_BASE_DN: "DC=ad,DC=global"
+          TEST_LDAP_GROUP_PROVIDER_BIND_DN: "CN=ldap-service,CN=Users,DC=ad,DC=global"
+          TEST_LDAP_GROUP_PROVIDER_BIND_PW: randompassword
+        run: make controller-test
+
+  e2e:
+    needs: test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+      - name: Setup E2E Prerequisites (k3d, kubectl, helm, jq)
+        run: |
+          # Install k3d
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          
+          # kubectl, helm, and jq should now be in /usr/local/bin
+          kubectl version --client
+          helm version
+          jq --version
+          
+          echo "/usr/local/bin" >> $GITHUB_PATH
+      - name: Update test.env with secrets
+        env:
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
+        run: |
+          sed -i 's/^GITHUB_TOKEN=.*/GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}/' internal/controller/test.env
+          sed -i 's/^GITHUB_CLIENT_ID=.*/GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}/' internal/controller/test.env
+          sed -i 's/^GITHUB_CLIENT_SECRET=.*/GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}/' internal/controller/test.env
+          
+          # For private key, it might span multiple lines, so we use a temporary file to append it safely.
+          echo "TEST_GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}" >> internal/controller/test.env
+          echo "TEST_GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}" >> internal/controller/test.env
+          echo "TEST_GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}" >> internal/controller/test.env
+          
+          echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
+          echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
+          echo "EOF" >> internal/controller/test.env
+      - name: Run E2E Tests
+        run: |
+          make e2e
+      - name: Cleanup E2E
+        if: always()
+        run: make e2e-down e2e-github-cleanup

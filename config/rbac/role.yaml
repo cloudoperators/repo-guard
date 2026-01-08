@@ -1,0 +1,64 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - genericexternalmemberproviders
+  - staticmemberproviders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - genericexternalmemberproviders/finalizers
+  - githuborganizations/finalizers
+  - staticmemberproviders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - genericexternalmemberproviders/status
+  - githuborganizations/status
+  - staticmemberproviders/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - githubaccountlinks
+  - githubteamrepositories
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - githubguard.sap
+  resources:
+  - githuborganizations
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch

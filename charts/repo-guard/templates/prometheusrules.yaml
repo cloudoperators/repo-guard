@@ -1,0 +1,97 @@
+{{- if and .Values.manager.enabled .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "repo-guard.fullname" . }}-rules
+  labels:
+    app.kubernetes.io/name: {{ include "repo-guard.name" . }}
+    helm.sh/chart: {{ include "repo-guard.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  groups:
+  - name: github-guard.controller
+    rules:
+    - alert: GithubGuardControllerHighErrorRate
+      expr: |
+        (sum by (controller) (increase(repo_guard_controller_reconcile_total{result="error"}[10m]))
+          /
+         sum by (controller) (increase(repo_guard_controller_reconcile_total[10m])))
+        > 0.05
+      for: 10m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: High reconcile error rate in controller {{ `{{ $labels.controller }}` }}
+        description: >-
+          Error rate for {{ `{{ $labels.controller }}` }} exceeds 5% in the last 10 minutes.
+
+    - alert: GithubGuardControllerVeryHighErrorRate
+      expr: |
+        (sum by (controller) (increase(repo_guard_controller_reconcile_total{result="error"}[10m]))
+          /
+         sum by (controller) (increase(repo_guard_controller_reconcile_total[10m])))
+        > 0.15
+      for: 10m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: Very high reconcile error rate in controller {{ `{{ $labels.controller }}` }}
+        description: >-
+          Error rate for {{ `{{ $labels.controller }}` }} exceeds 15% in the last 10 minutes.
+
+    - alert: GithubGuardControllerSlowReconcileP95
+      expr: |
+        histogram_quantile(
+          0.95,
+          sum by (controller, le) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[10m]))
+        ) > 10
+      for: 15m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: Slow reconciliations (p95) in controller {{ `{{ $labels.controller }}` }}
+        description: >-
+          95th percentile reconciliation duration exceeds 10s over the last 15 minutes.
+
+    - alert: GithubGuardControllerNoReconciles
+      expr: |
+        sum by (controller) (increase(repo_guard_controller_reconcile_total[30m])) == 0
+      for: 30m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: No reconciles observed for controller {{ `{{ $labels.controller }}` }}
+        description: >-
+          No reconcile activity detected for {{ `{{ $labels.controller }}` }} in the last 30 minutes.
+
+  - name: github-guard.external
+    rules:
+    - alert: GithubGuardExternalAPIHighErrorRate
+      expr: |
+        (sum by (provider, operation) (increase(repo_guard_external_api_requests_total{status!~"2.."}[10m]))
+          /
+         sum by (provider, operation) (increase(repo_guard_external_api_requests_total[10m])))
+        > 0.1
+      for: 15m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: High error rate calling {{ `{{ $labels.provider }}` }} {{ `{{ $labels.operation }}` }}
+        description: >-
+          Non-2xx error rate exceeds 10% over the last 15 minutes.
+
+    - alert: GithubGuardExternalAPISlowP95
+      expr: |
+        histogram_quantile(
+          0.95,
+          sum by (provider, operation, le) (rate(repo_guard_external_api_request_duration_seconds_bucket[10m]))
+        ) > 5
+      for: 15m
+      labels:
+        severity: {{ .Values.monitoring.severity | default "info" | quote }}
+      annotations:
+        summary: External API slow (p95) for {{ `{{ $labels.provider }}` }} {{ `{{ $labels.operation }}` }}
+        description: >-
+          95th percentile request duration exceeds 5s over the last 15 minutes.
+{{- end }}
