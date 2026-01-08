@@ -10,7 +10,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba
 	github.com/onsi/ginkgo/v2 v2.27.3
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/gomega v1.39.0
 	github.com/palantir/go-githubapp v0.40.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
