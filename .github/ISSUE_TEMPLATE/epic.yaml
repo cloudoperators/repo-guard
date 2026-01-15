@@ -1,6 +1,6 @@
 name: ✨ Epic
 description: Create an epic
-title: "[EPIC] - <title>"
+title: "[EPIC repo-guard] - <title>"
 body:
   - type: textarea
     id: description
