@@ -27,7 +27,7 @@ jobs:
 
       - name: Create Pull Request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_GH_TOKEN_PR }}
         run: |
           NEW_VERSION=${{ github.event.inputs.version }}
           BRANCH_NAME="release-$NEW_VERSION"
