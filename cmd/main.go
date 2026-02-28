@@ -28,7 +28,7 @@ import (
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
 
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	"github.com/cloudoperators/repo-guard/internal/controller"
 	//+kubebuilder:scaffold:imports
 )
@@ -42,7 +42,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(greenhousesapv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(githubguardsapv1.AddToScheme(scheme))
+	utilruntime.Must(repoguardsapv1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }
@@ -63,19 +63,28 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	if os.Getenv("POD_NAMESPACE") != "" {
+		controller.OperatorNamespace = os.Getenv("POD_NAMESPACE")
+	}
+
 	resyncPeriod := time.Duration(15 * time.Minute)
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgrOpts := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
-			DefaultNamespaces: map[string]cache.Config{currentNamespace: cache.Config{}},
-			SyncPeriod:        &resyncPeriod,
+			SyncPeriod: &resyncPeriod,
 		},
 		// Bind metrics server to the address provided via flag
 		Metrics: server.Options{BindAddress: metricsAddr},
 
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         false,
-	})
+	}
+
+	if currentNamespace != "" {
+		mgrOpts.Cache.DefaultNamespaces = map[string]cache.Config{currentNamespace: cache.Config{}}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -111,6 +120,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LDAPGroupProvider")
 		os.Exit(1)
 	}
+	if err = (&controller.ClusterLDAPGroupProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterLDAPGroupProvider")
+		os.Exit(1)
+	}
 	if err = (&controller.GithubAccountLinkReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -125,11 +141,25 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GenericExternalMemberProvider")
 		os.Exit(1)
 	}
+	if err = (&controller.ClusterGenericExternalMemberProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterGenericExternalMemberProvider")
+		os.Exit(1)
+	}
 	if err = (&controller.StaticMemberProviderReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StaticMemberProvider")
+		os.Exit(1)
+	}
+	if err = (&controller.ClusterStaticMemberProviderReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ClusterStaticMemberProvider")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
