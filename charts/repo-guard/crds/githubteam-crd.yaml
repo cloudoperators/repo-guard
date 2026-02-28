@@ -6,9 +6,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: githubteams.githubguard.sap
+  name: githubteams.repoguard.sap
 spec:
-  group: githubguard.sap
+  group: repoguard.sap
   names:
     kind: GithubTeam
     listKind: GithubTeamList
@@ -63,12 +63,16 @@ spec:
                     properties:
                       group:
                         type: string
+                      kind:
+                        type: string
                       provider:
                         type: string
                     type: object
                   ldap:
                     properties:
                       group:
+                        type: string
+                      kind:
                         type: string
                       provider:
                         type: string
@@ -83,6 +87,8 @@ spec:
                   static:
                     properties:
                       group:
+                        type: string
+                      kind:
                         type: string
                       provider:
                         type: string

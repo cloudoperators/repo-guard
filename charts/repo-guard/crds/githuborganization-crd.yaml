@@ -6,9 +6,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: githuborganizations.githubguard.sap
+  name: githuborganizations.repoguard.sap
 spec:
-  group: githubguard.sap
+  group: repoguard.sap
   names:
     kind: GithubOrganization
     listKind: GithubOrganizationList

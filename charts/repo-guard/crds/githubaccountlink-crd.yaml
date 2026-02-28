@@ -6,15 +6,15 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: githubaccountlinks.githubguard.sap
+  name: githubaccountlinks.repoguard.sap
 spec:
-  group: githubguard.sap
+  group: repoguard.sap
   names:
     kind: GithubAccountLink
     listKind: GithubAccountLinkList
     plural: githubaccountlinks
     singular: githubaccountlink
-  scope: Namespaced
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.github
