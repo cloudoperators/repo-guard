@@ -30,6 +30,7 @@ type ExternalMemberProviderConfig struct {
 }
 
 type GenericProvider struct {
+	Kind                   string `json:"kind,omitempty"`
 	ExternalMemberProvider string `json:"provider,omitempty"`
 	Group                  string `json:"group,omitempty"`
 }

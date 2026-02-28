@@ -44,4 +44,26 @@ type StaticMemberProviderList struct {
 
 func init() {
 	SchemeBuilder.Register(&StaticMemberProvider{}, &StaticMemberProviderList{})
+	SchemeBuilder.Register(&ClusterStaticMemberProvider{}, &ClusterStaticMemberProviderList{})
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+
+// ClusterStaticMemberProvider provides static members by group (cluster-wide)
+type ClusterStaticMemberProvider struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   StaticMemberProviderSpec   `json:"spec,omitempty"`
+	Status StaticMemberProviderStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+type ClusterStaticMemberProviderList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []ClusterStaticMemberProvider `json:"items"`
 }

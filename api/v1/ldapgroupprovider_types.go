@@ -57,4 +57,29 @@ type LDAPGroupProviderList struct {
 
 func init() {
 	SchemeBuilder.Register(&LDAPGroupProvider{}, &LDAPGroupProviderList{})
+	SchemeBuilder.Register(&ClusterLDAPGroupProvider{}, &ClusterLDAPGroupProviderList{})
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Last Change",type="date",JSONPath=".status.timestamp"
+
+// ClusterLDAPGroupProvider is the Schema for the clusterldapgroupproviders API
+type ClusterLDAPGroupProvider struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   LDAPGroupProviderSpec   `json:"spec,omitempty"`
+	Status LDAPGroupProviderStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// ClusterLDAPGroupProviderList contains a list of ClusterLDAPGroupProvider
+type ClusterLDAPGroupProviderList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []ClusterLDAPGroupProvider `json:"items"`
 }

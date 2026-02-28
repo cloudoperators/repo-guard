@@ -7,7 +7,7 @@ Copyright 2023 cc.
 
 // Package v1 contains API Schema definitions for the  v1 API group
 // +kubebuilder:object:generate=true
-// +groupName=githubguard.sap
+// +groupName=repoguard.sap
 package v1
 
 import (
@@ -17,7 +17,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects
-	GroupVersion = schema.GroupVersion{Group: "githubguard.sap", Version: "v1"}
+	GroupVersion = schema.GroupVersion{Group: "repoguard.sap", Version: "v1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
