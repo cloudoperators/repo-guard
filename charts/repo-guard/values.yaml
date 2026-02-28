@@ -42,15 +42,17 @@ monitoring:
 
 ## Resources to be managed by the plugin
 
-# ldap:
-#  name: 
-#  host: 
-#  baseDN: 
-#  bindDN: 
-#  bindPW:
+# ldaps:
+#  - name: 
+#    clusterScoped: true
+#    host: 
+#    baseDN: 
+#    bindDN: 
+#    bindPW:
 
 # genericExternalMemberProviders:
 #  - name: 
+#    clusterScoped: true
 #    endpoint: 
 #    username:
 #    password:
@@ -64,6 +66,7 @@ monitoring:
 
 # staticMemberProviders:
 #  - name: 
+#    clusterScoped: true
 #    groups:
 #      - group: 
 #        members:
@@ -105,9 +108,9 @@ monitoring:
 #        # associated with this GitHub (organization-level policy).
 #        # When set, the Helm chart will populate a JSON annotation on each
 #        # GithubAccountLink containing per-organization config entries:
-#        #   githubguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
+#        #   repoguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
 #        # The controller will write results into:
-#        #   githubguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","verified":true,"timestamp":"..."} }'
+#        #   repoguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","verified":true,"timestamp":"..."} }'
 #        githubAccountLinkEmailCheck:
 #          # Domain to require for verified email, e.g., example.com
 #          domain: ""
@@ -134,7 +137,7 @@ monitoring:
 #          # ldapGroup: cn=my-group,ou=groups,dc=example,dc=org
 #          # ldap object example allowing provider override:
 #          # ldap:
-#          #   provider: corp-ldap   # defaults to .Values.ldap.name if omitted
+#          #   provider: corp-ldap   # defaults to .Values.ldaps[0].name if omitted
 #          #   group: cn=my-group,ou=groups,dc=example,dc=org
 #          # generic http example:
 #          # genericHTTP:

@@ -3,8 +3,8 @@
 
 {{- if .Values.staticMemberProviders }}
 {{- range $idx, $smp := .Values.staticMemberProviders }}
-apiVersion: githubguard.sap/v1
-kind: StaticMemberProvider
+apiVersion: repoguard.sap/v1
+kind: {{ if $smp.clusterScoped }}ClusterStaticMemberProvider{{ else }}StaticMemberProvider{{ end }}
 metadata:
   name: {{ $smp.name | required "staticMemberProviders[].name is required" }}
 spec:

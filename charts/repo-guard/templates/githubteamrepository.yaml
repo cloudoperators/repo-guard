@@ -6,7 +6,7 @@
     {{- range $idx, $org := $githubItem.organizations }}
       {{- if $org.teamRepositoryAssignments }}
         {{- range $ridx, $assign := $org.teamRepositoryAssignments }}
-apiVersion: githubguard.sap/v1
+apiVersion: repoguard.sap/v1
 kind: GithubTeamRepository
 metadata:
   name: {{ $githubKey }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $assign.team | replace "_" "-" | replace " " "-" | lower }}--{{ $assign.permission }}

@@ -3,23 +3,26 @@
 
 {{ if .Values.manager.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
   name: {{ include "repo-guard.fullname" . }}-manager-role
   labels:
   {{- include "repo-guard.labels" . | nindent 4 }}
 rules:
-  # Main githubguard resources with full CRUD-ish verbs
+  # Main repoguard resources with full CRUD-ish verbs
   - apiGroups:
-      - githubguard.sap
+      - repoguard.sap
     resources:
       - githuborganizations
       - githubs
       - githubteams
       - ldapgroupproviders
+      - clusterldapgroupproviders
       - githubaccountlinks
       - genericexternalmemberproviders
+      - clustergenericexternalmemberproviders
       - staticmemberproviders
+      - clusterstaticmemberproviders
     verbs:
       - get
       - list
@@ -29,35 +32,41 @@ rules:
 
   # Finalizers for those resources (update only)
   - apiGroups:
-      - githubguard.sap
+      - repoguard.sap
     resources:
       - githuborganizations/finalizers
       - githubs/finalizers
       - githubteams/finalizers
       - ldapgroupproviders/finalizers
+      - clusterldapgroupproviders/finalizers
       - genericexternalmemberproviders/finalizers
+      - clustergenericexternalmemberproviders/finalizers
       - staticmemberproviders/finalizers
+      - clusterstaticmemberproviders/finalizers
     verbs:
       - update
 
   # Status subresources
   - apiGroups:
-      - githubguard.sap
+      - repoguard.sap
     resources:
       - githuborganizations/status
       - githubs/status
       - githubteams/status
       - ldapgroupproviders/status
+      - clusterldapgroupproviders/status
       - genericexternalmemberproviders/status
+      - clustergenericexternalmemberproviders/status
       - staticmemberproviders/status
+      - clusterstaticmemberproviders/status
     verbs:
       - get
       - patch
       - update
 
-  # Read-only githubguard resources
+  # Read-only repoguard resources
   - apiGroups:
-      - githubguard.sap
+      - repoguard.sap
     resources:
       - githubteamrepositories
       - githubusernames
@@ -87,7 +96,7 @@ rules:
       - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: ClusterRoleBinding
 metadata:
   name: {{ include "repo-guard.fullname" . }}-manager-rolebinding
   labels:
@@ -97,7 +106,7 @@ metadata:
   {{- include "repo-guard.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: ClusterRole
   name: '{{ include "repo-guard.fullname" . }}-manager-role'
 subjects:
   - kind: ServiceAccount

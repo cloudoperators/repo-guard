@@ -26,14 +26,14 @@
         {{- end -}}
       {{- end -}}
       {{- range $uidx, $user := $githubItem.githubAccountLinks }}
-apiVersion: githubguard.sap/v1
+apiVersion: repoguard.sap/v1
 kind: GithubAccountLink
 metadata:
   name: {{ $githubKey | lower }}--{{ $user.userID | lower }}
   {{- $hasCfg := gt (len $emailCfgByOrg) 0 -}}
   {{- if $hasCfg }}
   annotations:
-    githubguard.sap/email-check-config: {{ toJson $emailCfgByOrg | quote }}
+    repoguard.sap/email-check-config: {{ toJson $emailCfgByOrg | quote }}
   {{- end }}
 spec:
   github: {{ $githubKey | lower }}

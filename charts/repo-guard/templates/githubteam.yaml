@@ -6,19 +6,19 @@
     {{- range $idx, $org := $githubItem.organizations }}
       {{- if $org.teams }}
         {{- range $tidx, $team := $org.teams }}
-apiVersion: githubguard.sap/v1
+apiVersion: repoguard.sap/v1
 kind: GithubTeam
 metadata:
   name: {{ $githubKey }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $team.name | replace "_" "-" | replace " " "-" | lower }}
   labels:
-    githubguard.sap/addUser: "{{ $team.addUsers | default "true" }}"
-    githubguard.sap/removeUser: "{{ $team.removeUsers | default "true" }}"
+    repoguard.sap/addUser: "{{ $team.addUsers | default "true" }}"
+    repoguard.sap/removeUser: "{{ $team.removeUsers | default "true" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
-    githubguard.sap/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.team.failed) }}"
-    githubguard.sap/notfoundTTL: "{{ ((get $ttl "notfound") | default $.Values.ttl.team.notfound) }}"
-    githubguard.sap/skippedTTL: "{{ ((get $ttl "skipped") | default $.Values.ttl.team.skipped) }}"
-    githubguard.sap/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.team.completed) }}"
+    repoguard.sap/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.team.failed) }}"
+    repoguard.sap/notfoundTTL: "{{ ((get $ttl "notfound") | default $.Values.ttl.team.notfound) }}"
+    repoguard.sap/skippedTTL: "{{ ((get $ttl "skipped") | default $.Values.ttl.team.skipped) }}"
+    repoguard.sap/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.team.completed) }}"
     {{- /* allow team-level override for disableInternalUsernames; fallback to org-level */ -}}
     {{- $teamDisable := false -}}
     {{- if hasKey $team "disableInternalUsernames" -}}
@@ -28,26 +28,28 @@ metadata:
     {{- end -}}
     {{- $disStr := printf "%v" $teamDisable -}}
     {{- if eq $disStr "true" }}
-    githubguard.sap/disableInternalUsernames: "true"
+    repoguard.sap/disableInternalUsernames: "true"
     {{- end }}
     {{- /* New: if org defines a required domain, set domain-valued label on all teams */ -}}
     {{- if and $org.githubAccountLinkEmailCheck $org.githubAccountLinkEmailCheck.domain }}
-    githubguard.sap/require-verified-domain-email: {{ $org.githubAccountLinkEmailCheck.domain | quote }}
+    repoguard.sap/require-verified-domain-email: {{ $org.githubAccountLinkEmailCheck.domain | quote }}
     {{- end }}
 spec:
   {{- if or $team.ldapGroup $team.ldap $team.genericHTTP $team.static }}
   externalMemberProvider:
     {{- if $team.ldapGroup }}
     ldapGroup:
-      ldapGroupProvider: "{{ $.Values.ldap.name }}"
+      {{- if $.Values.ldaps }}
+      ldapGroupProvider: "{{ (index $.Values.ldaps 0).name | default "ldap" }}"
+      {{- end }}
       group: {{ $team.ldapGroup }}
     {{- end }}
     {{- if $team.ldap }}
     ldap:
       {{- if $team.ldap.provider }}
       provider: {{ $team.ldap.provider }}
-      {{- else if $.Values.ldap.name }}
-      provider: "{{ $.Values.ldap.name }}"
+      {{- else if $.Values.ldaps }}
+      provider: "{{ (index $.Values.ldaps 0).name | default "ldap" }}"
       {{- end }}
       group: {{ $team.ldap.group }}
     {{- end }}

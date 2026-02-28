@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
   groups:
-  - name: github-guard.controller
+  - name: repo-guard.controller
     rules:
     - alert: GithubGuardControllerHighErrorRate
       expr: |
@@ -65,7 +65,7 @@ spec:
         description: >-
           No reconcile activity detected for {{ `{{ $labels.controller }}` }} in the last 30 minutes.
 
-  - name: github-guard.external
+  - name: repo-guard.external
     rules:
     - alert: GithubGuardExternalAPIHighErrorRate
       expr: |

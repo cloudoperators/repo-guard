@@ -4,26 +4,26 @@
 {{- range $githubKey, $githubItem := .Values.githubs }}
   {{- if $githubItem.organizations }}
     {{- range $idx, $org := $githubItem.organizations }}
-apiVersion: githubguard.sap/v1
+apiVersion: repoguard.sap/v1
 kind: GithubOrganization
 metadata:
   name: {{ $githubKey }}--{{ $org.organization | replace "/" "-" | lower }}
   labels:
-    githubguard.sap/addTeam: "{{ $org.addTeam | default "true" }}"
-    githubguard.sap/removeTeam: "{{ $org.removeTeam | default "true" }}"
-    githubguard.sap/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
-    githubguard.sap/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
-    githubguard.sap/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
-    githubguard.sap/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
-    githubguard.sap/dryRun: "{{ $org.dryRun | default "false" }}"
+    repoguard.sap/addTeam: "{{ $org.addTeam | default "true" }}"
+    repoguard.sap/removeTeam: "{{ $org.removeTeam | default "true" }}"
+    repoguard.sap/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
+    repoguard.sap/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
+    repoguard.sap/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
+    repoguard.sap/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
+    repoguard.sap/dryRun: "{{ $org.dryRun | default "false" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
-    githubguard.sap/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
-    githubguard.sap/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
+    repoguard.sap/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
+    repoguard.sap/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}
   {{- if $skipTeams }}
   annotations:
-    githubguard.sap/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
+    repoguard.sap/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
   {{- end }}
 spec:
   github: {{ $githubKey }}

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{- range $githubKey, $githubItem := .Values.githubs }}
-apiVersion: githubguard.sap/v1
+apiVersion: repoguard.sap/v1
 kind: Github
 metadata:
   name: {{ $githubKey | lower }}
