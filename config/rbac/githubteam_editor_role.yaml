@@ -15,7 +15,7 @@ metadata:
   name: githubteam-editor-role
 rules:
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githubteams
   verbs:
@@ -27,7 +27,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githubteams/status
   verbs:

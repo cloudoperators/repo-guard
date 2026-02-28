@@ -15,7 +15,7 @@ metadata:
   name: githuborganization-editor-role
 rules:
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githuborganizations
   verbs:
@@ -27,7 +27,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githuborganizations/status
   verbs:

@@ -1,6 +1,3 @@
-# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
-# SPDX-License-Identifier: Apache-2.0
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -16,8 +13,10 @@ rules:
   - list
   - watch
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
+  - clustergenericexternalmemberproviders
+  - clusterstaticmemberproviders
   - genericexternalmemberproviders
   - staticmemberproviders
   verbs:
@@ -29,16 +28,20 @@ rules:
   - update
   - watch
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
+  - clustergenericexternalmemberproviders/finalizers
+  - clusterstaticmemberproviders/finalizers
   - genericexternalmemberproviders/finalizers
   - githuborganizations/finalizers
   - staticmemberproviders/finalizers
   verbs:
   - update
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
+  - clustergenericexternalmemberproviders/status
+  - clusterstaticmemberproviders/status
   - genericexternalmemberproviders/status
   - githuborganizations/status
   - staticmemberproviders/status
@@ -47,16 +50,18 @@ rules:
   - patch
   - update
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githubaccountlinks
+  - githubs
   - githubteamrepositories
+  - githubteams
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - githubguard.sap
+  - repoguard.sap
   resources:
   - githuborganizations
   verbs:
