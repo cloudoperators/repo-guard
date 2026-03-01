@@ -12,7 +12,7 @@ import (
 
 	"github.com/gosimple/slug"
 
-	"github.com/google/go-github/v82/github"
+	"github.com/google/go-github/v83/github"
 )
 
 type TeamsProvider interface {

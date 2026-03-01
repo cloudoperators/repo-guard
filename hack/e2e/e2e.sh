@@ -277,7 +277,7 @@ build_import_dummy_emp_image() {
   local tmpdir
   tmpdir=$(mktemp -d)
   cat >"${tmpdir}/Dockerfile" <<'EOF'
-FROM --platform=$BUILDPLATFORM golang:1.25 as build
+FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/emp-http-server ./hack/emp-http-server
@@ -302,7 +302,7 @@ build_import_dummy_ldap_image() {
   local tmpdir
   tmpdir=$(mktemp -d)
   cat >"${tmpdir}/Dockerfile" <<'EOF'
-FROM --platform=$BUILDPLATFORM golang:1.25 as build
+FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/ldap-testserver ./hack/ldap-testserver
