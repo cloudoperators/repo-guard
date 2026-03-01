@@ -41,7 +41,7 @@ What the E2E does:
   - Sanitizes LDAP and HTTP credentials (removes literal backslashes by default)
   - Emits `githubAccountLinks` for LDAP/HTTP/Static/Owner/User3 mappings
   - Sets per-team `disableInternalUsernames` (LDAP team only) with org-level default false
-  - Adds `githubguard.sap/skippedTTL` label support via chart values
+  - Adds `repoguard.sap/skippedTTL` label support via chart values
   - Creates Greenhouse-backed teams for `TEAM_1`, `TEAM_2`, and the owner team
 - Pre-creates Greenhouse `Team` CRs for `TEAM_1`, `TEAM_2`, and the owner team during `e2e-install`
 - Installs/Upgrades the Helm chart with `--wait` and ensures manager metrics are exposed
@@ -51,7 +51,7 @@ What the E2E does:
   3) Teams scenario (Greenhouse-driven):
      - Patches Greenhouse `.status.members` and waits for `GithubTeam.status.members` to converge (1 → 2 → 1)
      - Before each expectation, bumps a trigger label on the team to nudge reconciliation; will re-trigger again after every 10 unchanged observations
-     - Toggles `githubguard.sap/addUser` / `githubguard.sap/removeUser` labels and verifies expected behavior
+     - Toggles `repoguard.sap/addUser` / `repoguard.sap/removeUser` labels and verifies expected behavior
   4) Provider scenarios:
      - LDAP team with GithubAccountLink — verifies member on GitHub and K8s status
      - Generic HTTP provider team — verifies member on GitHub and K8s status

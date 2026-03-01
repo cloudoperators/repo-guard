@@ -194,11 +194,10 @@ for f in "$BASE_DIR"/*.yaml; do
     merge_additional_printer_columns "$f" "$target"
     echo "Synced $f -> $target"
   else
-    # Only copy if you also want to add new CRDs into the chart automatically
-    # Uncomment the next 2 lines if desired:
-    # cp "$f" "$target"
-    # echo "Added $f -> $target"
-    :
+    # Automatically add new CRDs into the chart if they don't exist
+    target="$CHART_DIR/$(kind_to_filename "$kind")"
+    write_with_preserved_header "$f" "$target"
+    echo "Added new CRD: $f -> $target"
   fi
 
 done
