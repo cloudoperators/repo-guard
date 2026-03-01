@@ -13,6 +13,8 @@ import (
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,9 +29,10 @@ type GithubAccountLinkReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubaccountlinks/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubaccountlinks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations,verbs=get;list;watch
 func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubAccountLink")
@@ -44,10 +47,10 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}()
 
 	githubAccountLink := &v1.GithubAccountLink{}
-	err = r.Get(ctx, req.NamespacedName, githubAccountLink)
+	err = r.Get(ctx, types.NamespacedName{Name: req.Name}, githubAccountLink)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			l.Error(err, "resource not found in kubernetes: reconcile is skipped")
+			l.Info("resource not found in kubernetes: reconcile is skipped")
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
@@ -98,7 +101,7 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// Load existing results
 		type resultEntry struct {
 			Domain    string `json:"domain"`
-			Verified  bool   `json:"verified"`
+			Status    string `json:"status"`
 			Timestamp string `json:"timestamp"`
 		}
 		results := make(map[string]resultEntry)
@@ -163,22 +166,38 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 				}
 			}
 
-			var ok bool
+			var status string
 			if installationID == 0 {
-				l.Info("installation not resolved for email check; skipping GitHub call and marking as false",
+				l.Info("installation not resolved for email check; skipping GitHub call and marking as not-part-of-org",
 					"github", githubName, "org", orgName)
-				ok = false
+				status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG
 			} else {
 				usersProvider, err := github.NewUsersProvider(githubClient, installationID)
 				if err != nil {
 					l.Error(err, "error during creating the users provider")
 					return ctrl.Result{}, err
 				}
-				var checkErr error
-				ok, checkErr = usersProvider.HasVerifiedEmailDomainForGithubUID(ctx, orgName, githubAccountLink.Spec.GithubUserID, cfg.Domain)
-				if checkErr != nil {
-					l.Error(checkErr, "error verifying email domain via GitHub API", "uid", githubAccountLink.Spec.GithubUserID, "domain", cfg.Domain, "org", orgName)
-					return ctrl.Result{}, checkErr
+
+				// Check membership first to avoid deadlock
+				isMember, err := usersProvider.IsMemberOfOrg(ctx, orgName, githubAccountLink.Spec.GithubUserID)
+				if err != nil {
+					l.Error(err, "error checking org membership via GitHub API", "uid", githubAccountLink.Spec.GithubUserID, "org", orgName)
+					return ctrl.Result{}, err
+				}
+
+				if !isMember {
+					status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG
+				} else {
+					ok, checkErr := usersProvider.HasVerifiedEmailDomainForGithubUID(ctx, orgName, githubAccountLink.Spec.GithubUserID, cfg.Domain)
+					if checkErr != nil {
+						l.Error(checkErr, "error verifying email domain via GitHub API", "uid", githubAccountLink.Spec.GithubUserID, "domain", cfg.Domain, "org", orgName)
+						return ctrl.Result{}, checkErr
+					}
+					if ok {
+						status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED
+					} else {
+						status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NO
+					}
 				}
 			}
 
@@ -188,7 +207,7 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			// update results map
 			results[orgName] = resultEntry{
 				Domain:    cfg.Domain,
-				Verified:  ok,
+				Status:    status,
 				Timestamp: time.Now().Format(time.RFC3339),
 			}
 			// write back annotation after loop
@@ -203,7 +222,18 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	if updated {
-		if err := r.Update(ctx, githubAccountLink); err != nil {
+		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &v1.GithubAccountLink{}
+			if err := r.Get(ctx, types.NamespacedName{Name: githubAccountLink.Name}, latest); err != nil {
+				return err
+			}
+			if latest.Annotations == nil {
+				latest.Annotations = make(map[string]string)
+			}
+			latest.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS] = githubAccountLink.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]
+			return r.Update(ctx, latest)
+		})
+		if err != nil {
 			l.Error(err, "error updating GithubAccountLink after checks")
 			return ctrl.Result{}, err
 		}

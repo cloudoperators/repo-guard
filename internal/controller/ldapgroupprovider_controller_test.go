@@ -6,87 +6,78 @@ package controller
 import (
 	"context"
 
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// +kubebuilder:docs-gen:collapse=Imports
 var _ = Describe("LDAP Group Provider controller", Ordered, func() {
+	It("becomes Running with correct secret", func() {
+		ctx := context.Background()
 
-	Context("LDAP Group Provider with its secret", func() {
+		ldap := ldapGroupProvider.DeepCopy()
+		secret := ldapGroupProviderSecret.DeepCopy()
 
-		It("Should be in running state when deployed with the correct values", func() {
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, ldap)).To(Succeed())
 
-			ctx := context.Background()
+		Eventually(func() repoguardsapv1.LDAPGroupProviderState {
+			cur := &repoguardsapv1.LDAPGroupProvider{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: nonEmpty(TEST_ENV["NAMESPACE"], "default"), Name: ldap.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.LDAPGroupProviderStateRunning))
 
-			ldap := ldapGroupProvider.DeepCopy()
-			secret := ldapGroupProviderSecret.DeepCopy()
-
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, ldap)).Should(Succeed())
-
-			Eventually(func() githubguardsapv1.LDAPGroupProviderState {
-				l := &githubguardsapv1.LDAPGroupProvider{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["LDAP_GROUP_PROVIDER_KUBERNETES_RESOURCE_NAME"]}, l)
-				Expect(err).NotTo(HaveOccurred())
-				return l.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.LDAPGroupProviderStateRunning))
-
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, ldap)).Should(Succeed())
-
-		})
-
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, ldap)).To(Succeed())
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, secret)).To(Succeed())
 	})
 
-	Context("LDAP Group Provider with its secret", func() {
-		It("Should be in failed state when deployed with the wrong values", func() {
+	It("becomes Failed when secret reference is wrong", func() {
+		ctx := context.Background()
 
-			ctx := context.Background()
+		ldap := ldapGroupProvider.DeepCopy()
+		ldap.Spec.Secret = "missing-secret"
+		secret := ldapGroupProviderSecret.DeepCopy()
 
-			ldap := ldapGroupProvider.DeepCopy()
-			ldap.Spec.Secret = "asd"
-			secret := ldapGroupProviderSecret.DeepCopy()
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, ldap)).To(Succeed())
 
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, ldap)).Should(Succeed())
+		Eventually(func() repoguardsapv1.LDAPGroupProviderState {
+			cur := &repoguardsapv1.LDAPGroupProvider{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: nonEmpty(TEST_ENV["NAMESPACE"], "default"), Name: ldap.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.LDAPGroupProviderStateFailed))
 
-			Eventually(func() githubguardsapv1.LDAPGroupProviderState {
-				l := &githubguardsapv1.LDAPGroupProvider{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["LDAP_GROUP_PROVIDER_KUBERNETES_RESOURCE_NAME"]}, l)
-				Expect(err).NotTo(HaveOccurred())
-				return l.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.LDAPGroupProviderStateFailed))
-
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, ldap)).Should(Succeed())
-		})
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, ldap)).To(Succeed())
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, secret)).To(Succeed())
 	})
 
-	Context("LDAP Group Provider with its secret", func() {
-		It("Should be in failed state when deployed with the wrong secret values", func() {
+	It("becomes Failed when secret values are wrong", func() {
+		ctx := context.Background()
 
-			ctx := context.Background()
+		ldap := ldapGroupProvider.DeepCopy()
+		secret := ldapGroupProviderSecret.DeepCopy()
+		if secret.StringData == nil {
+			secret.StringData = map[string]string{}
+		}
+		secret.StringData["bindPW"] = "invalid"
 
-			ldap := ldapGroupProvider.DeepCopy()
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, ldap)).To(Succeed())
 
-			secret := ldapGroupProviderSecret.DeepCopy()
-			secret.StringData["bindPW"] = "asd"
+		Eventually(func() repoguardsapv1.LDAPGroupProviderState {
+			cur := &repoguardsapv1.LDAPGroupProvider{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: nonEmpty(TEST_ENV["NAMESPACE"], "default"), Name: ldap.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.LDAPGroupProviderStateFailed))
 
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, ldap)).Should(Succeed())
-
-			Eventually(func() githubguardsapv1.LDAPGroupProviderState {
-				l := &githubguardsapv1.LDAPGroupProvider{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["LDAP_GROUP_PROVIDER_KUBERNETES_RESOURCE_NAME"]}, l)
-				Expect(err).NotTo(HaveOccurred())
-				return l.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.LDAPGroupProviderStateFailed))
-
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, ldap)).Should(Succeed())
-		})
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, ldap)).To(Succeed())
+		Expect(deleteIgnoreNotFound(ctx, k8sClient, secret)).To(Succeed())
 	})
 })

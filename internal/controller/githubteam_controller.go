@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,12 +46,14 @@ type GithubTeamReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubteams,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubteams/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubteams/finalizers,verbs=update
-// +kubebuilder:rbac:groups=githubguard.sap,resources=githubaccountlinks,verbs=get;list;watch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks,verbs=get;list;watch
 // +kubebuilder:rbac:groups=greenhouse.sap,resources=teams,verbs=get;list;watch
-// +kubebuilder:rbac:groups=githubguard.sap,resources=externalmemberproviders,verbs=get;list;watch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders;clusterldapgroupproviders,verbs=get;list;watch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders;clustergenericexternalmemberproviders,verbs=get;list;watch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders;clusterstaticmemberproviders,verbs=get;list;watch
 func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubTeam")
@@ -333,14 +336,20 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// check for github instance
 	githubInstance := &v1.Github{}
 	var githubClient githubapp.ClientCreator
-	err = r.Get(ctx, types.NamespacedName{Name: githubName, Namespace: req.Namespace}, githubInstance)
+	err = r.Get(ctx, types.NamespacedName{Name: githubName}, githubInstance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			l.Info("github is not found in kubernetes", "github", githubName)
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-			githubTeam.Status.TeamStatusError = "github not found"
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			err := r.Client.Status().Update(ctx, githubTeam)
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateFailed
+				latest.Status.TeamStatusError = "github not found"
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -348,10 +357,16 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return reconcile.Result{}, nil
 		} else {
 			l.Error(err, "error during getting the github for github team", "github", githubName)
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-			githubTeam.Status.TeamStatusError = "error during getting the github: " + err.Error()
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			err := r.Client.Status().Update(ctx, githubTeam)
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateFailed
+				latest.Status.TeamStatusError = "error during getting the github: " + err.Error()
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -373,10 +388,16 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		if errors.IsNotFound(err) {
 			l.Info("github organization is not found in kubernetes", "GithubOrganization", githubOrganizationName)
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-			githubTeam.Status.TeamStatusError = fmt.Sprintf("organization not found: %v", err)
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			err := r.Client.Status().Update(ctx, githubTeam)
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateFailed
+				latest.Status.TeamStatusError = fmt.Sprintf("organization not found: %v", err)
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -384,10 +405,16 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return reconcile.Result{}, nil
 		} else {
 			l.Error(err, "error during getting the github organization for github team", "GithubOrganization", githubOrganizationName)
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-			githubTeam.Status.TeamStatusError = "error during getting the github organization: " + err.Error()
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			err := r.Client.Status().Update(ctx, githubTeam)
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateFailed
+				latest.Status.TeamStatusError = "error during getting the github organization: " + err.Error()
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -545,23 +572,20 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		if !elementsMatch(githubTeam.Status.Members, membersExtendedWithGithubUsernames) {
-
-			githubTeamForUpdate := &v1.GithubTeam{}
-			err := r.Get(ctx, req.NamespacedName, githubTeamForUpdate)
-			if err != nil {
-				l.Error(err, "error during getting the resource for update")
-				return reconcile.Result{}, err
-			}
-			l.Info("status.members will be updated", "current", githubTeamForUpdate.Status.Members, "update", membersExtendedWithGithubUsernames)
-			githubTeamForUpdate.Status.Members = membersExtendedWithGithubUsernames
-
-			err = r.Client.Status().Update(ctx, githubTeamForUpdate)
+			l.Info("status.members will be updated", "current", githubTeam.Status.Members, "update", membersExtendedWithGithubUsernames)
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status.Members = membersExtendedWithGithubUsernames
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
 			// Do not return here; continue reconciliation to calculate desired state
-
 		}
 
 		greenHouseTeamMemberList := make([]string, 0)
@@ -590,6 +614,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 			}
 
+			l.Info("Greenhouse Team members retrieved", "members", greenHouseTeam.Status.Members)
 			for _, gh := range greenHouseTeam.Status.Members {
 				greenHouseTeamMemberList = append(greenHouseTeamMemberList, gh.ID)
 			}
@@ -597,32 +622,52 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 			if githubTeam.Spec.ExternalMemberProvider.LDAP != nil || githubTeam.Spec.ExternalMemberProvider.LDAPGroupDepreceated != nil {
 				// check LDAP Group Provider resource and its status
-				ldap := &v1.LDAPGroupProvider{}
 				ldapName := ""
+				kind := "LDAPGroupProvider"
 				if githubTeam.Spec.ExternalMemberProvider.LDAP != nil {
 					ldapName = githubTeam.Spec.ExternalMemberProvider.LDAP.ExternalMemberProvider
+					kind = githubTeam.Spec.ExternalMemberProvider.LDAP.Kind
 				} else {
 					ldapName = githubTeam.Spec.ExternalMemberProvider.LDAPGroupDepreceated.LDAPGroupProvider
 				}
-				err = r.Get(ctx, types.NamespacedName{Name: ldapName, Namespace: req.Namespace}, ldap)
+
+				if kind == "ClusterLDAPGroupProvider" {
+					ldap := &v1.ClusterLDAPGroupProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: ldapName}, ldap)
+				} else {
+					ldap := &v1.LDAPGroupProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: ldapName, Namespace: req.Namespace}, ldap)
+				}
 				if err != nil {
 					if errors.IsNotFound(err) {
-						l.Info("LDAP Group Provider is not found in kubernetes", "LDAPGroupProvider", ldapName)
-						githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-						githubTeam.Status.TeamStatusError = fmt.Sprintf("LDAPGroupProvider is not found: %v", err)
-						githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-						err := r.Client.Status().Update(ctx, githubTeam)
+						l.Info("LDAP Group Provider is not found in kubernetes", "LDAPGroupProvider", ldapName, "Kind", kind)
+						err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+							latest := &v1.GithubTeam{}
+							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+								return err
+							}
+							latest.Status.TeamStatus = v1.GithubTeamStateFailed
+							latest.Status.TeamStatusError = fmt.Sprintf("%s is not found: %v", kind, err)
+							latest.Status.TeamStatusTimestamp = metav1.Now()
+							return r.Client.Status().Update(ctx, latest)
+						})
 						if err != nil {
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
 						return reconcile.Result{}, nil
 					} else {
-						l.Error(err, "error during getting the LDAPGroupProvider for github team", "LDAPGroupProvider", ldapName)
-						githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-						githubTeam.Status.TeamStatusError = "error during getting the LDAPGroupProvider: " + err.Error()
-						githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-						err := r.Client.Status().Update(ctx, githubTeam)
+						l.Error(err, "error during getting the LDAPGroupProvider for github team", "LDAPGroupProvider", ldapName, "Kind", kind)
+						err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+							latest := &v1.GithubTeam{}
+							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+								return err
+							}
+							latest.Status.TeamStatus = v1.GithubTeamStateFailed
+							latest.Status.TeamStatusError = fmt.Sprintf("error during getting the %s: %s", kind, err.Error())
+							latest.Status.TeamStatusTimestamp = metav1.Now()
+							return r.Client.Status().Update(ctx, latest)
+						})
 						if err != nil {
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
@@ -645,10 +690,16 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := ldapProvider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group", "group", group)
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-					githubTeam.Status.TeamStatusError = "error during getting users from ldap: " + err.Error()
-					githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-					err := r.Client.Status().Update(ctx, githubTeam)
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubTeam{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+						latest.Status.TeamStatusError = "error during getting users from ldap: " + err.Error()
+						latest.Status.TeamStatusTimestamp = metav1.Now()
+						return r.Client.Status().Update(ctx, latest)
+					})
 					if err != nil {
 						l.Error(err, "error during status update")
 						return reconcile.Result{}, err
@@ -661,15 +712,28 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if githubTeam.Spec.ExternalMemberProvider.GenericHTTP != nil {
 				// check if provider is registered in the runtime registry
 				empName := githubTeam.Spec.ExternalMemberProvider.GenericHTTP.ExternalMemberProvider
+				kind := githubTeam.Spec.ExternalMemberProvider.GenericHTTP.Kind
 
-				testEmp := v1.GenericExternalMemberProvider{}
-				err := r.Get(ctx, types.NamespacedName{Name: githubTeam.Spec.ExternalMemberProvider.GenericHTTP.ExternalMemberProvider, Namespace: req.Namespace}, &testEmp)
+				if kind == "ClusterGenericExternalMemberProvider" {
+					testEmp := v1.ClusterGenericExternalMemberProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: empName}, &testEmp)
+				} else {
+					testEmp := v1.GenericExternalMemberProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: empName, Namespace: req.Namespace}, &testEmp)
+				}
+
 				if err != nil {
-					l.Error(err, "error during getting external member provider")
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-					githubTeam.Status.TeamStatusError = "error during getting external member provider: " + err.Error()
-					githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-					err := r.Client.Status().Update(ctx, githubTeam)
+					l.Error(err, "error during getting external member provider", "Kind", kind)
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubTeam{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+						latest.Status.TeamStatusError = fmt.Sprintf("error during getting %s: %s", kind, err.Error())
+						latest.Status.TeamStatusTimestamp = metav1.Now()
+						return r.Client.Status().Update(ctx, latest)
+					})
 					if err != nil {
 						l.Error(err, "error during status update")
 						return reconcile.Result{}, err
@@ -687,10 +751,16 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := provider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group from external member provider", "group", group)
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-					githubTeam.Status.TeamStatusError = "error during getting users from external member provider: " + err.Error()
-					githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-					err := r.Client.Status().Update(ctx, githubTeam)
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubTeam{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+						latest.Status.TeamStatusError = "error during getting users from external member provider: " + err.Error()
+						latest.Status.TeamStatusTimestamp = metav1.Now()
+						return r.Client.Status().Update(ctx, latest)
+					})
 					if err != nil {
 						l.Error(err, "error during status update")
 						return reconcile.Result{}, err
@@ -703,6 +773,35 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Static external member provider
 			if githubTeam.Spec.ExternalMemberProvider.Static != nil {
 				empName := githubTeam.Spec.ExternalMemberProvider.Static.ExternalMemberProvider
+				kind := githubTeam.Spec.ExternalMemberProvider.Static.Kind
+
+				if kind == "ClusterStaticMemberProvider" {
+					testEmp := v1.ClusterStaticMemberProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: empName}, &testEmp)
+				} else {
+					testEmp := v1.StaticMemberProvider{}
+					err = r.Get(ctx, types.NamespacedName{Name: empName, Namespace: req.Namespace}, &testEmp)
+				}
+
+				if err != nil {
+					l.Error(err, "error during getting static member provider", "Kind", kind)
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubTeam{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+						latest.Status.TeamStatusError = fmt.Sprintf("error during getting %s: %s", kind, err.Error())
+						latest.Status.TeamStatusTimestamp = metav1.Now()
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if err != nil {
+						l.Error(err, "error during status update")
+						return reconcile.Result{}, err
+					}
+					return reconcile.Result{}, nil
+				}
+
 				provider, ok := StaticProviders[empName]
 				if !ok {
 					l.Info("waiting for static external member provider to be initialized", "StaticMemberProvider", empName)
@@ -712,10 +811,17 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := provider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group from static member provider", "group", group)
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-					githubTeam.Status.TeamStatusError = "error during getting users from static member provider: " + err.Error()
-					githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-					if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubTeam{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+						latest.Status.TeamStatusError = "error during getting users from static member provider: " + err.Error()
+						latest.Status.TeamStatusTimestamp = metav1.Now()
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if err != nil {
 						l.Error(err, "error during status update")
 						return reconcile.Result{}, err
 					}
@@ -725,7 +831,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		// read optional verified-domain requirement labels
+		// Read optional verified-domain requirement labels
 		var requiredDomain string
 		if githubTeam.Labels != nil {
 			if v := githubTeam.Labels[GITHUB_TEAMS_LABEL_REQUIRE_VERIFIED_DOMAIN_EMAIL]; v != "" {
@@ -759,24 +865,103 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			greenHouseTeamMemberListExtended = filteredMembers
 		}
 
+		// If dry run is enabled, ensure status members list reflects the desired members
+		if githubTeam.Labels != nil && githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {
+			// First, complete any pending operations in dry run mode
+			if githubTeam.PendingOperationsFound() {
+				l.Info("status is dry run and pending operations found: completing them in dry run mode")
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					for i, op := range latest.Status.Operations {
+						if op.State == v1.GithubUserOperationStatePending {
+							latest.Status.Operations[i].State = v1.GithubUserOperationStateComplete
+							latest.Status.Operations[i].Timestamp = metav1.Now()
+						}
+					}
+					latest.Status.TeamStatus = v1.GithubTeamStateDryRun
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					latest.Status.Members = greenHouseTeamMemberListExtended
+					l.Info("reflecting desired members in status during dry run")
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if err != nil {
+					l.Error(err, "error during status update in dry run mode")
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{}, nil
+			}
+
+			// Even if no pending operations were found by ChangeCalculator, ensure Members list is in sync
+			if len(githubTeam.Status.Members) != len(greenHouseTeamMemberListExtended) {
+				l.Info("dry run: members count mismatch, syncing status members")
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status.Members = greenHouseTeamMemberListExtended
+					latest.Status.TeamStatus = v1.GithubTeamStateDryRun
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if err != nil {
+					l.Error(err, "error during status members sync in dry run mode")
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{}, nil
+			}
+		}
+
 		statusChanged, newStatus := githubTeam.ChangeCalculator(greenHouseTeamMemberListExtended)
 
 		if statusChanged {
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				githubTeamForUpdate := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, githubTeamForUpdate); err != nil {
+					return err
+				}
+				githubTeamForUpdate.Status = *newStatus
+				// Reflect desired members immediately in the status to make
+				// membership intentions visible even before GitHub operations
+				// are executed. This helps tests and users observe the target
+				// state while Operations track the work to be done.
+				// However, we must ensure we don't prematurely remove members
+				// whose removal is disabled by labels.
+				if githubTeamForUpdate.Labels != nil && githubTeamForUpdate.Labels[GITHUB_TEAMS_LABEL_REMOVE_USER] != "" && githubTeamForUpdate.Labels[GITHUB_TEAMS_LABEL_REMOVE_USER] != GITHUB_TEAMS_LABEL_ADD_REMOVE_USER_ENABLED_VALUE {
+					// Removal is disabled. We should keep current members that are not in the desired list
+					desiredMap := make(map[string]bool)
+					for _, m := range greenHouseTeamMemberListExtended {
+						desiredMap[strings.ToLower(m.GithubUsername)] = true
+					}
+					finalMembers := greenHouseTeamMemberListExtended
+					for _, m := range githubTeamForUpdate.Status.Members {
+						if !desiredMap[strings.ToLower(m.GithubUsername)] {
+							finalMembers = append(finalMembers, m)
+						}
+					}
+					githubTeamForUpdate.Status.Members = finalMembers
+				} else if githubTeamForUpdate.Labels != nil && githubTeamForUpdate.Labels[GITHUB_TEAMS_LABEL_ADD_USER] != "" && githubTeamForUpdate.Labels[GITHUB_TEAMS_LABEL_ADD_USER] != GITHUB_TEAMS_LABEL_ADD_REMOVE_USER_ENABLED_VALUE {
+					// Addition is disabled. We should not include new members in the status yet
+					currentMap := make(map[string]bool)
+					for _, m := range githubTeamForUpdate.Status.Members {
+						currentMap[strings.ToLower(m.GithubUsername)] = true
+					}
+					finalMembers := make([]v1.Member, 0)
+					for _, m := range greenHouseTeamMemberListExtended {
+						if currentMap[strings.ToLower(m.GithubUsername)] {
+							finalMembers = append(finalMembers, m)
+						}
+					}
+					githubTeamForUpdate.Status.Members = finalMembers
+				} else {
+					githubTeamForUpdate.Status.Members = greenHouseTeamMemberListExtended
+				}
 
-			githubTeamForUpdate := &v1.GithubTeam{}
-			err := r.Get(ctx, req.NamespacedName, githubTeamForUpdate)
-			if err != nil {
-				l.Error(err, "error during getting the resource for update")
-				return reconcile.Result{}, err
-			}
-			githubTeamForUpdate.Status = *newStatus
-			// Reflect desired members immediately in the status to make
-			// membership intentions visible even before GitHub operations
-			// are executed. This helps tests and users observe the target
-			// state while Operations track the work to be done.
-			githubTeamForUpdate.Status.Members = greenHouseTeamMemberListExtended
-
-			err = r.Client.Status().Update(ctx, githubTeamForUpdate)
+				return r.Client.Status().Update(ctx, githubTeamForUpdate)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -787,9 +972,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// check for empty status in kubernetes resource
 			if githubTeam.Status.TeamStatus == "" {
 				l.Info("TeamStatus is empty, it could be the first round of the resource reconciliation")
-				githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
-				githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-				err := r.Client.Status().Update(ctx, githubTeam)
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					return r.Client.Status().Update(ctx, latest)
+				})
 				if err != nil {
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
@@ -804,10 +995,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {
 			if githubTeam.Status.TeamStatus != v1.GithubTeamStateDryRun {
 				l.Info("switching to dry run mode")
-				githubTeam.Status.TeamStatus = v1.GithubTeamStateDryRun
-				githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-
-				err := r.Client.Status().Update(ctx, githubTeam)
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status.TeamStatus = v1.GithubTeamStateDryRun
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					return r.Client.Status().Update(ctx, latest)
+				})
 				if err != nil {
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
@@ -819,16 +1015,22 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// remove the dry run status if it is not enabled
 			if githubTeam.Status.TeamStatus == v1.GithubTeamStateDryRun {
 
-				if githubTeam.PendingOperationsFound() {
-					githubTeam.Status.TeamStatus = v1.GithubTeamStatePendingOperations
-				} else if githubTeam.FailedOperationsFound() {
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateFailed
-				} else {
-					githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
-				}
-				l.Info("switching from dry run mode", "newStatus", githubTeam.Status.TeamStatus)
-				githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-				err := r.Client.Status().Update(ctx, githubTeam)
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					if latest.PendingOperationsFound() {
+						latest.Status.TeamStatus = v1.GithubTeamStatePendingOperations
+					} else if latest.FailedOperationsFound() {
+						latest.Status.TeamStatus = v1.GithubTeamStateFailed
+					} else {
+						latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					}
+					l.Info("switching from dry run mode", "newStatus", latest.Status.TeamStatus)
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					return r.Client.Status().Update(ctx, latest)
+				})
 				if err != nil {
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
@@ -865,7 +1067,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.Operations[i].State = v1.GithubUserOperationStateSkipped
 						newStatus.Operations[i].Timestamp = metav1.Now()
 						statusChanged = true
-						failed = false
 					} else {
 						userFound, err := teamsProvider.AddUser(githubTeamName, userOperation.User)
 						if !userFound {
@@ -899,7 +1100,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.Operations[i].State = v1.GithubUserOperationStateSkipped
 						newStatus.Operations[i].Timestamp = metav1.Now()
 						statusChanged = true
-						failed = false
 					} else {
 						err := teamsProvider.RemoveUser(githubTeamName, userOperation.User)
 						if err != nil {
@@ -914,6 +1114,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 							newStatus.Operations[i].State = v1.GithubUserOperationStateComplete
 							newStatus.Operations[i].Timestamp = metav1.Now()
 							statusChanged = true
+							// Correctly reflect current members after removal
+							// Find the member in the list and remove it
+							lowerUser := strings.ToLower(userOperation.User)
+							for j, m := range newStatus.Members {
+								if strings.ToLower(m.GithubUsername) == lowerUser {
+									newStatus.Members = append(newStatus.Members[:j], newStatus.Members[j+1:]...)
+									break
+								}
+							}
 						}
 
 					}
@@ -921,31 +1130,43 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 		if statusChanged {
-
+			l.Info("status changed during operation processing")
 			if failed {
 				newStatus.TeamStatus = v1.GithubTeamStateFailed
 			} else {
-				newStatus.TeamStatus = v1.GithubTeamStateComplete
+				if githubTeam.Labels != nil && githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {
+					newStatus.TeamStatus = v1.GithubTeamStateDryRun
+				} else {
+					newStatus.TeamStatus = v1.GithubTeamStateComplete
+				}
 			}
 			newStatus.TeamStatusTimestamp = metav1.Now()
-
-			l.Info("new status is calculated", "status", newStatus.TeamStatus)
-
-			githubTeamForUpdate := &v1.GithubTeam{}
-			err := r.Get(ctx, req.NamespacedName, githubTeamForUpdate)
+			// calculate current members
+			members, err := teamsProvider.MembersExtended(githubTeamName)
 			if err != nil {
-				l.Error(err, "error during getting the resource for update")
+				l.Error(err, "error during listing the members of the team in github", "team", githubTeamName)
 				return reconcile.Result{}, err
 			}
-			githubTeamForUpdate.Status = *newStatus
+			membersExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, members, githubName, r.Client, usersProvider)
+			if err != nil {
+				l.Error(err, "error during extending the members of the team in github membership")
+				return reconcile.Result{}, err
+			}
+			newStatus.Members = membersExtended
 
-			err = r.Client.Status().Update(ctx, githubTeamForUpdate)
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status = *newStatus
+				return r.Client.Status().Update(ctx, latest)
+			})
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
-			} else {
-				return reconcile.Result{}, nil
 			}
+			return reconcile.Result{}, nil
 		}
 	}
 
@@ -1105,13 +1326,21 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 					if raw, ok := link.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]; ok && raw != "" {
 						var results map[string]struct {
 							Domain    string `json:"domain"`
-							Verified  bool   `json:"verified"`
+							Status    string `json:"status"`
+							Verified  bool   `json:"verified"` // Legacy support
 							Timestamp string `json:"timestamp"`
 						}
 						if err := json.Unmarshal([]byte(raw), &results); err == nil {
-							if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain && r.Verified {
-								include = true
+							if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain {
+								// include if verified OR not yet in org
+								if r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED ||
+									r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG ||
+									(r.Status == "" && r.Verified) { // fallback for legacy result format
+									include = true
+								}
 							}
+						} else {
+							l.Error(err, "failed to unmarshal email check results", "member", ghID, "raw", raw)
 						}
 					}
 				}
@@ -1178,28 +1407,28 @@ func LabelSelectorPredicate(s metav1.LabelSelector) predicate.Predicate {
 	})
 }
 
-const GITHUB_TEAMS_LABEL_ORPHANED = "githubguard.sap/orphaned"
+const GITHUB_TEAMS_LABEL_ORPHANED = "repoguard.sap/orphaned"
 
-const GITHUB_TEAMS_LABEL_DRY_RUN = "githubguard.sap/dryRun"
+const GITHUB_TEAMS_LABEL_DRY_RUN = "repoguard.sap/dryRun"
 const GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE = "true"
 
-const GITHUB_TEAMS_LABEL_ADD_USER = "githubguard.sap/addUser"
-const GITHUB_TEAMS_LABEL_REMOVE_USER = "githubguard.sap/removeUser"
+const GITHUB_TEAMS_LABEL_ADD_USER = "repoguard.sap/addUser"
+const GITHUB_TEAMS_LABEL_REMOVE_USER = "repoguard.sap/removeUser"
 const GITHUB_TEAMS_LABEL_ADD_REMOVE_USER_ENABLED_VALUE = "true"
-const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES = "githubguard.sap/disableInternalUsernames"
+const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES = "repoguard.sap/disableInternalUsernames"
 const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES_VALUE = "true"
 
 // domain-valued label on GithubTeam. When set, the controller will consider only
 // GithubAccountLinks that report verified=true for this team's organization and this domain
 // in their results annotation.
-const GITHUB_TEAMS_LABEL_REQUIRE_VERIFIED_DOMAIN_EMAIL = "githubguard.sap/require-verified-domain-email"
+const GITHUB_TEAMS_LABEL_REQUIRE_VERIFIED_DOMAIN_EMAIL = "repoguard.sap/require-verified-domain-email"
 
 // TTL labels for automatic cleanup on GithubTeam
 // When present on GithubTeam, failedTTL clears failed user operations and team failed status
 // completedTTL clears completed user operations to avoid status bloat
 // notfoundTTL clears notfound user operations to allow retry after some time
 // skippedTTL clears skipped user operations to allow retry/cleanup of skipped state after some time
-const GITHUB_TEAM_LABEL_FAILED_TTL = "githubguard.sap/failedTTL"
-const GITHUB_TEAM_LABEL_COMPLETED_TTL = "githubguard.sap/completedTTL"
-const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "githubguard.sap/notfoundTTL"
-const GITHUB_TEAM_LABEL_SKIPPED_TTL = "githubguard.sap/skippedTTL"
+const GITHUB_TEAM_LABEL_FAILED_TTL = "repoguard.sap/failedTTL"
+const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repoguard.sap/completedTTL"
+const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repoguard.sap/notfoundTTL"
+const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repoguard.sap/skippedTTL"

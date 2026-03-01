@@ -6,154 +6,158 @@ package controller
 import (
 	"context"
 	"fmt"
+	"math/rand"
 
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	githubAPI "github.com/google/go-github/v82/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
-	githubAPI "github.com/google/go-github/v81/github"
 )
 
-const (
-	TEST_DEFAULT_PUBLIC_REPO_PULL  = "public-pull-team"
-	TEST_DEFAULT_PUBLIC_REPO_PUSH  = "public-push-team"
-	TEST_DEFAULT_PUBLIC_REPO_ADMIN = "public-admin-team"
+var _ = Describe("Github Organization controller - repository team assignments", func() {
+	const (
+		defaultPublicPull  = "public-pull-team"
+		defaultPublicPush  = "public-push-team"
+		defaultPublicAdmin = "public-admin-team"
 
-	TEST_DEFAULT_PRIVATE_REPO_PULL  = "private-pull-team"
-	TEST_DEFAULT_PRIVATE_REPO_PUSH  = "private-push-team"
-	TEST_DEFAULT_PRIVATE_REPO_ADMIN = "private-admin-team"
+		defaultPrivatePull  = "private-pull-team"
+		defaultPrivatePush  = "private-push-team"
+		defaultPrivateAdmin = "private-admin-team"
 
-	TEST_CUSTOM_TEAM = "custom-team-for-private-repo"
-)
+		customTeam = "custom-team-for-private-repo"
+	)
 
-var TEST_REPOSITORY_PUBLIC = "repository-1-" + fmt.Sprintf("%d", GinkgoRandomSeed())
-var TEST_REPOSITORY_PRIVATE = "repository-2-" + fmt.Sprintf("%d", GinkgoRandomSeed())
+	var (
+		client *githubAPI.Client
+		ctx    context.Context
 
-var _ = Describe("Github Organization controller - repository team assignments", Ordered, func() {
+		nsObj  *v1.Namespace
+		secret *v1.Secret
+		github *repoguardsapv1.Github
+		orgCR  *repoguardsapv1.GithubOrganization
+		tr     *repoguardsapv1.GithubTeamRepository
 
-	var client *githubAPI.Client
+		orgName string
 
-	BeforeAll(func() {
+		uniqueID      string
+		uniqueNS      string
+		uniqueGHName  string
+		uniqueSecName string
+		orgResource   string
+		repoPublic    string
+		repoPrivate   string
+	)
 
-		client = githubAPI.NewClient(nil).WithAuthToken(TEST_ENV["GITHUB_TOKEN"])
+	BeforeEach(func() {
+		ctx = context.Background()
 
-		ctx := context.Background()
-		github := githubCom.DeepCopy()
-		secret := githubComSecret.DeepCopy()
-		Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-		Expect(k8sClient.Create(ctx, github)).Should(Succeed())
+		orgName = requireEnv("ORGANIZATION")
+		client = githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
 
-		Eventually(func() githubguardsapv1.GithubState {
-			github := &githubguardsapv1.Github{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"]}, github)
-			Expect(err).NotTo(HaveOccurred())
-			return github.Status.State
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubStateRunning))
+		uniqueID = fmt.Sprintf("%08x", rand.Uint32())
+		uniqueNS = "ns-repo-" + uniqueID
+		uniqueGHName = "gh-repo-" + uniqueID
+		uniqueSecName = "sec-repo-" + uniqueID
+		orgResource = "org-res-repo-" + uniqueID
+		repoPublic = "repo-pub-" + uniqueID
+		repoPrivate = "repo-priv-" + uniqueID
 
-		_, response, err := client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PUBLIC_REPO_PULL})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PUBLIC_REPO_PUSH})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PUBLIC_REPO_ADMIN})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
+		nsObj = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uniqueNS}}
+		Expect(ensureResourceCreated(ctx, nsObj)).To(Succeed())
 
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PRIVATE_REPO_PULL})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PRIVATE_REPO_PUSH})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_DEFAULT_PRIVATE_REPO_ADMIN})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
+		github = githubCom.DeepCopy()
+		github.Name = uniqueGHName
+		github.Namespace = ""
+		github.Spec.Secret = uniqueSecName
 
-		_, response, err = client.Teams.CreateTeam(ctx, TEST_ENV["ORGANIZATION"], githubAPI.NewTeam{Name: TEST_CUSTOM_TEAM})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
+		secret = githubComSecret.DeepCopy()
+		secret.Name = uniqueSecName
+		secret.Namespace = TestOperatorNamespace
 
-		_, response, err = client.Repositories.Create(ctx, TEST_ENV["ORGANIZATION"], &githubAPI.Repository{Name: &TEST_REPOSITORY_PUBLIC})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
-		_, response, err = client.Repositories.Create(ctx, TEST_ENV["ORGANIZATION"], &githubAPI.Repository{Name: &TEST_REPOSITORY_PRIVATE})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(201))
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
 
+		Eventually(func() repoguardsapv1.GithubState {
+			cur := &repoguardsapv1.Github{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: uniqueGHName}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateRunning))
+
+		teams := []string{
+			defaultPublicPull, defaultPublicPush, defaultPublicAdmin,
+			defaultPrivatePull, defaultPrivatePush, defaultPrivateAdmin,
+			customTeam,
+		}
+		for _, t := range teams {
+			_ = githubEnsureTeam(ctx, client, orgName, t)
+		}
+
+		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, false)).To(Succeed())
+		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPrivate, true)).To(Succeed())
+
+		orgCR = githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
+		orgCR.Name = orgResource
+		orgCR.Namespace = uniqueNS
+		orgCR.Spec.Github = uniqueGHName
+		orgCR.Spec.Organization = orgName
+
+		tr = githubTeamRepository.DeepCopy()
+		tr.Name = generateUniqueName("team-repo")
+		tr.Namespace = uniqueNS
+		tr.Spec.Github = uniqueGHName
+		tr.Spec.Organization = orgName
+		tr.Spec.Repository = []string{repoPrivate}
+
+		DeferCleanup(func() {
+			_ = deleteIgnoreNotFound(ctx, k8sClient, tr)
+			_ = deleteIgnoreNotFound(ctx, k8sClient, orgCR)
+			_ = deleteIgnoreNotFound(ctx, k8sClient, github)
+			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
+			_ = deleteIgnoreNotFound(ctx, k8sClient, nsObj)
+
+			_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
+			_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
+			for _, t := range teams {
+				_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
+			}
+		})
 	})
-	AfterAll(func() {
 
-		ctx := context.Background()
+	It("assigns default teams to public/private repos and custom team to private repo", func() {
+		Expect(ensureResourceCreated(ctx, orgCR)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, tr)).To(Succeed())
 
-		githubOrg := githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
-		Expect(k8sClient.Delete(ctx, githubOrg)).Should(Succeed())
+		Eventually(func() bool {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return false
+			}
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete ||
+				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
+		}, 3*timeout, interval).Should(BeTrue())
 
-		githubTeamRepository := githubTeamRepository.DeepCopy()
-		Expect(k8sClient.Delete(ctx, githubTeamRepository)).Should(Succeed())
+		// Controller executed operations
+		Eventually(func() int {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations.RepositoryTeamOperations)
+		}, 3*timeout, interval).Should(BeNumerically(">", 0))
 
-		github := githubCom.DeepCopy()
-		secret := githubComSecret.DeepCopy()
-		Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-		Expect(k8sClient.Delete(ctx, github)).Should(Succeed())
-
-		_, err := client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PUBLIC_REPO_PULL)
+		publicTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPublic, nil)
 		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PUBLIC_REPO_PUSH)
+		Expect(resp.StatusCode).To(Equal(200))
+		Expect(publicTeams).To(HaveLen(3))
+
+		privateTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPrivate, nil)
 		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PUBLIC_REPO_ADMIN)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PRIVATE_REPO_PULL)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PRIVATE_REPO_PUSH)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_DEFAULT_PRIVATE_REPO_ADMIN)
-		Expect(err).NotTo(HaveOccurred())
-		_, err = client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_CUSTOM_TEAM)
-		Expect(err).NotTo(HaveOccurred())
-
-		response, err := client.Repositories.Delete(ctx, TEST_ENV["ORGANIZATION"], TEST_REPOSITORY_PUBLIC)
-		Expect(response.StatusCode).To(Equal(204))
-		Expect(err).NotTo(HaveOccurred())
-
-		response, err = client.Repositories.Delete(ctx, TEST_ENV["ORGANIZATION"], TEST_REPOSITORY_PRIVATE)
-		Expect(response.StatusCode).To(Equal(204))
-		Expect(err).NotTo(HaveOccurred())
-
-	})
-
-	It("Private and public repositories should have assigned teams", func() {
-
-		ctx := context.Background()
-
-		githubOrg := githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
-		Expect(k8sClient.Create(ctx, githubOrg)).Should(Succeed())
-
-		githubTeamRepository := githubTeamRepository.DeepCopy()
-		Expect(k8sClient.Create(ctx, githubTeamRepository)).Should(Succeed())
-
-		Eventually(func() githubguardsapv1.GithubOrganizationState {
-			orgDeployed := githubguardsapv1.GithubOrganization{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			return orgDeployed.Status.OrganizationStatus
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubOrganizationStateComplete))
-
-		Eventually(func() []githubguardsapv1.GithubRepoTeamOperation {
-			orgDeployed := githubguardsapv1.GithubOrganization{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			return orgDeployed.Status.Operations.RepositoryTeamOperations
-		}, timeout, interval).ShouldNot(BeEmpty())
-
-		repositoryTeams, response, err := client.Repositories.ListTeams(ctx, TEST_ENV["ORGANIZATION"], TEST_REPOSITORY_PUBLIC, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(200))
-		Expect(repositoryTeams).To(HaveLen(3))
-
-		repositoryTeams, response, err = client.Repositories.ListTeams(ctx, TEST_ENV["ORGANIZATION"], TEST_REPOSITORY_PRIVATE, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(200))
-		Expect(repositoryTeams).To(HaveLen(4)) // There are 3 default + 1 custom team assigned
-
+		Expect(resp.StatusCode).To(Equal(200))
+		Expect(privateTeams).To(HaveLen(4))
 	})
 })

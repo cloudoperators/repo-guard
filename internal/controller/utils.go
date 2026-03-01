@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var OperatorNamespace = "repo-guard-system"
+
 type dummyAssert struct{}
 
 func (t dummyAssert) Errorf(string, ...interface{}) {}
