@@ -10,7 +10,7 @@ import (
 
 	"github.com/palantir/go-githubapp/githubapp"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v82/github"
 )
 
 type OrganizationProvider interface {

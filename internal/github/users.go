@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
 )
@@ -17,6 +17,8 @@ import (
 type UsersProvider interface {
 	GithubUsernameByID(id string) (string, bool, error)
 	GithubIDByUsername(username string) (string, bool, error)
+	// IsMemberOfOrg checks whether the GitHub user with the given UID is a member of the organization.
+	IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error)
 	// HasVerifiedEmailDomainForGithubUID checks whether the GitHub user with the given UID
 	// has an email address visible to the given organization that matches the provided domain.
 	// This uses the organization members endpoint which exposes members' verified emails to
@@ -82,6 +84,33 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 
 	// convert numeric ID to string
 	return strconv.FormatInt(user.GetID(), 10), true, nil
+}
+
+func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error) {
+	userID, err := strconv.ParseInt(uid, 10, 64)
+	if err != nil {
+		return false, err
+	}
+	user, resp, err := u.service.GetByID(ctx, userID)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return false, nil
+		}
+		return false, err
+	}
+	login := user.GetLogin()
+	if login == "" {
+		return false, nil
+	}
+
+	isMember, resp, err := u.orgs.IsMember(ctx, org, login)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return false, nil
+		}
+		return false, err
+	}
+	return isMember, nil
 }
 
 // HasVerifiedEmailDomainForGithubUID implements UsersProvider.HasVerifiedEmailDomainForGithubUID.
