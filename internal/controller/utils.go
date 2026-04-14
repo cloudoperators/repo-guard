@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var OperatorNamespace = "repo-guard-system"
+var OperatorNamespace = "repo-guard-greenhouse-system"
 
 type dummyAssert struct{}
 
