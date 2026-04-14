@@ -6,6 +6,7 @@ package github
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -53,7 +54,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 	// parse the string ID to int64
 	userID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", id, err)
 	}
 
 	// fetch the user by ID
@@ -89,7 +90,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error) {
 	userID, err := strconv.ParseInt(uid, 10, 64)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
 	user, resp, err := u.service.GetByID(ctx, userID)
 	if err != nil {
@@ -126,7 +127,7 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 	// Resolve login by numeric ID (GraphQL query requires login)
 	userID, err := strconv.ParseInt(uid, 10, 64)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
 	user, resp, err := u.service.GetByID(ctx, userID)
 	if err != nil {
