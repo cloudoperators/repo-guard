@@ -1,6 +1,3 @@
-# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
-# SPDX-License-Identifier: Apache-2.0
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -19,8 +16,15 @@ rules:
   - repoguard.sap
   resources:
   - clustergenericexternalmemberproviders
+  - clusterldapgroupproviders
   - clusterstaticmemberproviders
   - genericexternalmemberproviders
+  - githubaccountlinks
+  - githuborganizations
+  - githubs
+  - githubteamrepositories
+  - githubteams
+  - ldapgroupproviders
   - staticmemberproviders
   verbs:
   - create
@@ -34,9 +38,15 @@ rules:
   - repoguard.sap
   resources:
   - clustergenericexternalmemberproviders/finalizers
+  - clusterldapgroupproviders/finalizers
   - clusterstaticmemberproviders/finalizers
   - genericexternalmemberproviders/finalizers
+  - githubaccountlinks/finalizers
   - githuborganizations/finalizers
+  - githubs/finalizers
+  - githubteamrepositories/finalizers
+  - githubteams/finalizers
+  - ldapgroupproviders/finalizers
   - staticmemberproviders/finalizers
   verbs:
   - update
@@ -44,32 +54,25 @@ rules:
   - repoguard.sap
   resources:
   - clustergenericexternalmemberproviders/status
+  - clusterldapgroupproviders/status
   - clusterstaticmemberproviders/status
   - genericexternalmemberproviders/status
+  - githubaccountlinks/status
   - githuborganizations/status
+  - githubs/status
+  - githubteamrepositories/status
+  - githubteams/status
+  - ldapgroupproviders/status
   - staticmemberproviders/status
   verbs:
   - get
   - patch
   - update
 - apiGroups:
-  - repoguard.sap
+  - greenhouse.sap
   resources:
-  - githubaccountlinks
-  - githubs
-  - githubteamrepositories
-  - githubteams
+  - teams
   verbs:
   - get
   - list
-  - watch
-- apiGroups:
-  - repoguard.sap
-  resources:
-  - githuborganizations
-  verbs:
-  - get
-  - list
-  - patch
-  - update
   - watch
