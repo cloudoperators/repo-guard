@@ -9,6 +9,7 @@ import (
 	genericprovider "github.com/cloudoperators/repo-guard/internal/external-provider/static"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -51,7 +52,7 @@ func (r *StaticMemberProviderReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	c := genericprovider.NewStaticClient(groups)
 
-	StaticProviders[emp.Name] = c
+	StaticProviders[types.NamespacedName{Name: emp.Name, Namespace: emp.Namespace}] = c
 
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning
 	emp.Status.Timestamp = metav1.Now()
@@ -102,7 +103,7 @@ func (r *ClusterStaticMemberProviderReconciler) Reconcile(ctx context.Context, r
 	}
 	c := genericprovider.NewStaticClient(groups)
 
-	StaticProviders[emp.Name] = c
+	StaticProviders[types.NamespacedName{Name: emp.Name}] = c
 
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning
 	emp.Status.Timestamp = metav1.Now()

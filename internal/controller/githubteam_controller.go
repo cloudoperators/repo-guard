@@ -631,12 +631,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					ldapName = githubTeam.Spec.ExternalMemberProvider.LDAPGroupDepreceated.LDAPGroupProvider
 				}
 
+				var providerKey types.NamespacedName
 				if kind == "ClusterLDAPGroupProvider" {
+					providerKey = types.NamespacedName{Name: ldapName}
 					ldap := &v1.ClusterLDAPGroupProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: ldapName}, ldap)
+					err = r.Get(ctx, providerKey, ldap)
 				} else {
+					providerKey = types.NamespacedName{Name: ldapName, Namespace: req.Namespace}
 					ldap := &v1.LDAPGroupProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: ldapName, Namespace: req.Namespace}, ldap)
+					err = r.Get(ctx, providerKey, ldap)
 				}
 				if err != nil {
 					if errors.IsNotFound(err) {
@@ -675,7 +678,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						return reconcile.Result{}, nil
 					}
 				}
-				ldapProvider, ok := LDAPGroupProviders[ldapName]
+				ldapProvider, ok := LDAPGroupProviders[providerKey]
 				if !ok {
 					l.Info("waiting for LDAPGroupProvider to be initialized", "LDAPGroupProviders", ldapName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
@@ -714,12 +717,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				empName := githubTeam.Spec.ExternalMemberProvider.GenericHTTP.ExternalMemberProvider
 				kind := githubTeam.Spec.ExternalMemberProvider.GenericHTTP.Kind
 
+				var providerKey types.NamespacedName
 				if kind == "ClusterGenericExternalMemberProvider" {
+					providerKey = types.NamespacedName{Name: empName}
 					testEmp := v1.ClusterGenericExternalMemberProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: empName}, &testEmp)
+					err = r.Get(ctx, providerKey, &testEmp)
 				} else {
+					providerKey = types.NamespacedName{Name: empName, Namespace: req.Namespace}
 					testEmp := v1.GenericExternalMemberProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: empName, Namespace: req.Namespace}, &testEmp)
+					err = r.Get(ctx, providerKey, &testEmp)
 				}
 
 				if err != nil {
@@ -741,7 +747,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, nil
 				}
 
-				provider, ok := GenericHTTPProviders[empName]
+				provider, ok := GenericHTTPProviders[providerKey]
 				if !ok {
 					l.Info("waiting for external member provider to be initialized", "ExternalMemberProvider", empName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
@@ -775,12 +781,15 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				empName := githubTeam.Spec.ExternalMemberProvider.Static.ExternalMemberProvider
 				kind := githubTeam.Spec.ExternalMemberProvider.Static.Kind
 
+				var providerKey types.NamespacedName
 				if kind == "ClusterStaticMemberProvider" {
+					providerKey = types.NamespacedName{Name: empName}
 					testEmp := v1.ClusterStaticMemberProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: empName}, &testEmp)
+					err = r.Get(ctx, providerKey, &testEmp)
 				} else {
+					providerKey = types.NamespacedName{Name: empName, Namespace: req.Namespace}
 					testEmp := v1.StaticMemberProvider{}
-					err = r.Get(ctx, types.NamespacedName{Name: empName, Namespace: req.Namespace}, &testEmp)
+					err = r.Get(ctx, providerKey, &testEmp)
 				}
 
 				if err != nil {
@@ -802,7 +811,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, nil
 				}
 
-				provider, ok := StaticProviders[empName]
+				provider, ok := StaticProviders[providerKey]
 				if !ok {
 					l.Info("waiting for static external member provider to be initialized", "StaticMemberProvider", empName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil

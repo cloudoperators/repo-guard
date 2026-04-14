@@ -106,7 +106,7 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 	}
 	ghmetrics.ObserveExternalRequest("generic_http_provider", "test_connection", "success", start)
 
-	GenericHTTPProviders[emp.Name] = c
+	GenericHTTPProviders[types.NamespacedName{Name: emp.Name, Namespace: emp.Namespace}] = c
 
 	// set running
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning
@@ -203,7 +203,7 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 	}
 	ghmetrics.ObserveExternalRequest("cluster_generic_http_provider", "test_connection", "success", start)
 
-	GenericHTTPProviders[emp.Name] = c
+	GenericHTTPProviders[types.NamespacedName{Name: emp.Name}] = c
 
 	// set running
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning

@@ -3,16 +3,20 @@
 
 package controller
 
-import externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+import (
+	"k8s.io/apimachinery/pkg/types"
+
+	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+)
 
 var (
-	LDAPGroupProviders   = make(map[string]externalprovider.ExternalProvider)
-	GenericHTTPProviders map[string]externalprovider.ExternalProvider
-	StaticProviders      map[string]externalprovider.ExternalProvider
+	LDAPGroupProviders   map[types.NamespacedName]externalprovider.ExternalProvider
+	GenericHTTPProviders map[types.NamespacedName]externalprovider.ExternalProvider
+	StaticProviders      map[types.NamespacedName]externalprovider.ExternalProvider
 )
 
 func init() {
-	LDAPGroupProviders = make(map[string]externalprovider.ExternalProvider)
-	GenericHTTPProviders = make(map[string]externalprovider.ExternalProvider)
-	StaticProviders = make(map[string]externalprovider.ExternalProvider)
+	LDAPGroupProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
+	GenericHTTPProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
+	StaticProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
 }
