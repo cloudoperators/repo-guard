@@ -39,6 +39,8 @@ var (
 
 	empHTTPServer *empHTTPTestServer
 	ldapServer    *ldapTestServer
+
+	testRand *rand.Rand
 )
 
 const (
@@ -75,13 +77,13 @@ func dumpCapturedLogs() {
 	defer logBufMu.Unlock()
 
 	if logBuf.Len() == 0 {
-		fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs: <empty> ---")
+		_, _ = fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs: <empty> ---")
 		return
 	}
 
-	fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs (begin) ---")
+	_, _ = fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs (begin) ---")
 	_, _ = GinkgoWriter.Write(logBuf.Bytes())
-	fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs (end) ---")
+	_, _ = fmt.Fprintln(GinkgoWriter, "\n--- captured controller logs (end) ---")
 }
 
 var _ = AfterEach(func() {
@@ -89,12 +91,12 @@ var _ = AfterEach(func() {
 		return
 	}
 
-	fmt.Fprintln(GinkgoWriter, "\n================ FAILURE DEBUG DUMP ================")
+	_, _ = fmt.Fprintln(GinkgoWriter, "\n================ FAILURE DEBUG DUMP ================")
 	dumpCapturedLogs()
 
 	if k8sClient == nil {
-		fmt.Fprintln(GinkgoWriter, "k8sClient is nil; cannot dump objects")
-		fmt.Fprintln(GinkgoWriter, "====================================================")
+		_, _ = fmt.Fprintln(GinkgoWriter, "k8sClient is nil; cannot dump objects")
+		_, _ = fmt.Fprintln(GinkgoWriter, "====================================================")
 		return
 	}
 
@@ -102,39 +104,39 @@ var _ = AfterEach(func() {
 
 	var nsList v1.NamespaceList
 	if err := k8sClient.List(ctx, &nsList); err == nil {
-		fmt.Fprintf(GinkgoWriter, "Namespaces: %d\n", len(nsList.Items))
+		_, _ = fmt.Fprintf(GinkgoWriter, "Namespaces: %d\n", len(nsList.Items))
 		for _, n := range nsList.Items {
-			fmt.Fprintf(GinkgoWriter, " - %s\n", n.Name)
+			_, _ = fmt.Fprintf(GinkgoWriter, " - %s\n", n.Name)
 		}
 	}
 
 	var ghList repoguardsapv1.GithubList
 	if err := k8sClient.List(ctx, &ghList); err == nil {
-		fmt.Fprintf(GinkgoWriter, "Github CRs: %d\n", len(ghList.Items))
+		_, _ = fmt.Fprintf(GinkgoWriter, "Github CRs: %d\n", len(ghList.Items))
 		for _, it := range ghList.Items {
-			fmt.Fprintf(GinkgoWriter, " - %s state=%s\n", it.Name, it.Status.State)
+			_, _ = fmt.Fprintf(GinkgoWriter, " - %s state=%s\n", it.Name, it.Status.State)
 		}
 	}
 
 	var orgList repoguardsapv1.GithubOrganizationList
 	if err := k8sClient.List(ctx, &orgList); err == nil {
-		fmt.Fprintf(GinkgoWriter, "GithubOrganization CRs: %d\n", len(orgList.Items))
+		_, _ = fmt.Fprintf(GinkgoWriter, "GithubOrganization CRs: %d\n", len(orgList.Items))
 		for _, it := range orgList.Items {
-			fmt.Fprintf(GinkgoWriter, " - %s/%s status=%s err=%q\n",
+			_, _ = fmt.Fprintf(GinkgoWriter, " - %s/%s status=%s err=%q\n",
 				it.Namespace, it.Name, it.Status.OrganizationStatus, it.Status.OrganizationStatusError)
 		}
 	}
 
 	var teamList repoguardsapv1.GithubTeamList
 	if err := k8sClient.List(ctx, &teamList); err == nil {
-		fmt.Fprintf(GinkgoWriter, "GithubTeam CRs: %d\n", len(teamList.Items))
+		_, _ = fmt.Fprintf(GinkgoWriter, "GithubTeam CRs: %d\n", len(teamList.Items))
 		for _, it := range teamList.Items {
-			fmt.Fprintf(GinkgoWriter, " - %s/%s status=%s err=%q members=%d\n",
+			_, _ = fmt.Fprintf(GinkgoWriter, " - %s/%s status=%s err=%q members=%d\n",
 				it.Namespace, it.Name, it.Status.TeamStatus, it.Status.TeamStatusError, len(it.Status.Members))
 		}
 	}
 
-	fmt.Fprintln(GinkgoWriter, "====================================================")
+	_, _ = fmt.Fprintln(GinkgoWriter, "====================================================")
 })
 
 // ---- suite bootstrap ----
@@ -147,8 +149,8 @@ var _ = BeforeSuite(func() {
 	TEST_ENV = loadTestEnv()
 
 	seed := int64(GinkgoRandomSeed())
-	rand.Seed(seed)
-	fmt.Fprintf(GinkgoWriter, "Ginkgo random seed: %d\n", seed)
+	testRand = rand.New(rand.NewSource(seed))
+	_, _ = fmt.Fprintf(GinkgoWriter, "Ginkgo random seed: %d\n", seed)
 
 	// Start dummy external services first, because initSharedResources() consumes
 	// values from TEST_ENV (e.g. LDAP host, EMP HTTP endpoint) to build fixtures.

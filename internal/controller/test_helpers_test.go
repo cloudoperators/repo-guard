@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -34,7 +33,7 @@ func generateUniqueName(base string) string {
 	if base == "" {
 		base = "test"
 	}
-	return fmt.Sprintf("%s-%08x", base, rand.Uint32())
+	return fmt.Sprintf("%s-%08x", base, testRand.Uint32())
 }
 
 func requireEnv(key string) string {
@@ -71,23 +70,8 @@ func requireEnvOr(preferred, key, fallback string) string {
 	return ""
 }
 
-// requireEnvOrFallback keeps compatibility for older call sites.
-// Prefer using requireEnvOr(preferred, key, fallback).
-func requireEnvOrFallback(key, fallback string) string {
-	return requireEnvOr("", key, fallback)
-}
-
-func isTruthy(v string) bool {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "1", "true", "yes", "y", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-// ---- k8s helpers ----
-
+// eventuallyGet is used when the object may not exist yet.
+// Returns last error on timeout.
 func deleteIgnoreNotFound(ctx context.Context, c client.Client, obj client.Object) error {
 	if obj == nil || strings.TrimSpace(obj.GetName()) == "" {
 		return nil
@@ -97,21 +81,6 @@ func deleteIgnoreNotFound(ctx context.Context, c client.Client, obj client.Objec
 		return nil
 	}
 	return err
-}
-
-// eventuallyGet is used when the object may not exist yet.
-// Returns last error on timeout.
-func eventuallyGet(ctx context.Context, nn types.NamespacedName, out client.Object) error {
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		lastErr = k8sClient.Get(ctx, nn, out)
-		if lastErr == nil {
-			return nil
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return lastErr
 }
 
 func updateObjectWithRetry[T client.Object](ctx context.Context, c client.Client, keyObj T, mutate func(T)) error {
@@ -186,7 +155,7 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 	// Create team. GitHub slug is derived from name; keeping name == slugOrName is fine for tests.
 	newTeam := &githubAPI.NewTeam{
 		Name:    teamSlugOrName,
-		Privacy: githubAPI.String("closed"),
+		Privacy: githubAPI.Ptr("closed"),
 	}
 	_, resp, err = client.Teams.CreateTeam(ctx, org, *newTeam)
 	if err == nil {
@@ -195,42 +164,6 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 
 	// If creation failed because it already exists (race), treat as success.
 	// GitHub may return 422 "Validation Failed" for duplicate.
-	if resp != nil && resp.StatusCode == 422 {
-		return nil
-	}
-
-	return err
-}
-
-// githubEnsureRepo ensures a repository exists in the org (idempotent).
-// If the repo already exists, it returns nil.
-func githubEnsureRepo(ctx context.Context, client *githubAPI.Client, org, repo string) error {
-	org = strings.TrimSpace(org)
-	repo = strings.TrimSpace(repo)
-	if org == "" || repo == "" || client == nil {
-		return nil
-	}
-
-	// If repo exists, done.
-	_, resp, err := client.Repositories.Get(ctx, org, repo)
-	if err == nil && resp != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
-	}
-
-	// Create private repo by default (tests can still validate team assignment behavior).
-	// If you need public repos in assertions, set the "Private" flag accordingly in the test
-	// by calling this helper twice with different settings (or create separate helper).
-	private := true
-	r := &githubAPI.Repository{
-		Name:    githubAPI.String(repo),
-		Private: githubAPI.Bool(private),
-	}
-	_, resp, err = client.Repositories.Create(ctx, org, r)
-	if err == nil {
-		return nil
-	}
-
-	// 422 may also be returned if repo exists (race).
 	if resp != nil && resp.StatusCode == 422 {
 		return nil
 	}
@@ -253,8 +186,8 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 	}
 
 	r := &githubAPI.Repository{
-		Name:    githubAPI.String(repo),
-		Private: githubAPI.Bool(private),
+		Name:    githubAPI.Ptr(repo),
+		Private: githubAPI.Ptr(private),
 	}
 	_, resp, err = client.Repositories.Create(ctx, org, r)
 	if err == nil {

@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
@@ -45,7 +44,7 @@ var _ = Describe("Github Team controller", func() {
 		orgName = requireEnv("ORGANIZATION")
 		requireEnv("GITHUB_TOKEN")
 
-		uniqueID = fmt.Sprintf("%08x", rand.Uint32())
+		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNamespace = "ns-team-" + uniqueID
 		uniqueGithubName = "gh-team-" + uniqueID
 		uniqueGithubSecretName = "sec-team-" + uniqueID

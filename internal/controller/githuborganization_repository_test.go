@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"math/rand"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	githubAPI "github.com/google/go-github/v83/github"
@@ -57,7 +56,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		orgName = requireEnv("ORGANIZATION")
 		client = githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
 
-		uniqueID = fmt.Sprintf("%08x", rand.Uint32())
+		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNS = "ns-repo-" + uniqueID
 		uniqueGHName = "gh-repo-" + uniqueID
 		uniqueSecName = "sec-repo-" + uniqueID

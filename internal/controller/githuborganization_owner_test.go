@@ -53,13 +53,11 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 		github = githubCom.DeepCopy()
 		github.Name = generateUniqueName("gh-owner")
 		github.Namespace = ""
-		github.ObjectMeta.Namespace = ""
 		github.Spec.Secret = generateUniqueName("gh-owner-secret")
 
 		secret = githubComSecret.DeepCopy()
 		secret.Name = github.Spec.Secret
 		secret.Namespace = TestOperatorNamespace
-		secret.ObjectMeta.Namespace = TestOperatorNamespace
 
 		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
 		Expect(ensureResourceCreated(ctx, github)).To(Succeed())

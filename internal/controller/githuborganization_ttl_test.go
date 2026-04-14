@@ -36,14 +36,12 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 		secret = githubComSecret.DeepCopy()
 		secret.Name = secName
 		secret.Namespace = TestOperatorNamespace
-		secret.ObjectMeta.Namespace = TestOperatorNamespace
 		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
 
 		// Create cluster-scoped Github first, so we know expected secret name
 		github = githubCom.DeepCopy()
 		github.Name = ghName
 		github.Namespace = ""
-		github.ObjectMeta.Namespace = ""
 		github.Spec.Secret = secName
 		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
 

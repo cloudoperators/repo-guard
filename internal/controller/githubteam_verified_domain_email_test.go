@@ -72,13 +72,11 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 		github = githubCom.DeepCopy()
 		github.Name = ghName
 		github.Namespace = ""
-		github.ObjectMeta.Namespace = ""
 		github.Spec.Secret = secName
 
 		secret = githubComSecret.DeepCopy()
 		secret.Name = secName
 		secret.Namespace = TestOperatorNamespace
-		secret.ObjectMeta.Namespace = TestOperatorNamespace
 
 		// Create Secret BEFORE Github so Github can become Running deterministically
 		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
@@ -96,7 +94,6 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 		org = githubOrganizationGreenhouseSandboxForTeamTests.DeepCopy()
 		org.Name = fmt.Sprintf("%s--%s", github.Name, orgName)
 		org.Namespace = ns
-		org.ObjectMeta.Namespace = ns
 		org.Spec.Github = github.Name
 		org.Spec.Organization = orgName
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
