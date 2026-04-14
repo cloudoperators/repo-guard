@@ -107,7 +107,7 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 		ownerLink = &repoguardsapv1.GithubAccountLink{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      generateUniqueName("owner-link"),
-				Namespace: testNamespace,
+				Namespace: "",
 			},
 			Spec: repoguardsapv1.GithubAccountLinkSpec{
 				Github:           github.Name,

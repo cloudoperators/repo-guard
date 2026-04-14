@@ -75,7 +75,7 @@ var _ = Describe("Github Team controller", func() {
 
 		gal = githubAccountLink.DeepCopy()
 		gal.Name = generateUniqueName("team-gal")
-		gal.Namespace = uniqueNamespace
+		gal.Namespace = ""
 		gal.Spec.Github = uniqueGithubName
 		Expect(ensureResourceCreated(ctx, gal)).To(Succeed())
 

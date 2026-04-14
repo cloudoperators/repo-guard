@@ -237,7 +237,7 @@ func initSharedResources() {
 	githubAccountLinkForExternalMemberProviderLDAP = &repoguardsapv1.GithubAccountLink{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"], strings.ToLower(TEST_ENV["LDAP_GROUP_PROVIDER_USER_INTERNAL_USERNAME"])),
-			Namespace: ns,
+			Namespace: "",
 		},
 		Spec: repoguardsapv1.GithubAccountLinkSpec{
 			GreenhouseUserID: TEST_ENV["LDAP_GROUP_PROVIDER_USER_INTERNAL_USERNAME"],
@@ -506,7 +506,7 @@ func initSharedResources() {
 	githubAccountLinkOrgOwner = &repoguardsapv1.GithubAccountLink{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"], strings.ToLower(TEST_ENV["USER_0_GREENHOUSE_ID"])),
-			Namespace: ns,
+			Namespace: "",
 		},
 		Spec: repoguardsapv1.GithubAccountLinkSpec{
 			GreenhouseUserID: TEST_ENV["USER_0_GREENHOUSE_ID"],
@@ -518,7 +518,7 @@ func initSharedResources() {
 	githubAccountLink = &repoguardsapv1.GithubAccountLink{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"], strings.ToLower(TEST_ENV["USER_1_GREENHOUSE_ID"])),
-			Namespace: ns,
+			Namespace: "",
 		},
 		Spec: repoguardsapv1.GithubAccountLinkSpec{
 			GreenhouseUserID: TEST_ENV["USER_1_GREENHOUSE_ID"],
