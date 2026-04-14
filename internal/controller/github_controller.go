@@ -80,7 +80,7 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 	if err != nil {
 		l.Error(err, "error during getting the secret for github")
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
 			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 				return err
@@ -89,10 +89,9 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			latest.Status.Error = fmt.Sprintf("error in getting secret: %v", err)
 			latest.Status.Timestamp = metav1.Now()
 			return r.Status().Update(ctx, latest)
-		})
-		if err != nil {
-			l.Error(err, "error during status update")
-			return reconcile.Result{}, err
+		}); updateErr != nil {
+			l.Error(updateErr, "error during status update")
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, nil
 	}
@@ -112,7 +111,7 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	)
 	if err != nil {
 		l.Error(err, "error during github client creation")
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
 			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 				return err
@@ -121,10 +120,9 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			latest.Status.Error = fmt.Sprintf("error in github client creation: %v", err)
 			latest.Status.Timestamp = metav1.Now()
 			return r.Status().Update(ctx, latest)
-		})
-		if err != nil {
-			l.Error(err, "error during status update")
-			return reconcile.Result{}, err
+		}); updateErr != nil {
+			l.Error(updateErr, "error during status update")
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, nil
 	}
@@ -133,7 +131,7 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	_, err = cc.NewAppClient()
 	if err != nil {
 		l.Error(err, "error during github app client creation")
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
 			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 				return err
@@ -142,10 +140,9 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 			latest.Status.Error = fmt.Sprintf("error in github app client creation: %v", err)
 			latest.Status.Timestamp = metav1.Now()
 			return r.Status().Update(ctx, latest)
-		})
-		if err != nil {
-			l.Error(err, "error during status update")
-			return reconcile.Result{}, err
+		}); updateErr != nil {
+			l.Error(updateErr, "error during status update")
+			return reconcile.Result{}, updateErr
 		}
 		return reconcile.Result{}, nil
 	}
