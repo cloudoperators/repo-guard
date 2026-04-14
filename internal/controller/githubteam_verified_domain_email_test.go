@@ -177,10 +177,10 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 		// Pre-annotate links to avoid race condition during first reconciliation
 		now := time.Now().UTC().Format(time.RFC3339)
 		emailChecksTest := map[string]map[string]any{
-			orgName: {"domain": "test.com", "verified": true, "timestamp": now},
+			orgName: {"domain": "test.com", "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED, "timestamp": now},
 		}
 		emailChecksOther := map[string]map[string]any{
-			orgName: {"domain": "other.com", "verified": true, "timestamp": now},
+			orgName: {"domain": "other.com", "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED, "timestamp": now},
 		}
 		bTest, _ := json.Marshal(emailChecksTest)
 		bOther, _ := json.Marshal(emailChecksOther)
@@ -224,10 +224,10 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 
 		now := time.Now().UTC().Format(time.RFC3339)
 		emailChecksTest := map[string]map[string]any{
-			orgName: {"domain": requiredDomain, "verified": true, "timestamp": now},
+			orgName: {"domain": requiredDomain, "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED, "timestamp": now},
 		}
 		emailChecksOther := map[string]map[string]any{
-			orgName: {"domain": "other.com", "verified": true, "timestamp": now},
+			orgName: {"domain": "other.com", "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED, "timestamp": now},
 		}
 
 		bTest, err := json.Marshal(emailChecksTest)
@@ -314,6 +314,77 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 				HaveLen(1),
 				ContainElement(HaveField("GreenhouseID", u1GHID)),
 			))
+		}, 5*timeout, interval).Should(Succeed())
+	})
+
+	It("allows members with status 'not-part-of-org'", func() {
+		requiredDomain := "test.com"
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		// Link U0: verified
+		// Link U1: not-part-of-org
+		emailChecksU0 := map[string]map[string]any{
+			orgName: {"domain": requiredDomain, "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED, "timestamp": now},
+		}
+		emailChecksU1 := map[string]map[string]any{
+			orgName: {"domain": requiredDomain, "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG, "timestamp": now},
+		}
+
+		bU0, _ := json.Marshal(emailChecksU0)
+		bU1, _ := json.Marshal(emailChecksU1)
+
+		Eventually(func() error {
+			return updateObjectWithRetry(ctx, k8sClient, &repoguardsapv1.GithubAccountLink{
+				ObjectMeta: metav1.ObjectMeta{Name: linkU0.Name},
+			}, func(obj *repoguardsapv1.GithubAccountLink) {
+				if obj.Annotations == nil {
+					obj.Annotations = map[string]string{}
+				}
+				obj.Annotations[repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS] = string(bU0)
+			})
+		}, 3*timeout, interval).Should(Succeed())
+
+		Eventually(func() error {
+			return updateObjectWithRetry(ctx, k8sClient, &repoguardsapv1.GithubAccountLink{
+				ObjectMeta: metav1.ObjectMeta{Name: linkU1.Name},
+			}, func(obj *repoguardsapv1.GithubAccountLink) {
+				if obj.Annotations == nil {
+					obj.Annotations = map[string]string{}
+				}
+				obj.Annotations[repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS] = string(bU1)
+			})
+		}, 3*timeout, interval).Should(Succeed())
+
+		teamName := generateUniqueName("team-not-part-of-org")
+		teamCR2 := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s--%s--%s", github.Name, orgName, teamName),
+				Namespace: ns,
+				Labels: map[string]string{
+					"repoguard.sap/require-verified-domain-email": requiredDomain,
+					"repoguard.sap/dryRun":                        "true",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:         github.Name,
+				Organization:   orgName,
+				Team:           teamName,
+				GreenhouseTeam: ghTeam.Name,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, teamCR2)).To(Succeed())
+		defer func() { _ = deleteIgnoreNotFound(ctx, k8sClient, teamCR2) }()
+
+		// Both users should be included:
+		// u0 because it's VERIFIED
+		// u1 because it's NOT_PART_OF_ORG
+		Eventually(func(g Gomega) {
+			cur := &repoguardsapv1.GithubTeam{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: teamCR2.Name}, cur)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cur.Status.Members).To(HaveLen(2))
+			g.Expect(cur.Status.Members).To(ContainElement(HaveField("GreenhouseID", u0GHID)))
+			g.Expect(cur.Status.Members).To(ContainElement(HaveField("GreenhouseID", u1GHID)))
 		}, 5*timeout, interval).Should(Succeed())
 	})
 })

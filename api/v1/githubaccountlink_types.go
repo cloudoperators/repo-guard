@@ -54,7 +54,7 @@ func init() {
 // Results format:
 //
 //	{
-//	  "<org>": { "domain": "example.com", "verified": true, "timestamp": "RFC3339" },
+//	  "<org>": { "domain": "example.com", "status": "verified/not-part-of-org/no", "timestamp": "RFC3339" },
 //	  ...
 //	}
 const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_CONFIG = "repoguard.sap/email-check-config"

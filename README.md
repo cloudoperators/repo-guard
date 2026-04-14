@@ -428,7 +428,7 @@ GithubAccountLink labels & annotations:
 
 ```json
 {
-  "org-name": { "domain": "example.com", "verified": true, "timestamp": "2023-10-27T10:00:00Z" }
+  "org-name": { "domain": "example.com", "status": "verified/not-part-of-org/no", "timestamp": "2023-10-27T10:00:00Z" }
 }
 ```
 
