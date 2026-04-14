@@ -82,8 +82,8 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		l.Error(err, "error during getting the secret for github")
 		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
-			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-				return err
+			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr != nil {
+				return getErr
 			}
 			latest.Status.State = repoguardsapv1.GithubStateFailed
 			latest.Status.Error = fmt.Sprintf("error in getting secret: %v", err)
@@ -113,8 +113,8 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		l.Error(err, "error during github client creation")
 		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
-			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-				return err
+			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr != nil {
+				return getErr
 			}
 			latest.Status.State = repoguardsapv1.GithubStateFailed
 			latest.Status.Error = fmt.Sprintf("error in github client creation: %v", err)
@@ -133,8 +133,8 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		l.Error(err, "error during github app client creation")
 		if updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			latest := &repoguardsapv1.Github{}
-			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-				return err
+			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr != nil {
+				return getErr
 			}
 			latest.Status.State = repoguardsapv1.GithubStateFailed
 			latest.Status.Error = fmt.Sprintf("error in github app client creation: %v", err)
