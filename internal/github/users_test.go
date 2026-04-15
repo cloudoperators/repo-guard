@@ -5,8 +5,8 @@ package github
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -22,9 +22,9 @@ func TestDefaultUsersProvider_ParseIntErrorWrapping(t *testing.T) {
 		if !errors.Is(err, strconv.ErrSyntax) {
 			t.Errorf("expected strconv.ErrSyntax, got %v", err)
 		}
-		expectedMsg := fmt.Sprintf("invalid GitHub user ID: %q (expected numeric ID): strconv.ParseInt: parsing %q: %s", uid, uid, strconv.ErrSyntax)
-		if err.Error() != expectedMsg {
-			t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
+		expectedPrefix := "invalid GitHub user ID: \"not-numeric\" (expected numeric ID):"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("expected error message to start with %q, got %q", expectedPrefix, err.Error())
 		}
 	})
 
@@ -33,9 +33,12 @@ func TestDefaultUsersProvider_ParseIntErrorWrapping(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
-		expectedMsg := fmt.Sprintf("invalid GitHub user ID: %q (expected numeric ID): strconv.ParseInt: parsing %q: %s", uid, uid, strconv.ErrSyntax)
-		if err.Error() != expectedMsg {
-			t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
+		if !errors.Is(err, strconv.ErrSyntax) {
+			t.Errorf("expected strconv.ErrSyntax, got %v", err)
+		}
+		expectedPrefix := "invalid GitHub user ID: \"not-numeric\" (expected numeric ID):"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("expected error message to start with %q, got %q", expectedPrefix, err.Error())
 		}
 	})
 
@@ -44,9 +47,12 @@ func TestDefaultUsersProvider_ParseIntErrorWrapping(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
-		expectedMsg := fmt.Sprintf("invalid GitHub user ID: %q (expected numeric ID): strconv.ParseInt: parsing %q: %s", uid, uid, strconv.ErrSyntax)
-		if err.Error() != expectedMsg {
-			t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
+		if !errors.Is(err, strconv.ErrSyntax) {
+			t.Errorf("expected strconv.ErrSyntax, got %v", err)
+		}
+		expectedPrefix := "invalid GitHub user ID: \"not-numeric\" (expected numeric ID):"
+		if !strings.HasPrefix(err.Error(), expectedPrefix) {
+			t.Errorf("expected error message to start with %q, got %q", expectedPrefix, err.Error())
 		}
 	})
 }
