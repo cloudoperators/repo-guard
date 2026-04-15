@@ -199,6 +199,7 @@ var _ = BeforeSuite(func() {
 	Expect((&GithubReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubOrganizationReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubTeamReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
+	Expect((&GithubAccountLinkReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&LDAPGroupProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GenericExternalMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&StaticMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())

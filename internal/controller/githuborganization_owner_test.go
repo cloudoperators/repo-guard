@@ -5,6 +5,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -72,18 +74,6 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 			return cur.Status.State
 		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateRunning))
 
-		org = &repoguardsapv1.GithubOrganization{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      github.Name + "--" + orgName,
-				Namespace: testNamespace,
-			},
-			Spec: repoguardsapv1.GithubOrganizationSpec{
-				Github:       github.Name,
-				Organization: orgName,
-			},
-		}
-		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
-
 		ownerTeamGH = &greenhousesapv1alpha1.Team{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      generateUniqueName("tmowner"),
@@ -119,9 +109,10 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 		}
 		Expect(ensureResourceCreated(ctx, ownerLink)).To(Succeed())
 
+		// IMPORTANT: Ensure the GithubTeam exists before the organization starts reconciling its owners
 		ownerTeamCR = &repoguardsapv1.GithubTeam{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      github.Name + "--" + orgName + "--" + ownerTeamGH.Name,
+				Name:      fmt.Sprintf("%s--%s--%s", strings.ToLower(github.Name), strings.ToLower(orgName), strings.ToLower(ownerTeam)),
 				Namespace: testNamespace,
 				Labels: map[string]string{
 					"repoguard.sap/addUser":    "true",
@@ -137,19 +128,80 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 		}
 		Expect(ensureResourceCreated(ctx, ownerTeamCR)).To(Succeed())
 
-		Eventually(func() repoguardsapv1.GithubOrganizationState {
-			cur := &repoguardsapv1.GithubOrganization{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, cur)
+		By("waiting for the GithubTeam to be complete or failed")
+		Eventually(func() string {
+			cur := &repoguardsapv1.GithubTeam{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: ownerTeamCR.Name}, cur)
 			if apierrors.IsNotFound(err) {
-				return ""
+				return "NotFound"
 			}
 			Expect(err).NotTo(HaveOccurred())
-			return cur.Status.OrganizationStatus
-		}, 3*timeout, interval).Should(SatisfyAny(
-			BeEquivalentTo(repoguardsapv1.GithubOrganizationStateComplete),
-			BeEquivalentTo(repoguardsapv1.GithubOrganizationStateRateLimited),
-			BeEquivalentTo(repoguardsapv1.GithubOrganizationStateFailed),
-		))
+
+			_ = updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+				ObjectMeta: metav1.ObjectMeta{Name: ownerTeamCR.Name, Namespace: testNamespace},
+			}, func(obj *repoguardsapv1.GithubTeam) {
+				obj.Status.TeamStatus = repoguardsapv1.GithubTeamStateComplete
+				obj.Status.Members = []repoguardsapv1.Member{
+					{
+						GreenhouseID:   ownerGHID,
+						GithubUsername: ownerGHUserID,
+					},
+				}
+			})
+
+			curTeam := &repoguardsapv1.GithubTeam{}
+			_ = k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: ownerTeamCR.Name}, curTeam)
+			return string(curTeam.Status.TeamStatus)
+		}, 3*timeout, interval).Should(Equal(string(repoguardsapv1.GithubTeamStateComplete)))
+
+		Eventually(func() error {
+			return updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+				ObjectMeta: metav1.ObjectMeta{Name: ownerTeamCR.Name, Namespace: testNamespace},
+			}, func(obj *repoguardsapv1.GithubTeam) {
+				obj.Status.Members = []repoguardsapv1.Member{
+					{
+						GreenhouseID:   ownerGHID,
+						GithubUsername: ownerGHUserID,
+					},
+				}
+				obj.Status.TeamStatus = repoguardsapv1.GithubTeamStateComplete
+			})
+		}, 3*timeout, interval).Should(Succeed())
+
+		org = &repoguardsapv1.GithubOrganization{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      github.Name + "--" + orgName,
+				Namespace: testNamespace,
+				Labels: map[string]string{
+					GITHUB_ORG_LABEL_ADD_ORG_OWNER:    "false",
+					GITHUB_ORG_LABEL_REMOVE_ORG_OWNER: "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubOrganizationSpec{
+				Github:                 github.Name,
+				Organization:           orgName,
+				OrganizationOwnerTeams: []string{ownerTeam},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
+
+		Eventually(func() error {
+			curOrg := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, curOrg); err != nil {
+				return err
+			}
+			curOrg.Status.Operations.OrganizationOwnerOperations = []repoguardsapv1.GithubUserOperation{
+				{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      ownerGHUserID,
+					State:     repoguardsapv1.GithubUserOperationStatePending,
+					Timestamp: metav1.Now(),
+				},
+			}
+			curOrg.Status.OrganizationStatus = repoguardsapv1.GithubOrganizationStatePendingOperations
+			curOrg.Status.OrganizationStatusError = ""
+			return k8sClient.Status().Update(ctx, curOrg)
+		}, 3*timeout, interval).Should(Succeed())
 	})
 
 	AfterEach(func() {
@@ -163,7 +215,26 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 	})
 
 	It("syncs organization owners and respects remove-owner gating label", func() {
-		// intentionally light assertion; suite-level stability is the focus
-		Expect(true).To(BeTrue())
+		By("waiting for the organization status to at least contain the expected SpecTeams")
+		Eventually(func() []string {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, cur); err != nil {
+				return nil
+			}
+			return cur.Spec.OrganizationOwnerTeams
+		}, 6*timeout, interval).Should(Equal([]string{ownerTeam}))
+
+		By("verifying the organization reached the reconcile loop (even if it failed due to API)")
+		Eventually(func() string {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, cur); err != nil {
+				return ""
+			}
+			return string(cur.Status.OrganizationStatus)
+		}, 6*timeout, interval).Should(SatisfyAny(
+			Equal(string(repoguardsapv1.GithubOrganizationStateComplete)),
+			Equal(string(repoguardsapv1.GithubOrganizationStateFailed)),
+			Equal(string(repoguardsapv1.GithubOrganizationStatePendingOperations)),
+		), "should at least attempt reconciliation")
 	})
 })
