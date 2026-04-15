@@ -201,8 +201,11 @@ var _ = BeforeSuite(func() {
 	Expect((&GithubTeamReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubAccountLinkReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&LDAPGroupProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
+	Expect((&ClusterLDAPGroupProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GenericExternalMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
+	Expect((&ClusterGenericExternalMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&StaticMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
+	Expect((&ClusterStaticMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 
 	started := make(chan struct{})
 	go func() {

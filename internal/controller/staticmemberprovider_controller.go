@@ -7,6 +7,7 @@ import (
 	"context"
 
 	genericprovider "github.com/cloudoperators/repo-guard/internal/external-provider/static"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,8 +39,11 @@ func (r *StaticMemberProviderReconciler) Reconcile(ctx context.Context, req ctrl
 
 	emp := &repoguardsapv1.StaticMemberProvider{}
 	if err = r.Get(ctx, req.NamespacedName, emp); err != nil {
-		// Let controller-runtime handle notfound logging similar to other controllers
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if errors.IsNotFound(err) {
+			StaticProviders.Delete(req.NamespacedName)
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	groups := map[string][]string{}
@@ -86,7 +90,11 @@ func (r *ClusterStaticMemberProviderReconciler) Reconcile(ctx context.Context, r
 
 	emp := &repoguardsapv1.ClusterStaticMemberProvider{}
 	if err = r.Get(ctx, req.NamespacedName, emp); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if errors.IsNotFound(err) {
+			StaticProviders.Delete(types.NamespacedName{Name: req.Name})
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
 	groups := map[string][]string{}

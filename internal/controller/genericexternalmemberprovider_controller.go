@@ -44,6 +44,7 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 	emp := &repoguardsapv1.GenericExternalMemberProvider{}
 	if err := r.Get(ctx, req.NamespacedName, emp); err != nil {
 		if errors.IsNotFound(err) {
+			GenericHTTPProviders.Delete(req.NamespacedName)
 			l.Info("resource not found in kubernetes: reconcile is skipped")
 			return ctrl.Result{}, nil
 		}
@@ -141,6 +142,7 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 	emp := &repoguardsapv1.ClusterGenericExternalMemberProvider{}
 	if err := r.Get(ctx, req.NamespacedName, emp); err != nil {
 		if errors.IsNotFound(err) {
+			GenericHTTPProviders.Delete(types.NamespacedName{Name: req.Name})
 			l.Info("resource not found in kubernetes: reconcile is skipped")
 			return ctrl.Result{}, nil
 		}

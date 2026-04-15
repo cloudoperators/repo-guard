@@ -47,6 +47,7 @@ func (r *LDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	err = r.Get(ctx, req.NamespacedName, ldap)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			LDAPGroupProviders.Delete(req.NamespacedName)
 			l.Info("resource not found in kubernetes: reconcile is skipped")
 			return ctrl.Result{}, nil
 		}
@@ -154,6 +155,7 @@ func (r *ClusterLDAPGroupProviderReconciler) Reconcile(ctx context.Context, req 
 	err = r.Get(ctx, req.NamespacedName, ldap)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			LDAPGroupProviders.Delete(types.NamespacedName{Name: req.Name})
 			l.Info("resource not found in kubernetes: reconcile is skipped")
 			return ctrl.Result{}, nil
 		}
