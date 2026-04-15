@@ -29,10 +29,6 @@ type GithubAccountLinkReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations,verbs=get;list;watch
 func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubAccountLink")

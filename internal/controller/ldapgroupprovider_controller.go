@@ -30,9 +30,6 @@ type LDAPGroupProviderReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders/finalizers,verbs=update
 func (r *LDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("LDAPGroupProvider")
@@ -140,9 +137,6 @@ type ClusterLDAPGroupProviderReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterldapgroupproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterldapgroupproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterldapgroupproviders/finalizers,verbs=update
 func (r *ClusterLDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("ClusterLDAPGroupProvider")

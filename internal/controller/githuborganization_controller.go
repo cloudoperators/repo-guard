@@ -35,15 +35,34 @@ type GithubOrganizationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=repoguard.sap,resources=githuborganizations/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks,verbs=get;list;watch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteamrepositories,verbs=get;list;watch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams,verbs=get;list;watch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubaccountlinks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteamrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteamrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteamrepositories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=githubteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders;clusterldapgroupproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders/status;clusterldapgroupproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=ldapgroupproviders/finalizers;clusterldapgroupproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders;clustergenericexternalmemberproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders/status;clustergenericexternalmemberproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders/finalizers;clustergenericexternalmemberproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders;clusterstaticmemberproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders/status;clusterstaticmemberproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders/finalizers;clusterstaticmemberproviders/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=greenhouse.sap,resources=teams,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+
 func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubOrganization")

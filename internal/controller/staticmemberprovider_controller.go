@@ -18,10 +18,6 @@ import (
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=staticmemberproviders/finalizers,verbs=update
-
 type StaticMemberProviderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -74,10 +70,6 @@ type ClusterStaticMemberProviderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
-
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterstaticmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterstaticmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clusterstaticmemberproviders/finalizers,verbs=update
 
 func (r *ClusterStaticMemberProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)

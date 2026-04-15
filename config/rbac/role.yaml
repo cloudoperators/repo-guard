@@ -16,6 +16,14 @@ rules:
   - list
   - watch
 - apiGroups:
+  - greenhouse.sap
+  resources:
+  - teams
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - repoguard.sap
   resources:
   - clustergenericexternalmemberproviders
@@ -71,11 +79,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - greenhouse.sap
-  resources:
-  - teams
-  verbs:
-  - get
-  - list
-  - watch

@@ -23,11 +23,6 @@ import (
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=genericexternalmemberproviders/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
-
 type GenericExternalMemberProviderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -129,10 +124,6 @@ type ClusterGenericExternalMemberProviderReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
-
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clustergenericexternalmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clustergenericexternalmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=clustergenericexternalmemberproviders/finalizers,verbs=update
 
 func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)

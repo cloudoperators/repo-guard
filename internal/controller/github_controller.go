@@ -41,9 +41,6 @@ type GithubReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.sap,resources=githubs/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
