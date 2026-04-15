@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/cloudoperators/greenhouse v0.10.0
 	github.com/go-ldap/ldap/v3 v3.4.13
-	github.com/google/go-github/v83 v83.0.0
+	github.com/google/go-github/v84 v84.0.0
 	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba
@@ -71,7 +71,6 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v75 v75.0.0 // indirect
-	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
 	github.com/google/uuid v1.6.0 // indirect

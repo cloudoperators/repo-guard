@@ -10,7 +10,7 @@ import (
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	githubAPI "github.com/google/go-github/v83/github"
+	githubAPI "github.com/google/go-github/v84/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
