@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
 )
