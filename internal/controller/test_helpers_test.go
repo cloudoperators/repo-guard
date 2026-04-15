@@ -70,8 +70,7 @@ func requireEnvOr(preferred, key, fallback string) string {
 	return ""
 }
 
-// eventuallyGet is used when the object may not exist yet.
-// Returns last error on timeout.
+// deleteIgnoreNotFound deletes the object and ignores NotFound errors.
 func deleteIgnoreNotFound(ctx context.Context, c client.Client, obj client.Object) error {
 	if obj == nil || strings.TrimSpace(obj.GetName()) == "" {
 		return nil
