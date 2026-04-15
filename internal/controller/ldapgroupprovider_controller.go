@@ -110,7 +110,7 @@ func (r *LDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 	ghmetrics.ObserveExternalRequest("ldap_group_provider", "test_connection", "success", start)
 
-	LDAPGroupProviders[types.NamespacedName{Name: ldap.Name, Namespace: ldap.Namespace}] = c
+	LDAPGroupProviders.Store(types.NamespacedName{Name: ldap.Name, Namespace: ldap.Namespace}, c)
 
 	// update status to running
 	ldap.Status.State = repoguardsapv1.LDAPGroupProviderStateRunning
@@ -212,7 +212,7 @@ func (r *ClusterLDAPGroupProviderReconciler) Reconcile(ctx context.Context, req 
 	}
 	ghmetrics.ObserveExternalRequest("cluster_ldap_group_provider", "test_connection", "success", start)
 
-	LDAPGroupProviders[types.NamespacedName{Name: ldap.Name}] = c
+	LDAPGroupProviders.Store(types.NamespacedName{Name: ldap.Name}, c)
 
 	// update status to running
 	ldap.Status.State = repoguardsapv1.LDAPGroupProviderStateRunning

@@ -48,7 +48,7 @@ func (r *StaticMemberProviderReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 	c := genericprovider.NewStaticClient(groups)
 
-	StaticProviders[types.NamespacedName{Name: emp.Name, Namespace: emp.Namespace}] = c
+	StaticProviders.Store(types.NamespacedName{Name: emp.Name, Namespace: emp.Namespace}, c)
 
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning
 	emp.Status.Timestamp = metav1.Now()
@@ -95,7 +95,7 @@ func (r *ClusterStaticMemberProviderReconciler) Reconcile(ctx context.Context, r
 	}
 	c := genericprovider.NewStaticClient(groups)
 
-	StaticProviders[types.NamespacedName{Name: emp.Name}] = c
+	StaticProviders.Store(types.NamespacedName{Name: emp.Name}, c)
 
 	emp.Status.State = repoguardsapv1.ExternalMemberProviderStateRunning
 	emp.Status.Timestamp = metav1.Now()

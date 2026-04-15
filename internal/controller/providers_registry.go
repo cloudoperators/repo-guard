@@ -4,19 +4,11 @@
 package controller
 
 import (
-	"k8s.io/apimachinery/pkg/types"
-
-	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+	"sync"
 )
 
 var (
-	LDAPGroupProviders   map[types.NamespacedName]externalprovider.ExternalProvider
-	GenericHTTPProviders map[types.NamespacedName]externalprovider.ExternalProvider
-	StaticProviders      map[types.NamespacedName]externalprovider.ExternalProvider
+	LDAPGroupProviders   sync.Map
+	GenericHTTPProviders sync.Map
+	StaticProviders      sync.Map
 )
-
-func init() {
-	LDAPGroupProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
-	GenericHTTPProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
-	StaticProviders = make(map[types.NamespacedName]externalprovider.ExternalProvider)
-}

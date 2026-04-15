@@ -34,6 +34,7 @@ import (
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
 
+	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
 	"github.com/cloudoperators/repo-guard/internal/github"
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 
@@ -671,8 +672,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						return reconcile.Result{}, nil
 					}
 				}
-				ldapProvider, ok := LDAPGroupProviders[providerKey]
-				if !ok {
+				var ldapProvider externalprovider.ExternalProvider
+				if val, ok := LDAPGroupProviders.Load(providerKey); ok {
+					ldapProvider = val.(externalprovider.ExternalProvider)
+				}
+				if ldapProvider == nil {
 					l.Info("waiting for LDAPGroupProvider to be initialized", "LDAPGroupProviders", ldapName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
@@ -740,8 +744,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, nil
 				}
 
-				provider, ok := GenericHTTPProviders[providerKey]
-				if !ok {
+				var provider externalprovider.ExternalProvider
+				if val, ok := GenericHTTPProviders.Load(providerKey); ok {
+					provider = val.(externalprovider.ExternalProvider)
+				}
+				if provider == nil {
 					l.Info("waiting for external member provider to be initialized", "ExternalMemberProvider", empName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
@@ -804,8 +811,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, nil
 				}
 
-				provider, ok := StaticProviders[providerKey]
-				if !ok {
+				var provider externalprovider.ExternalProvider
+				if val, ok := StaticProviders.Load(providerKey); ok {
+					provider = val.(externalprovider.ExternalProvider)
+				}
+				if provider == nil {
 					l.Info("waiting for static external member provider to be initialized", "StaticMemberProvider", empName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
