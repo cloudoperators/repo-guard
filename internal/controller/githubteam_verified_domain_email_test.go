@@ -384,4 +384,74 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 			g.Expect(cur.Status.Members).To(ContainElement(HaveField("GreenhouseID", u1GHID)))
 		}, 5*timeout, interval).Should(Succeed())
 	})
+
+	It("supports legacy verified field in results annotation", func() {
+		requiredDomain := "test.com"
+		now := time.Now().UTC().Format(time.RFC3339)
+
+		// linkU0: Legacy format with only "verified": true
+		emailChecksU0 := map[string]map[string]any{
+			orgName: {"domain": requiredDomain, "verified": true, "timestamp": now},
+		}
+		bU0, _ := json.Marshal(emailChecksU0)
+
+		Eventually(func() error {
+			return updateObjectWithRetry(ctx, k8sClient, &repoguardsapv1.GithubAccountLink{
+				ObjectMeta: metav1.ObjectMeta{Name: linkU0.Name},
+			}, func(obj *repoguardsapv1.GithubAccountLink) {
+				if obj.Annotations == nil {
+					obj.Annotations = map[string]string{}
+				}
+				obj.Annotations[repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS] = string(bU0)
+			})
+		}, 3*timeout, interval).Should(Succeed())
+
+		// linkU1: Explicitly not verified
+		emailChecksU1 := map[string]map[string]any{
+			orgName: {"domain": requiredDomain, "status": repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NO, "timestamp": now},
+		}
+		bU1, _ := json.Marshal(emailChecksU1)
+
+		Eventually(func() error {
+			return updateObjectWithRetry(ctx, k8sClient, &repoguardsapv1.GithubAccountLink{
+				ObjectMeta: metav1.ObjectMeta{Name: linkU1.Name},
+			}, func(obj *repoguardsapv1.GithubAccountLink) {
+				if obj.Annotations == nil {
+					obj.Annotations = map[string]string{}
+				}
+				obj.Annotations[repoguardsapv1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS] = string(bU1)
+			})
+		}, 3*timeout, interval).Should(Succeed())
+
+		teamName := generateUniqueName("team-legacy-verified")
+		teamCRLegacy := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s--%s--%s", github.Name, orgName, teamName),
+				Namespace: ns,
+				Labels: map[string]string{
+					"repoguard.sap/require-verified-domain-email": requiredDomain,
+					"repoguard.sap/dryRun":                        "true",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:         github.Name,
+				Organization:   orgName,
+				Team:           teamName,
+				GreenhouseTeam: ghTeam.Name,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, teamCRLegacy)).To(Succeed())
+		defer func() { _ = deleteIgnoreNotFound(ctx, k8sClient, teamCRLegacy) }()
+
+		// Expect only u0 (legacy verified) to be in members
+		Eventually(func(g Gomega) {
+			cur := &repoguardsapv1.GithubTeam{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: teamCRLegacy.Name}, cur)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(cur.Status.Members).To(SatisfyAll(
+				HaveLen(1),
+				ContainElement(HaveField("GreenhouseID", u0GHID)),
+			))
+		}, 5*timeout, interval).Should(Succeed())
+	})
 })

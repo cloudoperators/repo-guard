@@ -97,6 +97,7 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// Load existing results
 		type resultEntry struct {
 			Domain    string `json:"domain"`
+			Verified  bool   `json:"verified,omitzero"`
 			Status    string `json:"status"`
 			Timestamp string `json:"timestamp"`
 		}
@@ -207,6 +208,7 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			results[orgName] = resultEntry{
 				Domain:    cfg.Domain,
 				Status:    status,
+				Verified:  status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED,
 				Timestamp: time.Now().Format(time.RFC3339),
 			}
 			// write back annotation after loop
