@@ -26,7 +26,7 @@ replace (
 	github.com/dexidp/dex/api/v2 => github.com/dexidp/dex/api/v2 v2.4.0
 
 	// Keep Flux dependencies in sync with v2.6.1.
-	github.com/fluxcd/helm-controller/api => github.com/fluxcd/helm-controller/api v1.4.2
+	github.com/fluxcd/helm-controller/api => github.com/fluxcd/helm-controller/api v1.5.3
 	github.com/fluxcd/kustomize-controller/api => github.com/fluxcd/kustomize-controller/api v1.7.1
 	github.com/fluxcd/pkg/apis/kustomize => github.com/fluxcd/pkg/apis/kustomize v1.12.0
 	github.com/fluxcd/pkg/apis/meta => github.com/fluxcd/pkg/apis/meta v1.21.0
