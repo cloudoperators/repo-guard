@@ -95,6 +95,7 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 
 		org := githubOrganizationGreenhouseSandboxForTTLTests.DeepCopy()
 		org.Name = generateUniqueName("ttl-completed")
+		org.Spec.Github = github.Name
 		if org.Labels == nil {
 			org.Labels = map[string]string{}
 		}

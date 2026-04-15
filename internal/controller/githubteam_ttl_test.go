@@ -116,4 +116,142 @@ var _ = Describe("GithubTeam TTL labels maintenance", Ordered, func() {
 			return cur.Status.TeamStatusError
 		}, 3*timeout, interval).Should(BeEmpty())
 	})
+
+	It("clears completed operations after completedTTL", func() {
+		ctx := context.Background()
+
+		teamName := "team-completed-ttl"
+		name := fmt.Sprintf("%s--%s--%s", github.Name, TEST_ENV["ORGANIZATION"], teamName)
+
+		t := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: TEST_ENV["NAMESPACE"],
+				Labels: map[string]string{
+					GITHUB_TEAM_LABEL_COMPLETED_TTL: "1s",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       github.Name,
+				Organization: TEST_ENV["ORGANIZATION"],
+				Team:         teamName,
+			},
+			Status: repoguardsapv1.GithubTeamStatus{
+				Operations: []repoguardsapv1.GithubUserOperation{{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      "user1",
+					State:     repoguardsapv1.GithubUserOperationStateComplete,
+					Timestamp: metav1.NewTime(time.Now().Add(-2 * time.Second)),
+				}},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, t)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, t) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: TEST_ENV["NAMESPACE"]},
+		}, func(cur *repoguardsapv1.GithubTeam) {
+			cur.Status = t.Status
+		})).To(Succeed())
+
+		Eventually(func() int {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations)
+		}, 3*timeout, interval).Should(Equal(0))
+	})
+
+	It("clears notfound operations after notfoundTTL", func() {
+		ctx := context.Background()
+
+		teamName := "team-notfound-ttl"
+		name := fmt.Sprintf("%s--%s--%s", github.Name, TEST_ENV["ORGANIZATION"], teamName)
+
+		t := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: TEST_ENV["NAMESPACE"],
+				Labels: map[string]string{
+					GITHUB_TEAM_LABEL_NOTFOUND_TTL: "1s",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       github.Name,
+				Organization: TEST_ENV["ORGANIZATION"],
+				Team:         teamName,
+			},
+			Status: repoguardsapv1.GithubTeamStatus{
+				Operations: []repoguardsapv1.GithubUserOperation{{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      "user1",
+					State:     repoguardsapv1.GithubUserOperationStateNotFound,
+					Timestamp: metav1.NewTime(time.Now().Add(-2 * time.Second)),
+				}},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, t)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, t) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: TEST_ENV["NAMESPACE"]},
+		}, func(cur *repoguardsapv1.GithubTeam) {
+			cur.Status = t.Status
+		})).To(Succeed())
+
+		Eventually(func() int {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations)
+		}, 3*timeout, interval).Should(Equal(0))
+	})
+
+	It("clears skipped operations after skippedTTL", func() {
+		ctx := context.Background()
+
+		teamName := "team-skipped-ttl"
+		name := fmt.Sprintf("%s--%s--%s", github.Name, TEST_ENV["ORGANIZATION"], teamName)
+
+		t := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: TEST_ENV["NAMESPACE"],
+				Labels: map[string]string{
+					GITHUB_TEAM_LABEL_SKIPPED_TTL: "1s",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       github.Name,
+				Organization: TEST_ENV["ORGANIZATION"],
+				Team:         teamName,
+			},
+			Status: repoguardsapv1.GithubTeamStatus{
+				Operations: []repoguardsapv1.GithubUserOperation{{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      "user1",
+					State:     repoguardsapv1.GithubUserOperationStateSkipped,
+					Timestamp: metav1.NewTime(time.Now().Add(-2 * time.Second)),
+				}},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, t)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, t) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: TEST_ENV["NAMESPACE"]},
+		}, func(cur *repoguardsapv1.GithubTeam) {
+			cur.Status = t.Status
+		})).To(Succeed())
+
+		Eventually(func() int {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations)
+		}, 3*timeout, interval).Should(Equal(0))
+	})
 })
