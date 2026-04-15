@@ -93,7 +93,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			customTeam,
 		}
 		for _, t := range teams {
-			_ = githubEnsureTeam(ctx, client, orgName, t)
+			Expect(githubEnsureTeam(ctx, client, orgName, t)).To(Succeed())
 		}
 
 		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, false)).To(Succeed())
