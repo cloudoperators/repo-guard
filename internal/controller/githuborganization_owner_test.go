@@ -28,9 +28,10 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 		ownerTeamCR *repoguardsapv1.GithubTeam
 		ownerLink   *repoguardsapv1.GithubAccountLink
 
-		orgName   string
-		ownerTeam string
-		ownerGHID string
+		orgName       string
+		ownerTeam     string
+		ownerGHID     string
+		ownerGHUserID string
 	)
 
 	BeforeAll(func() {
@@ -40,6 +41,7 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 
 		ownerTeam = nonEmpty(TEST_ENV["ORGANIZATION_OWNER_TEAM"], "team-owner")
 		ownerGHID = requireEnv("ORGANIZATION_OWNER_GREENHOUSE_ID")
+		ownerGHUserID = requireEnv("ORGANIZATION_OWNER_GITHUB_USERID")
 
 	})
 
@@ -112,7 +114,7 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 			Spec: repoguardsapv1.GithubAccountLinkSpec{
 				Github:           github.Name,
 				GreenhouseUserID: ownerGHID,
-				GithubUserID:     ownerGHID,
+				GithubUserID:     ownerGHUserID,
 			},
 		}
 		Expect(ensureResourceCreated(ctx, ownerLink)).To(Succeed())
