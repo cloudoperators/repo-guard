@@ -216,12 +216,12 @@ monitoring:
   podMonitor:
     enabled: true
 
-ldap:
-  name: ${LDAP_NAME}
-  host: ${LDAP_HOST}
-  baseDN: ${LDAP_BASE_DN}
-  bindDN: ${LDAP_BIND_DN}
-  bindPW: ${LDAP_BIND_PW}
+ldaps:
+  - name: ${LDAP_NAME}
+    host: ${LDAP_HOST}
+    baseDN: ${LDAP_BASE_DN}
+    bindDN: ${LDAP_BIND_DN}
+    bindPW: ${LDAP_BIND_PW}
 
 staticMemberProviders:
   - name: ${STATIC_NAME}

@@ -17,6 +17,7 @@ type GithubAccountLinkStatus struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Github",type="string",JSONPath=".spec.github"
 // +kubebuilder:printcolumn:name="User",type="string",JSONPath=".spec.userID"
@@ -53,10 +54,13 @@ func init() {
 // Results format:
 //
 //	{
-//	  "<org>": { "domain": "example.com", "verified": true, "timestamp": "RFC3339" },
+//	  "<org>": { "domain": "example.com", "status": "verified/not-part-of-org/no", "timestamp": "RFC3339" },
 //	  ...
 //	}
-const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_CONFIG = "githubguard.sap/email-check-config"
-const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS = "githubguard.sap/email-check-results"
-const GITHUB_ACCOUNT_LINK_CHECK_EMAIL_TIMESTAMP = "githubguard.sap/check-email-timestamp"
-const GITHUB_ACCOUNT_LINK_CHECK_EMAIL_TTL = "githubguard.sap/check-email-ttl"
+const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_CONFIG = "repoguard.sap/email-check-config"
+const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS = "repoguard.sap/email-check-results"
+
+const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED = "verified"
+const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG = "not-part-of-org"
+const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NO = "no"
+const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_SKIPPED = "skipped"

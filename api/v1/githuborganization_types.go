@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-/*
-Copyright 2023 cc.
-*/
-
 package v1
 
 import (
@@ -23,8 +19,7 @@ type GithubOrganizationSpec struct {
 	DefaultPublicRepositoryTeams  []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
 	DefaultPrivateRepositoryTeams []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
 
-	InstallationID int64 `json:"installationID,omitempty"` // TODO(onur) get installation ID from webhook
-
+	InstallationID int64 `json:"installationID,omitempty"`
 }
 
 func GithubRepositoryListEquals(github, kubernetes []GithubRepository) bool {
@@ -741,4 +736,4 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 
 }
 
-const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "githubguard.sap/skipDefaultRepositoryTeams"
+const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "repoguard.sap/skipDefaultRepositoryTeams"

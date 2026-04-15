@@ -25,6 +25,7 @@ ROOT_DIR=$(cd -- "${SCRIPT_DIR}/../.." &>/dev/null && pwd)
 
 K3D_CLUSTER=${K3D_CLUSTER:-repo-guard}
 NAMESPACE=${NAMESPACE:-default}
+SECONDARY_NAMESPACE=${SECONDARY_NAMESPACE:-repo-guard-e2e-2}
 HELM_RELEASE=${HELM_RELEASE:-repo-guard}
 CHART_PATH=${CHART_PATH:-${ROOT_DIR}/charts/repo-guard}
 VALUES_OUT=${VALUES_OUT:-${SCRIPT_DIR}/values.generated.yaml}
@@ -33,7 +34,7 @@ CONTAINER_TOOL=${CONTAINER_TOOL:-docker}
 E2E_IMAGE_REPO=${E2E_IMAGE_REPO:-repo-guard}
 E2E_IMAGE_TAG=${E2E_IMAGE_TAG:-e2e}
 E2E_IMAGE=${E2E_IMAGE:-${E2E_IMAGE_REPO}:${E2E_IMAGE_TAG}}
-E2E_TRIGGER_LABEL_KEY=${E2E_TRIGGER_LABEL_KEY:-githubguard.sap/trigger}
+E2E_TRIGGER_LABEL_KEY=${E2E_TRIGGER_LABEL_KEY:-repoguard.sap/trigger}
 # Default to using the in-repo dummy EMP HTTP server for E2E runs.
 # Set USE_DUMMY_EMP_HTTP=false to use external Profiles instead.
 USE_DUMMY_EMP_HTTP=${USE_DUMMY_EMP_HTTP:-true}
@@ -157,8 +158,19 @@ ensure_test_context_or_confirm() {
 ensure_kubeconfig_env() {
   local kube_file="${SCRIPT_DIR}/.kubeconfig_${K3D_CLUSTER}"
   log_step "Exporting kubeconfig for cluster ${K3D_CLUSTER}"
+
+  # If cluster doesn't exist, we can't get kubeconfig.
+  # For commands like github-cleanup, this shouldn't be fatal.
+  if ! k3d cluster list "${K3D_CLUSTER}" >/dev/null 2>&1; then
+    log_warn "Cluster ${K3D_CLUSTER} not found; skipping kubeconfig export."
+    return 0
+  fi
+
   # Write kubeconfig content to a stable path for the session
-  k3d kubeconfig get "${K3D_CLUSTER}" > "${kube_file}"
+  if ! k3d kubeconfig get "${K3D_CLUSTER}" > "${kube_file}" 2>/dev/null; then
+    log_warn "Failed to get kubeconfig for cluster ${K3D_CLUSTER}; skipping export."
+    return 0
+  fi
   export KUBECONFIG="${kube_file}"
   log_info "KUBECONFIG=${KUBECONFIG}"
 }
@@ -265,7 +277,7 @@ build_import_dummy_emp_image() {
   local tmpdir
   tmpdir=$(mktemp -d)
   cat >"${tmpdir}/Dockerfile" <<'EOF'
-FROM --platform=$BUILDPLATFORM golang:1.25 as build
+FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/emp-http-server ./hack/emp-http-server
@@ -290,7 +302,7 @@ build_import_dummy_ldap_image() {
   local tmpdir
   tmpdir=$(mktemp -d)
   cat >"${tmpdir}/Dockerfile" <<'EOF'
-FROM --platform=$BUILDPLATFORM golang:1.25 as build
+FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/ldap-testserver ./hack/ldap-testserver
@@ -535,9 +547,10 @@ cmd_install() {
   # Optionally start local dummy LDAP server
   start_dummy_ldap
 
-  # Create namespace if missing
-  log_step "Ensuring namespace exists: ${NAMESPACE}"
+  # Create namespaces if missing
+  log_step "Ensuring namespaces exist: ${NAMESPACE}, ${SECONDARY_NAMESPACE}"
   kubectl get ns "${NAMESPACE}" >/dev/null 2>&1 || kubectl create ns "${NAMESPACE}"
+  kubectl get ns "${SECONDARY_NAMESPACE}" >/dev/null 2>&1 || kubectl create ns "${SECONDARY_NAMESPACE}"
 
   # If requested, build/import and deploy in-cluster dummy servers and set base URLs
   if [[ "${USE_INCLUSTER_DUMMIES}" == "true" ]]; then
@@ -585,16 +598,19 @@ cmd_install() {
   DEF_PRIV_ADMIN=$(read_env_var DEFAULT_PRIVATE_ADMIN_TEAM)
   CUSTOM_PRIV_TEAM=$(read_env_var CUSTOM_PRIVATE_REPO_TEAM)
   if [[ -n "$GH_TEAM1" ]]; then
-    log_step "Ensuring Greenhouse Team CR exists: ${GH_TEAM1}"
-    apply_greenhouse_team "$GH_TEAM1" || true
+    log_step "Ensuring Greenhouse Team CR exists: ${GH_TEAM1} in both namespaces"
+    apply_greenhouse_team "$GH_TEAM1" "${NAMESPACE}" || true
+    apply_greenhouse_team "$GH_TEAM1" "${SECONDARY_NAMESPACE}" || true
   fi
   if [[ -n "$GH_TEAM2" ]]; then
-    log_step "Ensuring Greenhouse Team CR exists: ${GH_TEAM2}"
-    apply_greenhouse_team "$GH_TEAM2" || true
+    log_step "Ensuring Greenhouse Team CR exists: ${GH_TEAM2} in both namespaces"
+    apply_greenhouse_team "$GH_TEAM2" "${NAMESPACE}" || true
+    apply_greenhouse_team "$GH_TEAM2" "${SECONDARY_NAMESPACE}" || true
   fi
   if [[ -n "$GH_OWNER_TEAM" ]]; then
-    log_step "Ensuring Greenhouse Team CR exists: ${GH_OWNER_TEAM} (owner team)"
-    apply_greenhouse_team "$GH_OWNER_TEAM" || true
+    log_step "Ensuring Greenhouse Team CR exists: ${GH_OWNER_TEAM} (owner team) in both namespaces"
+    apply_greenhouse_team "$GH_OWNER_TEAM" "${NAMESPACE}" || true
+    apply_greenhouse_team "$GH_OWNER_TEAM" "${SECONDARY_NAMESPACE}" || true
   fi
   for t in "$DEF_PUB_PULL" "$DEF_PUB_PUSH" "$DEF_PUB_ADMIN" "$DEF_PRIV_PULL" "$DEF_PRIV_PUSH" "$DEF_PRIV_ADMIN" "$CUSTOM_PRIV_TEAM"; do
     [[ -z "$t" ]] && continue
@@ -622,6 +638,16 @@ cmd_install() {
     ${HELM_EXTRA_ARGS[@]:-} \
     --create-namespace \
     --wait --timeout 5m
+
+  log_step "Applying resources to SECONDARY_NAMESPACE: ${SECONDARY_NAMESPACE}"
+  # We use the same values but only for resources, operator is already in NAMESPACE
+  # We use helm template to avoid another Helm release tracking.
+  helm template "${HELM_RELEASE}-res" "${CHART_PATH}" \
+    --namespace "${SECONDARY_NAMESPACE}" \
+    -f "${VALUES_OUT}" \
+    --set manager.enabled=false \
+    ${HELM_EXTRA_ARGS[@]:-} \
+    | kubectl apply -n "${SECONDARY_NAMESPACE}" -f -
   section_end
 }
 
@@ -645,6 +671,13 @@ cmd_install_dry_run() {
     HELM_EXTRA_ARGS+=(--set monitoring.enabled=false --set monitoring.podMonitor.enabled=false)
   fi
 
+  # If Prometheus Operator CRDs are not installed, disable PrometheusRule/PodMonitor templates
+  HELM_EXTRA_ARGS=()
+  if ! kubectl get crd podmonitors.monitoring.coreos.com >/dev/null 2>&1 || \
+     ! kubectl get crd prometheusrules.monitoring.coreos.com >/dev/null 2>&1; then
+    log_info "Prometheus Operator CRDs not found; disabling monitoring templates for dry-run"
+    HELM_EXTRA_ARGS+=(--set monitoring.enabled=false --set monitoring.podMonitor.enabled=false)
+  fi
   helm upgrade --install "${HELM_RELEASE}" "${CHART_PATH}" \
     --namespace "${NAMESPACE}" \
     -f "${VALUES_OUT}" \
@@ -671,41 +704,45 @@ cmd_test() {
 
   # 1) Ensure CRDs are present
   log_step "Checking required CRDs exist"
-  for crd in githubs.githubguard.sap githuborganizations.githubguard.sap githubteams.githubguard.sap githubteamrepositories.githubguard.sap githubaccountlinks.githubguard.sap staticmemberproviders.githubguard.sap ldapgroupproviders.githubguard.sap genericexternalmemberproviders.githubguard.sap; do
+  for crd in githubs.repoguard.sap githuborganizations.repoguard.sap githubteams.repoguard.sap githubteamrepositories.repoguard.sap githubaccountlinks.repoguard.sap staticmemberproviders.repoguard.sap ldapgroupproviders.repoguard.sap genericexternalmemberproviders.repoguard.sap; do
     echo -n "Checking CRD $crd ... "
     kubectl get crd "$crd" >/dev/null
     echo OK
   done
 
-  # 2) Ensure core resources exist (Github, Organization, Teams)
-  log_step "Listing Github resources"
-  kubectl -n "${NAMESPACE}" get github -o wide
+  # 2) Ensure core resources exist (Github, Organization, Teams) in both namespaces
+  for ns in "${NAMESPACE}" "${SECONDARY_NAMESPACE}"; do
+    log_step "Listing Github resources in ${ns}"
+    kubectl -n "${ns}" get github -o wide || true
 
-  log_step "Listing GithubOrganization resources"
-  kubectl -n "${NAMESPACE}" get githuborganization -o wide || true
+    log_step "Listing GithubOrganization resources in ${ns}"
+    kubectl -n "${ns}" get githuborganization -o wide || true
 
-  log_step "Listing GithubTeam resources"
-  kubectl -n "${NAMESPACE}" get githubteam -o wide || true
+    log_step "Listing GithubTeam resources in ${ns}"
+    kubectl -n "${ns}" get githubteam -o wide || true
+  done
 
   # 3) Verify statuses fields exist (non-empty where available)
   # We only check that the .status is present; the controller may still be reconciling.
   log_step "Verifying status fields (best-effort)"
-  kubectl -n "${NAMESPACE}" get github -o json | jq -e '.items | length >= 1' >/dev/null 2>&1 || { echo "No Github resources found"; exit 1; }
-  # If jq is not available, skip deep checks
-  if command -v jq >/dev/null 2>&1; then
-    local github_statuses
-    github_statuses=$(kubectl -n "${NAMESPACE}" get github -o json | jq -r '.items[] | "Github: \(.metadata.name) state=\(.status.state // "")"')
-    echo "$github_statuses"
-    if echo "$github_statuses" | grep -q "state=failed"; then
-      echo "ERROR: One or more Github resources are in 'failed' state. Check controller logs." >&2
-      kubectl -n "${NAMESPACE}" logs -l control-plane=controller-manager --tail=100 >&2 || true
-      exit 1
+  for ns in "${NAMESPACE}" "${SECONDARY_NAMESPACE}"; do
+    kubectl -n "${ns}" get github -o json | jq -e '.items | length >= 1' >/dev/null 2>&1 || { echo "No Github resources found in ${ns}"; exit 1; }
+    # If jq is not available, skip deep checks
+    if command -v jq >/dev/null 2>&1; then
+      local github_statuses
+      github_statuses=$(kubectl -n "${ns}" get github -o json | jq -r '.items[] | "Github in \(.metadata.namespace): \(.metadata.name) state=\(.status.state // "")"')
+      echo "$github_statuses"
+      if echo "$github_statuses" | grep -q "state=failed"; then
+        echo "ERROR: One or more Github resources in ${ns} are in 'failed' state. Check controller logs." >&2
+        kubectl -n "${NAMESPACE}" logs -l control-plane=controller-manager --tail=100 >&2 || true
+        exit 1
+      fi
+      kubectl -n "${ns}" get githuborganization -o json 2>/dev/null | jq -r '.items[]? | "GithubOrganization in \(.metadata.namespace): \(.metadata.name) state=\(.status.orgStatus // "")"' || true
+      kubectl -n "${ns}" get githubteam -o json 2>/dev/null | jq -r '.items[]? | "GithubTeam in \(.metadata.namespace): \(.metadata.name) state=\(.status.teamStatus // "")"' || true
+    else
+      echo "jq not found; skipping JSON status checks for ${ns}"
     fi
-    kubectl -n "${NAMESPACE}" get githuborganization -o json 2>/dev/null | jq -r '.items[]? | "GithubOrganization: \(.metadata.name) state=\(.status.orgStatus // "")"' || true
-    kubectl -n "${NAMESPACE}" get githubteam -o json 2>/dev/null | jq -r '.items[]? | "GithubTeam: \(.metadata.name) state=\(.status.teamStatus // "")"' || true
-  else
-    echo "jq not found; skipping JSON status checks"
-  fi
+  done
 
   # 4) Metrics check: port-forward one manager pod and curl metrics (robust, no SIGPIPE noise)
   log_step "Checking metrics endpoint"
@@ -723,7 +760,7 @@ cmd_test() {
   MET_FILE=$(mktemp)
   # Write once, then read with grep/head to avoid SIGPIPE on printf
   printf "%s" "$METRICS" >"$MET_FILE"
-  grep -E "^#|githubguard|controller_runtime_|repo_guard_" "$MET_FILE" | head -n 20 || true
+  grep -E "^#|repoguard|controller_runtime_|repo_guard_" "$MET_FILE" | head -n 20 || true
   if grep -qE "controller_runtime_|repo_guard_" "$MET_FILE"; then
     echo "Metrics endpoint looks healthy"
   else
@@ -758,29 +795,46 @@ cmd_test() {
       exit 1
     fi
 
-    echo "Fetching teams for org ${ORG}"
-    http_status=$(curl -sS -o /tmp/teams.json -w "%{http_code}" "${GITHUB_API}/orgs/${ORG}/teams?per_page=100" "${authHeader[@]}")
-    if [[ "$http_status" != "200" ]]; then
-      echo "GitHub team list failed: HTTP ${http_status}" >&2
-      cat /tmp/teams.json >&2 || true
-      exit 1
-    fi
-    TEAMS_JSON=$(cat /tmp/teams.json)
-    # Require that defined teams exist
-    for t in "$TEAM_1" "$TEAM_2" "$OWNER_TEAM" "$LDAP_TEAM" "$STATIC_TEAM" "$HTTP_TEAM"; do
-      [[ -z "$t" ]] && continue
-      if command -v jq >/dev/null 2>&1; then
-        t_lc=$(printf "%s" "$t" | tr '[:upper:]' '[:lower:]')
-        if ! printf "%s" "$TEAMS_JSON" | jq -r '.[] | [.slug, .name] | .[]' | tr '[:upper:]' '[:lower:]' | grep -qx "$t_lc"; then
-          echo "Missing team in GitHub: $t" >&2; exit 1
+    # Require that defined teams exist (best-effort, might take a few seconds to propagate)
+    local max_retries=10
+    local retry_count=0
+    while (( retry_count < max_retries )); do
+      local missing_any=false
+      echo "Fetching teams for org ${ORG} (attempt $((retry_count + 1))/${max_retries})"
+      http_status=$(curl -sS -o /tmp/teams.json -w "%{http_code}" "${GITHUB_API}/orgs/${ORG}/teams?per_page=100" "${authHeader[@]}")
+      if [[ "$http_status" != "200" ]]; then
+        echo "GitHub team list failed: HTTP ${http_status}" >&2
+        cat /tmp/teams.json >&2 || true
+        exit 1
+      fi
+      TEAMS_JSON=$(cat /tmp/teams.json)
+      for t in "$TEAM_1" "$TEAM_2" "$OWNER_TEAM" "$LDAP_TEAM" "$STATIC_TEAM" "$HTTP_TEAM"; do
+        [[ -z "$t" ]] && continue
+        if command -v jq >/dev/null 2>&1; then
+          t_lc=$(printf "%s" "$t" | tr '[:upper:]' '[:lower:]')
+          if ! printf "%s" "$TEAMS_JSON" | jq -r '.[] | [.slug, .name] | .[]' | tr '[:upper:]' '[:lower:]' | grep -qx "$t_lc"; then
+            missing_any=true; break
+          fi
+        else
+          pattern="\"slug\"[[:space:]]*:[[:space:]]*\"$t\"|\"name\"[[:space:]]*:[[:space:]]*\"$t\""
+          if ! echo "$TEAMS_JSON" | grep -qiE "$pattern"; then
+            missing_any=true; break
+          fi
         fi
+      done
+      if [[ "$missing_any" == "false" ]]; then
+        echo "GitHub team presence verified"
+        break
+      fi
+      (( retry_count++ ))
+      if (( retry_count < max_retries )); then
+        echo "Some teams missing in GitHub, retrying in 5s..."
+        sleep 5
       else
-        # Fallback regex allowing optional spaces after colon
-        pattern="\"slug\"[[:space:]]*:[[:space:]]*\"$t\"|\"name\"[[:space:]]*:[[:space:]]*\"$t\""
-        echo "$TEAMS_JSON" | grep -qiE "$pattern" || { echo "Missing team in GitHub: $t" >&2; exit 1; }
+        echo "Timeout: some teams still missing in GitHub" >&2
+        exit 1
       fi
     done
-    echo "GitHub team presence verified"
   fi
 
   echo "E2E checks completed"
@@ -907,7 +961,11 @@ wait_for_org_repo_ops() {
     local now=$(date +%s)
     if (( now - start >= timeout_sec )); then
       echo "[$(ts)] WARN: Timeout waiting for repository team operations or complete status (continuing)" >&2
-      echo "$org_json" | jq '.status' || true
+      if [[ -n "$org_json" ]]; then
+        local status_info
+        status_info=$(echo "$org_json" | jq -r '.status | "orgStatus: \(.orgStatus // "N/A"), timestamp: \(.timestamp // "N/A"), teams: \([.teams[]?] | join(", ")), organizationOwners: \([.organizationOwners[]? | "\(.githubUsername) (\(.id))"] | join(", "))"')
+        echo "Status: ${status_info}" >&2
+      fi
       return 0
     fi
     sleep "$interval"
@@ -1097,19 +1155,19 @@ ts() {
 }
 
 log_info() {
-  echo "[$(ts)] INFO: $*"
+  echo "[$(ts)] INFO: $*" >&2
 }
 
 log_step() {
-  echo "[$(ts)] $EMJ_STEP $*"
+  echo "[$(ts)] $EMJ_STEP $*" >&2
 }
 
 log_expect() {
-  echo "[$(ts)] EXPECT: $*"
+  echo "[$(ts)] EXPECT: $*" >&2
 }
 
 log_observe() {
-  echo "[$(ts)] OBSERVED: $*"
+  echo "[$(ts)] OBSERVED: $*" >&2
 }
 
 SECTION_TITLE=""
@@ -1245,7 +1303,13 @@ cmd_github_cleanup() {
       deleted_any=true
     else
       echo "[$(ts)] ERROR: Failed to delete team ${slug} (HTTP ${dcode})" >&2
-      cat /tmp/delteam.json >&2 || true
+      if [[ -s /tmp/delteam.json ]]; then
+        local err_line
+        err_line=$(jq -r '"message: \(.message // "N/A"), status: \(.status // "N/A"), doc: \(.documentation_url // "N/A")"' /tmp/delteam.json 2>/dev/null)
+        if [[ -n "$err_line" && "$err_line" != "message: N/A, status: N/A, doc: N/A" ]]; then
+          echo "Details: ${err_line}" >&2
+        fi
+      fi
       exit 1
     fi
   done
@@ -1395,30 +1459,33 @@ log_observe() {
 }
 
 # Patch a transient trigger label on a GithubTeam to nudge a reconcile
-# Usage: bump_trigger_label <githubteam-name>
+# Usage: bump_trigger_label <githubteam-name> [namespace]
 bump_trigger_label() {
   local gt_name=$1
+  local ns=${2:-${NAMESPACE}}
   local ts_val
   ts_val=$(date +%s)
   if command -v jq >/dev/null 2>&1; then
     local patch
     patch=$(jq -nc --arg k "${E2E_TRIGGER_LABEL_KEY}" --arg v "${ts_val}" '{metadata:{labels:{($k):$v}}}')
-    echo "[$(ts)] TRIGGER: Patching label ${E2E_TRIGGER_LABEL_KEY}=${ts_val} on GithubTeam/${gt_name}"
-    kubectl -n "${NAMESPACE}" patch githubteam "${gt_name}" --type=merge -p "${patch}" >/dev/null 2>&1 || true
+    echo "[$(ts)] TRIGGER: Patching label ${E2E_TRIGGER_LABEL_KEY}=${ts_val} on GithubTeam/${gt_name} in ${ns}"
+    kubectl -n "${ns}" patch githubteam "${gt_name}" --type=merge -p "${patch}" >/dev/null 2>&1 || true
   else
     # Fallback without jq; try simple JSON with the default key
-    echo "[$(ts)] TRIGGER: Patching label ${E2E_TRIGGER_LABEL_KEY}=${ts_val} on GithubTeam/${gt_name} (no jq)"
-    kubectl -n "${NAMESPACE}" patch githubteam "${gt_name}" --type=merge -p "{\"metadata\":{\"labels\":{\"${E2E_TRIGGER_LABEL_KEY}\":\"${ts_val}\"}}}" >/dev/null 2>&1 || true
+    echo "[$(ts)] TRIGGER: Patching label ${E2E_TRIGGER_LABEL_KEY}=${ts_val} on GithubTeam/${gt_name} in ${ns} (no jq)"
+    kubectl -n "${ns}" patch githubteam "${gt_name}" --type=merge -p "{\"metadata\":{\"labels\":{\"${E2E_TRIGGER_LABEL_KEY}\":\"${ts_val}\"}}}" >/dev/null 2>&1 || true
   fi
 }
 
 get_github_name() {
-  kubectl -n "${NAMESPACE}" get github -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
+  local ns=${1:-${NAMESPACE}}
+  kubectl -n "${ns}" get github -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
 }
 
 apply_greenhouse_team() {
   local name=$1
-  kubectl -n "${NAMESPACE}" apply -f - <<EOF
+  local ns=${2:-${NAMESPACE}}
+  kubectl -n "${ns}" apply -f - <<EOF
 apiVersion: greenhouse.sap/v1alpha1
 kind: Team
 metadata:
@@ -1432,6 +1499,7 @@ EOF
 patch_greenhouse_team_members() {
   local team_name=$1; shift
   local ids_csv=$1
+  local ns=${2:-${NAMESPACE}}
   local json_members
   if [[ -z "$ids_csv" ]]; then
     json_members="[]"
@@ -1446,8 +1514,8 @@ patch_greenhouse_team_members() {
       printf "]";
     }')
   fi
-  log_step "Patching Greenhouse Team status: team=${team_name} members=${ids_csv}"
-  kubectl -n "${NAMESPACE}" patch team "${team_name}" --type=merge --subresource=status -p "{\"status\":{\"members\":${json_members}, \"statusConditions\": {\"conditions\": []}}}"
+  log_step "Patching Greenhouse Team status: team=${team_name} members=${ids_csv} in ${ns}"
+  kubectl -n "${ns}" patch team "${team_name}" --type=merge --subresource=status -p "{\"status\":{\"members\":${json_members}, \"statusConditions\": {\"conditions\": []}}}"
 }
 
 mk_gt_name() {
@@ -1465,11 +1533,12 @@ mk_gt_name() {
 
 wait_for_resource() {
   local kind=$1 name=$2
+  local ns=${3:-${NAMESPACE}}
   local timeout_sec=${E2E_TIMEOUT:-180}
   local interval=${E2E_INTERVAL:-3}
   local start=$(date +%s)
   while true; do
-    if kubectl -n "${NAMESPACE}" get "$kind" "$name" >/dev/null 2>&1; then
+    if kubectl -n "${ns}" get "$kind" "$name" >/dev/null 2>&1; then
       return 0
     fi
     local now=$(date +%s)
@@ -1486,30 +1555,31 @@ wait_for_resource() {
 # ------------------------------
 
 wait_for_controller_readiness() {
+  local ns=${1:-${NAMESPACE}}
   local timeout_sec=${E2E_TIMEOUT:-180}
   local interval=${E2E_INTERVAL:-3}
   local start=$(date +%s)
-  log_step "Waiting for Github.status.state == running"
+  log_step "Waiting for Github.status.state == running in ${ns}"
   while true; do
     local state
-    state=$(kubectl -n "${NAMESPACE}" get github -o json 2>/dev/null | jq -r '.items[0].status.state // ""') || true
+    state=$(kubectl -n "${ns}" get github -o json 2>/dev/null | jq -r '.items[0].status.state // ""') || true
     if [[ "$state" == "running" ]]; then break; fi
     local now=$(date +%s)
     if (( now - start >= timeout_sec )); then
-      echo "[$(ts)] ERROR: Timeout waiting for Github to be running (last state=${state})" >&2
-      kubectl -n "${NAMESPACE}" get github -o json | jq '.' >&2 || true
+      echo "[$(ts)] ERROR: Timeout waiting for Github to be running in ${ns} (last state=${state})" >&2
+      kubectl -n "${ns}" get github -o json | jq '.' >&2 || true
       exit 1
     fi
     if e2e_verbose_true; then log_observe "Github.status.state=${state:-<empty>} (waiting)"; fi
     sleep "$interval"
   done
-  log_info "Github.status.state is running"
+  log_info "Github.status.state is running in ${ns}"
 
-  log_step "Waiting for GithubOrganization to converge (status=Complete OR operations queue empty)"
+  log_step "Waiting for GithubOrganization to converge in ${ns} (status=Complete OR operations queue empty)"
   start=$(date +%s)
   while true; do
     local orgjson
-    orgjson=$(kubectl -n "${NAMESPACE}" get githuborganization -o json 2>/dev/null) || true
+    orgjson=$(kubectl -n "${ns}" get githuborganization -o json 2>/dev/null) || true
     if [[ -n "$orgjson" ]] && echo "$orgjson" | jq -e '.items | length > 0' >/dev/null; then
       local status ops
       status=$(echo "$orgjson" | jq -r '.items[0].status.orgStatus // ""')
@@ -1521,13 +1591,13 @@ wait_for_controller_readiness() {
     fi
     local now=$(date +%s)
     if (( now - start >= timeout_sec )); then
-      echo "[$(ts)] ERROR: Timeout waiting for GithubOrganization to converge" >&2
+      echo "[$(ts)] ERROR: Timeout waiting for GithubOrganization to converge in ${ns}" >&2
       echo "$orgjson" | jq '.' >&2 || true
       exit 1
     fi
     sleep "$interval"
   done
-  log_info "GithubOrganization convergence reached"
+  log_info "GithubOrganization convergence reached in ${ns}"
 }
 
 github_fetch_teams_json() {
@@ -1597,26 +1667,28 @@ github_set_org_membership_role() {
 
 # Return the first GithubOrganization resource name in the namespace
 get_org_resource_name() {
-  kubectl -n "${NAMESPACE}" get githuborganization -o json 2>/dev/null | jq -r '.items[0].metadata.name // empty' || true
+  local ns=${1:-${NAMESPACE}}
+  kubectl -n "${ns}" get githuborganization -o json 2>/dev/null | jq -r '.items[0].metadata.name // empty' || true
 }
 
 # Ensure the GithubOrganization.spec.organizationOwnerTeams includes provided team
 ensure_org_has_owner_team() {
   local team=$1
+  local ns=${2:-${NAMESPACE}}
   local org_name
-  org_name=$(get_org_resource_name)
-  [[ -z "$org_name" ]] && { echo "[$(ts)] WARN: No GithubOrganization resource found to patch owners" >&2; return 0; }
+  org_name=$(get_org_resource_name "${ns}")
+  [[ -z "$org_name" ]] && { echo "[$(ts)] WARN: No GithubOrganization resource found to patch owners in ${ns}" >&2; return 0; }
   # If jq says the team exists already, do nothing
   local current
-  current=$(kubectl -n "${NAMESPACE}" get githuborganization "$org_name" -o json)
+  current=$(kubectl -n "${ns}" get githuborganization "$org_name" -o json)
   if printf '%s' "$current" | jq -e --arg t "$team" '.spec.organizationOwnerTeams // [] | index($t) != null' >/dev/null 2>&1; then
     return 0
   fi
   # Compute new array and patch
   local new_array
   new_array=$(printf '%s' "$current" | jq -c --arg t "$team" '(.spec.organizationOwnerTeams // []) + [$t]')
-  log_step "Patching GithubOrganization to include owner team '${team}'"
-  kubectl -n "${NAMESPACE}" patch githuborganization "$org_name" --type=merge -p "{\"spec\":{\"organizationOwnerTeams\":${new_array}}}"
+  log_step "Patching GithubOrganization in ${ns} to include owner team '${team}'"
+  kubectl -n "${ns}" patch githuborganization "$org_name" --type=merge -p "{\"spec\":{\"organizationOwnerTeams\":${new_array}}}"
 }
 
 # Wait until GitHub org admins include the given username
@@ -1650,13 +1722,14 @@ wait_for_org_admin() {
 
 # Drive owner flow: ensure owner greenhouse team has member, then verify admin on GitHub
 run_owner_scenario() {
+  local ns=${1:-${NAMESPACE}}
   ensure_jq
   local OWNER_TEAM OWNER_GH_ID OWNER_GH_USER ORG GITHUB_NAME
   OWNER_TEAM=$(read_env_var ORGANIZATION_OWNER_TEAM)
   OWNER_GH_ID=$(read_env_var ORGANIZATION_OWNER_GREENHOUSE_ID)
   OWNER_GH_USER=$(read_env_var ORGANIZATION_OWNER_USER)
   ORG=$(read_env_var ORGANIZATION)
-  GITHUB_NAME=$(get_github_name)
+  GITHUB_NAME=$(get_github_name "${ns}")
 
   if [[ -z "$OWNER_TEAM" || -z "$OWNER_GH_USER" ]]; then
     log_info "Owner scenario skipped: ORGANIZATION_OWNER_TEAM or ORGANIZATION_OWNER_USER not set"
@@ -1668,26 +1741,26 @@ run_owner_scenario() {
     OWNER_GH_ID=$(read_env_var LDAP_GROUP_PROVIDER_USER_INTERNAL_USERNAME)
   fi
 
-  log_step "Owner scenario: team=${OWNER_TEAM}, greenhouseID=${OWNER_GH_ID}, githubUser=${OWNER_GH_USER}"
+  log_step "Owner scenario in ${ns}: team=${OWNER_TEAM}, greenhouseID=${OWNER_GH_ID}, githubUser=${OWNER_GH_USER}"
   # Ensure Greenhouse Team CR exists (idempotent) and org is configured to use it for owners
-  apply_greenhouse_team "$OWNER_TEAM" || true
-  ensure_org_has_owner_team "$OWNER_TEAM"
+  apply_greenhouse_team "$OWNER_TEAM" "${ns}" || true
+  ensure_org_has_owner_team "$OWNER_TEAM" "${ns}"
   # Patch status members for owner team
-  patch_greenhouse_team_members "$OWNER_TEAM" "$OWNER_GH_ID"
+  patch_greenhouse_team_members "$OWNER_TEAM" "$OWNER_GH_ID" "${ns}"
 
   # Wait for GithubTeam CR to exist (rendered by Helm) and for 1 member to appear in status
   local GT_OWNER
   if [[ -n "$GITHUB_NAME" ]]; then
     GT_OWNER=$(mk_gt_name "$GITHUB_NAME" "$ORG" "$OWNER_TEAM")
-    log_info "Waiting for GithubTeam resource: ${GT_OWNER}"
-    wait_for_resource githubteam "$GT_OWNER" || true
-    wait_for_members_count "$GT_OWNER" 1 || true
+    log_info "Waiting for GithubTeam resource: ${GT_OWNER} in ${ns}"
+    wait_for_resource githubteam "$GT_OWNER" "${ns}" || true
+    wait_for_members_count "$GT_OWNER" 1 "${ns}" || true
   fi
 
   # Optionally observe Kubernetes-side owner state
-  if kubectl -n "${NAMESPACE}" get githuborganization -o json 2>/dev/null | jq -e '.items | length > 0' >/dev/null 2>&1; then
-    log_step "Observing GithubOrganization owners state (best-effort)"
-    kubectl -n "${NAMESPACE}" get githuborganization -o json | jq -r '.items[0].status.organizationOwners // []' || true
+  if kubectl -n "${ns}" get githuborganization -o json 2>/dev/null | jq -e '.items | length > 0' >/dev/null 2>&1; then
+    log_step "Observing GithubOrganization owners state (best-effort) in ${ns}"
+    kubectl -n "${ns}" get githuborganization -o json | jq -r '.items[0].status.organizationOwners // [] | .[] | "\(.githubUsername) (\(.id))"' || true
   fi
 
   # Verify on GitHub that owner user is an org admin (authoritative)
@@ -1698,38 +1771,39 @@ run_owner_scenario() {
   NEW_OWNER_GH_ID=$(read_env_var USER_1_GREENHOUSE_ID)
   NEW_OWNER_GH_USER=$(read_env_var USER_1_GITHUB_USERNAME)
   if [[ -n "$NEW_OWNER_GH_ID" && -n "$NEW_OWNER_GH_USER" ]]; then
-    log_step "Owner scenario (extend): add second member to owner team -> ${NEW_OWNER_GH_ID}/${NEW_OWNER_GH_USER}"
+    log_step "Owner scenario (extend) in ${ns}: add second member to owner team -> ${NEW_OWNER_GH_ID}/${NEW_OWNER_GH_USER}"
     # Patch owner team to contain two members now
-    patch_greenhouse_team_members "$OWNER_TEAM" "$OWNER_GH_ID,$NEW_OWNER_GH_ID"
+    patch_greenhouse_team_members "$OWNER_TEAM" "$OWNER_GH_ID,$NEW_OWNER_GH_ID" "${ns}"
     # Wait for Kubernetes GithubTeam status to reflect 2 members
     if [[ -n "$GT_OWNER" ]]; then
-      wait_for_members_count "$GT_OWNER" 2 || true
+      wait_for_members_count "$GT_OWNER" 2 "${ns}" || true
     fi
     # Verify on GitHub the new user also becomes an org admin
     wait_for_org_admin "$NEW_OWNER_GH_USER"
   else
-    log_info "Owner scenario (extend): USER_1 mapping not provided; skipping add-second-member step"
+    log_info "Owner scenario (extend) in ${ns}: USER_1 mapping not provided; skipping add-second-member step"
   fi
 }
 
 wait_for_members_count() {
   local gt_name=$1
   local expected=$2
+  local ns=${3:-${NAMESPACE}}
   local timeout_sec=${E2E_TIMEOUT:-180}
   local interval=${E2E_INTERVAL:-3}
   local start=$(date +%s)
   # Apply a trigger label before starting the expectation wait to provoke a reconcile
-  bump_trigger_label "${gt_name}"
-  log_expect "GithubTeam/${gt_name} members count == ${expected}"
+  bump_trigger_label "${gt_name}" "${ns}"
+  log_expect "GithubTeam/${gt_name} members count == ${expected} in ${ns}"
   local observed=0
   while true; do
     local count
-    count=$(kubectl -n "${NAMESPACE}" get githubteam "${gt_name}" -o json 2>/dev/null | jq -r '.status.members | length // 0')
+    count=$(kubectl -n "${ns}" get githubteam "${gt_name}" -o json 2>/dev/null | jq -r '.status.members | length // 0')
     if [[ "$count" == "$expected" ]]; then
       if e2e_verbose_true; then
         local members
-        members=$(kubectl -n "${NAMESPACE}" get githubteam "${gt_name}" -o json 2>/dev/null | jq -c '.status.members // []')
-        log_observe "GithubTeam/${gt_name} count=${count} members=${members}"
+        members=$(kubectl -n "${ns}" get githubteam "${gt_name}" -o json 2>/dev/null | jq -r '.status.members // [] | map("\(.githubUsername) (\(.id))") | join(", ")')
+        log_observe "GithubTeam/${gt_name} count=${count} members=[${members}]"
       fi
       return 0
     fi
@@ -1737,14 +1811,21 @@ wait_for_members_count() {
     # If observed 10 times without convergence, bump trigger again to nudge reconcile
     if (( observed % 10 == 0 )); then
       log_info "No convergence after ${observed} observations; re-triggering reconcile"
-      bump_trigger_label "${gt_name}"
+      bump_trigger_label "${gt_name}" "${ns}"
     fi
     local now=$(date +%s)
     if (( now - start >= timeout_sec ));
     then
-      echo "[$(ts)] ERROR: Timeout waiting for GithubTeam/${gt_name} members count ${expected}. Last count=${count}" >&2
-      kubectl -n "${NAMESPACE}" get githubteam "${gt_name}" -o json | jq '.status' >&2 || true
+      echo "[$(ts)] ERROR: Timeout waiting for GithubTeam/${gt_name} members count ${expected} in ${ns}. Last count=${count}" >&2
+      local gt_json
+      gt_json=$(kubectl -n "${ns}" get githubteam "${gt_name}" -o json 2>/dev/null)
+      if [[ -n "$gt_json" ]]; then
+        local gt_status
+        gt_status=$(echo "$gt_json" | jq -r '.status | "members: \([.members[]? | "\(.githubUsername) (\(.id))"] | join(", ")), conditions: \([.statusConditions.conditions[]? | "\(.type)=\(.status)"] | join(", "))"')
+        echo "Status: ${gt_status}" >&2
+      fi
       # Show last controller logs to help debugging
+      # Operator is in NAMESPACE
       if kubectl -n "${NAMESPACE}" get deploy repo-guard-controller-manager >/dev/null 2>&1; then
         echo "[$(ts)] INFO: Last controller logs:" >&2
         kubectl -n "${NAMESPACE}" logs deploy/repo-guard-controller-manager --tail=120 >&2 || true
@@ -1758,6 +1839,7 @@ wait_for_members_count() {
 
 # Extracted helper to run the teams scenario so it can be reused by cmd_test and cmd_teams
 run_teams_scenario() {
+  local ns=${1:-${NAMESPACE}}
   # Read inputs
   local ORG TEAM1 TEAM2 USER1 USER2
   ORG=$(read_env_var ORGANIZATION)
@@ -1766,71 +1848,71 @@ run_teams_scenario() {
   USER1=$(read_env_var USER_1)
   USER2=$(read_env_var USER_2)
   local GITHUB_NAME
-  GITHUB_NAME=$(get_github_name)
+  GITHUB_NAME=$(get_github_name "${ns}")
   if [[ -z "$GITHUB_NAME" ]]; then
-    echo "ERROR: No Github resource found in namespace ${NAMESPACE}" >&2
+    echo "ERROR: No Github resource found in namespace ${ns}" >&2
     exit 1
   fi
 
-  echo "Using Github=${GITHUB_NAME}, Org=${ORG}, Teams=${TEAM1},${TEAM2}"
+  echo "Using Github=${GITHUB_NAME} in ${ns}, Org=${ORG}, Teams=${TEAM1},${TEAM2}"
 
   # Ensure Greenhouse Team CRs
-  log_step "Ensuring Greenhouse Team CRs exist: ${TEAM1}, ${TEAM2}"
-  apply_greenhouse_team "$TEAM1" && log_info "Applied/Ensured Greenhouse Team/${TEAM1}"
-  apply_greenhouse_team "$TEAM2" && log_info "Applied/Ensured Greenhouse Team/${TEAM2}"
+  log_step "Ensuring Greenhouse Team CRs exist in ${ns}: ${TEAM1}, ${TEAM2}"
+  apply_greenhouse_team "$TEAM1" "${ns}" && log_info "Applied/Ensured Greenhouse Team/${TEAM1} in ${ns}"
+  apply_greenhouse_team "$TEAM2" "${ns}" && log_info "Applied/Ensured Greenhouse Team/${TEAM2} in ${ns}"
 
   # GithubTeam CRs are created by Helm from values (gen-values.sh). Compute names and wait for them.
   local GT1_NAME GT2_NAME
   GT1_NAME=$(mk_gt_name "$GITHUB_NAME" "$ORG" "$TEAM1")
   GT2_NAME=$(mk_gt_name "$GITHUB_NAME" "$ORG" "$TEAM2")
-  log_step "Waiting for GithubTeam resources to exist: ${GT1_NAME}, ${GT2_NAME}"
-  wait_for_resource githubteam "$GT1_NAME"
-  wait_for_resource githubteam "$GT2_NAME"
+  log_step "Waiting for GithubTeam resources to exist in ${ns}: ${GT1_NAME}, ${GT2_NAME}"
+  wait_for_resource githubteam "$GT1_NAME" "${ns}"
+  wait_for_resource githubteam "$GT2_NAME" "${ns}"
 
-  log_step "Scenario: drive membership via Greenhouse status for ${GT1_NAME} (TEAM_1=${TEAM1})"
+  log_step "Scenario: drive membership via Greenhouse status for ${GT1_NAME} (TEAM_1=${TEAM1}) in ${ns}"
 
   # 1) Start with 1 member (USER1)
-  kubectl -n "${NAMESPACE}" get team "$TEAM1" >/dev/null
-  log_step "Patching Greenhouse Team/${TEAM1} status to members=[${USER1}]"
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u "$USER1" '{status:{members:[{id:$u}]}}')"
-  wait_for_members_count "$GT1_NAME" 1
+  kubectl -n "${ns}" get team "$TEAM1" >/dev/null
+  log_step "Patching Greenhouse Team/${TEAM1} status in ${ns} to members=[${USER1}]"
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u "$USER1" '{status:{members:[{id:$u, email:($u+"@example.com"), firstName:$u, lastName:$u}], statusConditions: {conditions: []}}}')"
+  wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
   # 2) Add USER2 -> expect 2 members
-  log_step "Patching Greenhouse Team/${TEAM1} status to members=[${USER1}, ${USER2}]"
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" --arg u2 "$USER2" '{status:{members:[{id:$u1},{id:$u2}]}}')"
-  wait_for_members_count "$GT1_NAME" 2
+  log_step "Patching Greenhouse Team/${TEAM1} status in ${ns} to members=[${USER1}, ${USER2}]"
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" --arg u2 "$USER2" '{status:{members:[{id:$u1, email:($u1+"@example.com"), firstName:$u1, lastName:$u1},{id:$u2, email:($u2+"@example.com"), firstName:$u2, lastName:$u2}], statusConditions: {conditions: []}}}')"
+  wait_for_members_count "$GT1_NAME" 2 "${ns}"
 
   # 3) Remove first (keep USER2) -> expect 1
-  log_step "Patching Greenhouse Team/${TEAM1} status to members=[${USER2}] (removing ${USER1})"
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u2 "$USER2" '{status:{members:[{id:$u2}]}}')"
-  wait_for_members_count "$GT1_NAME" 1
+  log_step "Patching Greenhouse Team/${TEAM1} status in ${ns} to members=[${USER2}] (removing ${USER1})"
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u2 "$USER2" '{status:{members:[{id:$u2, email:($u2+"@example.com"), firstName:$u2, lastName:$u2}], statusConditions: {conditions: []}}}')"
+  wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
-  log_step "Scenario: label toggles on ${GT1_NAME}"
+  log_step "Scenario: label toggles on ${GT1_NAME} in ${ns}"
   # Disable removal; try to remove member in Greenhouse -> should remain 1
-  log_step "Setting label githubguard.sap/removeUser=false on GithubTeam/${GT1_NAME}"
-  kubectl -n "${NAMESPACE}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"githubguard.sap/removeUser":"false"}}}'
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p '{"status":{"members":[]}}'
+  log_step "Setting label repoguard.sap/removeUser=false on GithubTeam/${GT1_NAME} in ${ns}"
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/removeUser":"false"}}}'
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p '{"status":{"members":[], "statusConditions": {"conditions": []}}}'
   # Wait briefly and assert still 1
-  if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} to remain at count=1 despite empty Greenhouse members (remove disabled)"; fi
-  sleep 5
-  wait_for_members_count "$GT1_NAME" 1
+  if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} in ${ns} to remain at count=1 despite empty Greenhouse members (remove disabled)"; fi
+  # sleep 5
+  wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
   # Disable addition; add USER1 back in Greenhouse -> count should stay 1
-  log_step "Setting label githubguard.sap/addUser=false on GithubTeam/${GT1_NAME}"
-  kubectl -n "${NAMESPACE}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"githubguard.sap/addUser":"false"}}}'
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" '{status:{members:[{id:$u1}]}}')"
-  if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} to remain at count=1 despite Greenhouse adding ${USER1} (add disabled)"; fi
-  wait_for_members_count "$GT1_NAME" 1
+  log_step "Setting label repoguard.sap/addUser=false on GithubTeam/${GT1_NAME} in ${ns}"
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/addUser":"false"}}}'
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" '{status:{members:[{id:$u1, email:($u1+"@example.com"), firstName:$u1, lastName:$u1}], statusConditions: {conditions: []}}}')"
+  if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} in ${ns} to remain at count=1 despite Greenhouse adding ${USER1} (add disabled)"; fi
+  wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
   # Re-enable both and converge to two members
-  log_step "Re-enabling addUser/removeUser on GithubTeam/${GT1_NAME}"
-  kubectl -n "${NAMESPACE}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"githubguard.sap/addUser":"true","githubguard.sap/removeUser":"true"}}}'
-  kubectl -n "${NAMESPACE}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" --arg u2 "$USER2" '{status:{members:[{id:$u1},{id:$u2}]}}')"
-  wait_for_members_count "$GT1_NAME" 2
+  log_step "Re-enabling addUser/removeUser on GithubTeam/${GT1_NAME} in ${ns}"
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/addUser":"true","repoguard.sap/removeUser":"true"}}}'
+  kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" --arg u2 "$USER2" '{status:{members:[{id:$u1, email:($u1+"@example.com"), firstName:$u1, lastName:$u1},{id:$u2, email:($u2+"@example.com"), firstName:$u2, lastName:$u2}], statusConditions: {conditions: []}}}')"
+  wait_for_members_count "$GT1_NAME" 2 "${ns}"
 
-  log_step "Quick sanity for ${GT2_NAME}: patch Greenhouse Team/${TEAM2} to one member [${USER1}] and verify"
-  kubectl -n "${NAMESPACE}" patch team "$TEAM2" --type=merge --subresource=status -p "$(jq -nc --arg u "$USER1" '{status:{members:[{id:$u}]}}')"
-  wait_for_members_count "$GT2_NAME" 1
+  log_step "Quick sanity for ${GT2_NAME} in ${ns}: patch Greenhouse Team/${TEAM2} to one member [${USER1}] and verify"
+  kubectl -n "${ns}" patch team "$TEAM2" --type=merge --subresource=status -p "$(jq -nc --arg u "$USER1" '{status:{members:[{id:$u, email:($u+"@example.com"), firstName:$u, lastName:$u}], statusConditions: {conditions: []}}}')"
+  wait_for_members_count "$GT2_NAME" 1 "${ns}"
 
   if [[ "${E2E_KEEP:-true}" != "true" ]]; then
     log_info "Cleanup note: resources retained for inspection by default (set E2E_KEEP=false to enable auto-cleanup)"
@@ -1843,6 +1925,83 @@ run_teams_scenario() {
 # ------------------------------
 # Provider-backed scenarios (LDAP / HTTP / Static)
 # ------------------------------
+
+# Wait until GitHub team membership matches expectation (HTTP 204 or 200).
+# Args: <team_slug> <username> <friendly_name>
+wait_for_github_team_member() {
+  local team_slug=$1
+  local username=$2
+  local friendly=$3
+  local timeout_sec=${E2E_TIMEOUT:-180}
+  local interval=${E2E_INTERVAL:-5}
+  local start=$(date +%s)
+
+  log_step "Waiting for user to be a member of team '${friendly}' (${team_slug}) on GitHub: ${username}"
+  while true; do
+    local code
+    code=$(github_check_team_member "$team_slug" "$username")
+    if [[ "$code" == "200" || "$code" == "204" ]]; then
+      log_info "Confirmed membership on GitHub: ${username} in ${friendly}"
+      return 0
+    fi
+
+    if e2e_verbose_true; then log_observe "${username} not in ${friendly} yet (HTTP ${code}) (retrying)"; fi
+
+    local now=$(date +%s)
+    if (( now - start >= timeout_sec )); then
+      echo "[$(ts)] ERROR: Timeout waiting for ${username} to be member of ${friendly} on GitHub" >&2
+      cat /tmp/tm.json >&2 || true
+      return 1
+    fi
+    sleep "$interval"
+  done
+}
+
+# Refresh team list and locate slugs. Retries if some slugs are not found yet.
+# Args: <ldap_name> <http_name> <static_name>
+wait_for_github_team_slugs() {
+  local ldap_name=$1 http_name=$2 static_name=$3
+  local timeout_sec=${E2E_TIMEOUT:-180}
+  local interval=${E2E_INTERVAL:-5}
+  local start=$(date +%s)
+
+  log_step "Waiting for team slugs to be available on GitHub: ${ldap_name}, ${http_name}, ${static_name}"
+  while true; do
+    local code
+    code=$(github_fetch_teams_json)
+    if [[ "$code" == "200" ]]; then
+      local l h s
+      l=$(github_find_team "$ldap_name")
+      h=$(github_find_team "$http_name")
+      s=$(github_find_team "$static_name")
+
+      local missing=()
+      [[ -n "$ldap_name" && ( -z "$l" || "$l" == "null" ) ]] && missing+=("$ldap_name")
+      [[ -n "$http_name" && ( -z "$h" || "$h" == "null" ) ]] && missing+=("$http_name")
+      [[ -n "$static_name" && ( -z "$s" || "$s" == "null" ) ]] && missing+=("$static_name")
+
+      if [[ ${#missing[@]} -eq 0 ]]; then
+        # Use stderr for info logs to avoid polluting stdout
+        log_info "All team slugs found" >&2
+        # Print ONLY the slugs to stdout, space-separated
+        echo "${l} ${h} ${s}"
+        return 0
+      fi
+      if e2e_verbose_true; then log_observe "Some team slugs missing yet: ${missing[*]} (retrying)"; fi
+    else
+      if e2e_verbose_true; then log_observe "Failed to fetch teams (HTTP ${code}) (retrying)"; fi
+    fi
+
+    local now=$(date +%s)
+    if (( now - start >= timeout_sec )); then
+      echo "[$(ts)] ERROR: Timeout waiting for team slugs on GitHub" >&2
+      cat /tmp/teams.json >&2 || true
+      return 1
+    fi
+    sleep "$interval"
+  done
+}
+
 run_provider_scenarios() {
   local GITHUB_API=$(read_env_var GITHUB_V3_API_URL)
   local ORG=$(read_env_var ORGANIZATION)
@@ -1854,50 +2013,26 @@ run_provider_scenarios() {
   local STATIC_USER_GH=$(read_env_var EMP_STATIC_USER_GITHUB_USERNAME)
 
   # Refresh team list and locate slugs
-  local code
-  code=$(github_fetch_teams_json)
-  if [[ "$code" != "200" ]]; then
-    echo "Failed to fetch teams for provider scenarios: HTTP ${code}" >&2
-    cat /tmp/teams.json >&2 || true
-    exit 1
-  fi
-
+  local slugs
+  slugs=$(wait_for_github_team_slugs "$LDAP_TEAM_NAME" "$HTTP_TEAM_NAME" "$STATIC_TEAM_NAME" | tail -n1)
   local ldap_slug http_slug static_slug
-  ldap_slug=$(github_find_team "$LDAP_TEAM_NAME")
-  http_slug=$(github_find_team "$HTTP_TEAM_NAME")
-  static_slug=$(github_find_team "$STATIC_TEAM_NAME")
+  ldap_slug=$(echo "$slugs" | cut -d' ' -f1)
+  http_slug=$(echo "$slugs" | cut -d' ' -f2)
+  static_slug=$(echo "$slugs" | cut -d' ' -f3)
 
   # LDAP team membership check
   if [[ -n "$LDAP_USER_GH" && -n "$ldap_slug" && "$ldap_slug" != "null" ]]; then
-    echo "Verifying LDAP team membership on GitHub: ${LDAP_TEAM_NAME} -> ${LDAP_USER_GH}"
-    code=$(github_check_team_member "$ldap_slug" "$LDAP_USER_GH")
-    if [[ "$code" != "200" && "$code" != "204" ]]; then
-      echo "LDAP membership check failed (HTTP ${code}). Response:" >&2
-      cat /tmp/tm.json >&2 || true
-      exit 1
-    fi
+    wait_for_github_team_member "$ldap_slug" "$LDAP_USER_GH" "${LDAP_TEAM_NAME}"
   fi
 
   # Generic HTTP provider team membership check
   if [[ -n "$HTTP_USER_GH" && -n "$http_slug" && "$http_slug" != "null" ]]; then
-    echo "Verifying HTTP provider team membership on GitHub: ${HTTP_TEAM_NAME} -> ${HTTP_USER_GH}"
-    code=$(github_check_team_member "$http_slug" "$HTTP_USER_GH")
-    if [[ "$code" != "200" && "$code" != "204" ]]; then
-      echo "HTTP provider membership check failed (HTTP ${code}). Response:" >&2
-      cat /tmp/tm.json >&2 || true
-      exit 1
-    fi
+    wait_for_github_team_member "$http_slug" "$HTTP_USER_GH" "${HTTP_TEAM_NAME}"
   fi
 
   # Static provider team membership check
   if [[ -n "$STATIC_USER_GH" && -n "$static_slug" && "$static_slug" != "null" ]]; then
-    echo "Verifying Static provider team membership on GitHub: ${STATIC_TEAM_NAME} -> ${STATIC_USER_GH}"
-    code=$(github_check_team_member "$static_slug" "$STATIC_USER_GH")
-    if [[ "$code" != "200" && "$code" != "204" ]]; then
-      echo "Static provider membership check failed (HTTP ${code}). Response:" >&2
-      cat /tmp/tm.json >&2 || true
-      exit 1
-    fi
+    wait_for_github_team_member "$static_slug" "$STATIC_USER_GH" "${STATIC_TEAM_NAME}"
   fi
 
   log_info "Provider-backed scenarios passed"
@@ -1908,17 +2043,19 @@ cmd_teams() {
   section_begin "Teams scenario"
   check_prereqs
   ensure_jq
-  # Ensure cluster and namespace
+  # Ensure cluster and namespaces
   cmd_up
-  log_step "Ensuring namespace exists: ${NAMESPACE}"
+  log_step "Ensuring namespaces exist: ${NAMESPACE}, ${SECONDARY_NAMESPACE}"
   kubectl get ns "${NAMESPACE}" >/dev/null 2>&1 || kubectl create ns "${NAMESPACE}"
+  kubectl get ns "${SECONDARY_NAMESPACE}" >/dev/null 2>&1 || kubectl create ns "${SECONDARY_NAMESPACE}"
 
   # Ensure Helm release installed (basic check: deployment exists)
   if ! kubectl -n "${NAMESPACE}" get deploy -l app.kubernetes.io/name=repo-guard >/dev/null 2>&1; then
     log_info "Helm release not detected; running install first"
     cmd_install
   fi
-  run_teams_scenario
+  run_teams_scenario "${NAMESPACE}"
+  run_teams_scenario "${SECONDARY_NAMESPACE}"
   section_end
 }
 
@@ -1927,13 +2064,13 @@ main() {
   case "$cmd" in
     up) shift; cmd_up "$@" ;;
     down) shift; cmd_down "$@" ;;
-    install-crds) shift; cmd_install_crds "$@" ;;
-    install) shift; cmd_install "$@" ;;
-    install-dry-run) shift; cmd_install_dry_run "$@" ;;
-    teams|teams-test) shift; cmd_teams "$@" ;;
-    test) shift; cmd_test "$@" ;;
+    install-crds) shift; ensure_kubeconfig_env; cmd_install_crds "$@" ;;
+    install) shift; ensure_kubeconfig_env; cmd_install "$@" ;;
+    install-dry-run) shift; ensure_kubeconfig_env; cmd_install_dry_run "$@" ;;
+    teams|teams-test) shift; ensure_kubeconfig_env; cmd_teams "$@" ;;
+    test) shift; ensure_kubeconfig_env; cmd_test "$@" ;;
     image-build) shift; build_image "$@" ;;
-    github-cleanup) shift; cmd_github_cleanup "$@" ;;
+    github-cleanup) shift; ensure_kubeconfig_env; cmd_github_cleanup "$@" ;;
     *) usage; exit 1 ;;
   esac
 }

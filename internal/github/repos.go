@@ -10,15 +10,15 @@ import (
 
 	"github.com/palantir/go-githubapp/githubapp"
 
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	"github.com/google/go-github/v81/github"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	"github.com/google/go-github/v84/github"
 )
 
 type RepositoryProvider interface {
 	List() ([]string, []string, error)
-	ExtendedList() ([]githubguardsapv1.GithubRepository, []githubguardsapv1.GithubRepository, error)
-	RepositoryTeams(repo string) ([]githubguardsapv1.GithubTeamWithPermission, error)
-	RepositoryTeamAdd(repo, team string, permission githubguardsapv1.GithubTeamPermission) error
+	ExtendedList() ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
+	RepositoryTeams(repo string) ([]repoguardsapv1.GithubTeamWithPermission, error)
+	RepositoryTeamAdd(repo, team string, permission repoguardsapv1.GithubTeamPermission) error
 	RepositoryTeamRemove(repo, team string) error
 	RepositoryCollobarators(repo string) ([]string, error)
 	RepositoryCollobaratorRemove(repo string, user string) (bool, error)
@@ -52,9 +52,9 @@ func NewRepositoryProvider(cc githubapp.ClientCreator, organization string, inst
 	return &DefaultRepositoryProvider{repositoryService: *client.Repositories, teamsService: *client.Teams, organization: organization}, nil
 }
 
-func (t *DefaultRepositoryProvider) ExtendedList() ([]githubguardsapv1.GithubRepository, []githubguardsapv1.GithubRepository, error) {
-	publicRepos := make([]githubguardsapv1.GithubRepository, 0)
-	privateRepos := make([]githubguardsapv1.GithubRepository, 0)
+func (t *DefaultRepositoryProvider) ExtendedList() ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
+	publicRepos := make([]repoguardsapv1.GithubRepository, 0)
+	privateRepos := make([]repoguardsapv1.GithubRepository, 0)
 
 	publicRepoList, privateRepoList, err := t.List()
 	if err != nil {
@@ -68,7 +68,7 @@ func (t *DefaultRepositoryProvider) ExtendedList() ([]githubguardsapv1.GithubRep
 			return nil, nil, err
 		}
 
-		publicRepos = append(publicRepos, githubguardsapv1.GithubRepository{Name: repo, Teams: teams})
+		publicRepos = append(publicRepos, repoguardsapv1.GithubRepository{Name: repo, Teams: teams})
 	}
 
 	for _, repo := range privateRepoList {
@@ -78,7 +78,7 @@ func (t *DefaultRepositoryProvider) ExtendedList() ([]githubguardsapv1.GithubRep
 			return nil, nil, err
 		}
 
-		privateRepos = append(privateRepos, githubguardsapv1.GithubRepository{Name: repo, Teams: teams})
+		privateRepos = append(privateRepos, repoguardsapv1.GithubRepository{Name: repo, Teams: teams})
 	}
 
 	return publicRepos, privateRepos, nil
@@ -129,7 +129,7 @@ type CollobaratorWithPermission struct {
 	Permission   string
 }
 
-func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]githubguardsapv1.GithubTeamWithPermission, error) {
+func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]repoguardsapv1.GithubTeamWithPermission, error) {
 
 	opt := &github.ListOptions{PerPage: 100}
 
@@ -146,7 +146,7 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]githubguards
 		opt.Page = resp.NextPage
 	}
 
-	teamWithPermissions := make([]githubguardsapv1.GithubTeamWithPermission, 0)
+	teamWithPermissions := make([]repoguardsapv1.GithubTeamWithPermission, 0)
 	for _, t := range allTeams {
 		if t == nil {
 			continue
@@ -159,12 +159,12 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]githubguards
 		if t.Permission != nil {
 			perm = *t.Permission
 		}
-		teamWithPermissions = append(teamWithPermissions, githubguardsapv1.GithubTeamWithPermission{Team: name, Permission: githubguardsapv1.GithubTeamPermission(perm)})
+		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: name, Permission: repoguardsapv1.GithubTeamPermission(perm)})
 	}
 
 	return teamWithPermissions, nil
 }
-func (t *DefaultRepositoryProvider) RepositoryTeamAdd(repo, team string, permission githubguardsapv1.GithubTeamPermission) error {
+func (t *DefaultRepositoryProvider) RepositoryTeamAdd(repo, team string, permission repoguardsapv1.GithubTeamPermission) error {
 
 	opts := github.TeamAddTeamRepoOptions{Permission: string(permission)}
 	response, err := t.teamsService.AddTeamRepoBySlug(context.Background(), t.organization, team, t.organization, repo, &opts)

@@ -32,9 +32,13 @@ spec:
         args:
         - --metrics-bind-address=:9443
         - --health-probe-bind-address=:8082
-        - --namespace
-        - "$(NAMESPACE)"
+        # - --namespace
+        # - "$(NAMESPACE)"
         env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: NAMESPACE
           valueFrom:
             fieldRef:

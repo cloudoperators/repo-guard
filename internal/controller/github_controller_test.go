@@ -6,91 +6,95 @@ package controller
 import (
 	"context"
 
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// +kubebuilder:docs-gen:collapse=Imports
-var _ = Describe("Github controller", Ordered, func() {
+var _ = Describe("Github controller", func() {
+	var (
+		ctx        context.Context
+		github     *repoguardsapv1.Github
+		secret     *v1.Secret
+		githubName string
+		secretName string
+	)
 
-	Context("Github with its secret", func() {
+	getGithubState := func() (repoguardsapv1.GithubState, error) {
+		cur := &repoguardsapv1.Github{}
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: githubName}, cur)
+		if err != nil {
+			return "", err
+		}
+		return cur.Status.State, nil
+	}
 
-		It("Should be in running state when deployed with the correct values", func() {
+	BeforeEach(func() {
+		ctx = context.Background()
 
-			ctx := context.Background()
+		githubName = generateUniqueName(nonEmpty(TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"], "github"))
+		secretName = generateUniqueName(nonEmpty(TEST_ENV["GITHUB_KUBERNETES_SECRET_RESOURCE_NAME"], "github-secret"))
 
-			github := githubCom.DeepCopy()
-			secret := githubComSecret.DeepCopy()
+		github = githubCom.DeepCopy()
+		github.Name = githubName
+		github.Namespace = ""
+		github.Spec.Secret = secretName
 
-			if err := k8sClient.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
-				Expect(err).NotTo(HaveOccurred())
-			}
-			if err := k8sClient.Create(ctx, github); err != nil && !errors.IsAlreadyExists(err) {
-				Expect(err).NotTo(HaveOccurred())
-			}
+		secret = githubComSecret.DeepCopy()
+		secret.Name = secretName
+		secret.Namespace = TestOperatorNamespace
 
-			Eventually(func() githubguardsapv1.GithubState {
-				github := &githubguardsapv1.Github{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"]}, github)
-				Expect(err).NotTo(HaveOccurred())
-				return github.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubStateRunning))
-
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, github)).Should(Succeed())
-
-		})
-
-	})
-
-	Context("Github with its secret", func() {
-		It("Should be in failed state when deployed with the wrong values", func() {
-
-			ctx := context.Background()
-
-			github := githubCom.DeepCopy()
-			github.Spec.Secret = "asd"
-			secret := githubComSecret.DeepCopy()
-
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, github)).Should(Succeed())
-
-			Eventually(func() githubguardsapv1.GithubState {
-				github := &githubguardsapv1.Github{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"]}, github)
-				Expect(err).NotTo(HaveOccurred())
-				return github.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubStateFailed))
-
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, github)).Should(Succeed())
+		DeferCleanup(func() {
+			_ = deleteIgnoreNotFound(ctx, k8sClient, github)
+			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
 		})
 	})
 
-	Context("Github with its secret", func() {
-		It("Should be in failed state when deployed with the wrong secret values", func() {
+	It("becomes Running when deployed with correct values", func() {
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
 
-			ctx := context.Background()
+		Eventually(func() repoguardsapv1.GithubState {
+			state, err := getGithubState()
+			if apierrors.IsNotFound(err) {
+				return ""
+			}
+			return state
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateRunning))
+	})
 
-			github := githubCom.DeepCopy()
-			secret := githubComSecret.DeepCopy()
-			secret.StringData["privateKey"] = "asd"
+	It("becomes Failed when secret reference is wrong", func() {
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		github.Spec.Secret = "does-not-exist"
+		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
 
-			Expect(k8sClient.Create(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Create(ctx, github)).Should(Succeed())
+		Eventually(func() repoguardsapv1.GithubState {
+			state, err := getGithubState()
+			if apierrors.IsNotFound(err) {
+				return ""
+			}
+			return state
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateFailed))
+	})
 
-			Eventually(func() githubguardsapv1.GithubState {
-				github := &githubguardsapv1.Github{}
-				err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"]}, github)
-				Expect(err).NotTo(HaveOccurred())
-				return github.Status.State
-			}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubStateFailed))
+	It("becomes Failed when secret values are wrong", func() {
+		if secret.StringData == nil {
+			secret.StringData = map[string]string{}
+		}
+		secret.StringData["privateKey"] = "invalid"
 
-			Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, github)).Should(Succeed())
-		})
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
+
+		Eventually(func() repoguardsapv1.GithubState {
+			state, err := getGithubState()
+			if apierrors.IsNotFound(err) {
+				return ""
+			}
+			return state
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateFailed))
 	})
 })

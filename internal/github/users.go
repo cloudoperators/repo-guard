@@ -6,10 +6,11 @@ package github
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
 )
@@ -17,6 +18,8 @@ import (
 type UsersProvider interface {
 	GithubUsernameByID(id string) (string, bool, error)
 	GithubIDByUsername(username string) (string, bool, error)
+	// IsMemberOfOrg checks whether the GitHub user with the given UID is a member of the organization.
+	IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error)
 	// HasVerifiedEmailDomainForGithubUID checks whether the GitHub user with the given UID
 	// has an email address visible to the given organization that matches the provided domain.
 	// This uses the organization members endpoint which exposes members' verified emails to
@@ -51,7 +54,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 	// parse the string ID to int64
 	userID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return "", false, err
+		return "", false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", id, err)
 	}
 
 	// fetch the user by ID
@@ -84,6 +87,33 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 	return strconv.FormatInt(user.GetID(), 10), true, nil
 }
 
+func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error) {
+	userID, err := strconv.ParseInt(uid, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
+	}
+	user, resp, err := u.service.GetByID(ctx, userID)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return false, nil
+		}
+		return false, err
+	}
+	login := user.GetLogin()
+	if login == "" {
+		return false, nil
+	}
+
+	isMember, resp, err := u.orgs.IsMember(ctx, org, login)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return false, nil
+		}
+		return false, err
+	}
+	return isMember, nil
+}
+
 // HasVerifiedEmailDomainForGithubUID implements UsersProvider.HasVerifiedEmailDomainForGithubUID.
 // It uses the GitHub GraphQL API to query User.organizationVerifiedDomainEmails and
 // checks whether any email has the requested domain. This requires appropriate
@@ -97,7 +127,7 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 	// Resolve login by numeric ID (GraphQL query requires login)
 	userID, err := strconv.ParseInt(uid, 10, 64)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
 	user, resp, err := u.service.GetByID(ctx, userID)
 	if err != nil {

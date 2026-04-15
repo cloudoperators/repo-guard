@@ -49,8 +49,8 @@ merge_additional_printer_columns() {
   local dst="$2"  # existing in CHART_DIR
 
   if ! has_mikefarah_yq_v4; then
-    # No yq v4 available; perform header-preserving copy
-    write_with_preserved_header "$src" "$dst"
+    # No yq v4 available; perform header-preserving copy (no separator for chart CRDs)
+    write_with_preserved_header "$src" "$dst" "false"
     return 0
   fi
 
@@ -77,7 +77,8 @@ merge_additional_printer_columns() {
   ' > "$tmp"
 
   # Write merged content back to destination, preserving SPDX or any leading header from dst
-  write_with_preserved_header "$tmp" "$dst"
+  # No separator for chart CRDs
+  write_with_preserved_header "$tmp" "$dst" "false"
 }
 
 # Extract .spec.names.kind from a CRD YAML using awk (no external deps)
@@ -129,10 +130,11 @@ find_chart_file_by_kind() {
 
 # Read and preserve any leading comment header (e.g., SPDX) from destination file, then
 # write the body from source file without its own leading comments/---.
-# Usage: write_with_preserved_header <src> <dst>
+# Usage: write_with_preserved_header <src> <dst> [add_separator]
 write_with_preserved_header() {
   local src="$1"
   local dst="$2"
+  local add_separator="${3:-true}"
 
   local header=""
   if [[ -f "$dst" ]]; then
@@ -173,7 +175,71 @@ write_with_preserved_header() {
   else
     : > "$out_tmp"
   fi
-  # Append the body directly without adding a YAML document start (---) at the beginning
+  # Append a newline if header is present and doesn't end with one,
+  # and ensure a YAML document start is present if not already in body (if requested)
+  if [[ -n "$header" ]]; then
+     [[ "$header" != *$'\n' ]] && echo "" >> "$out_tmp"
+     if [[ "$add_separator" == "true" ]]; then
+       echo "---" >> "$out_tmp"
+     fi
+  fi
+  cat "$body_tmp" >> "$out_tmp"
+
+  mv "$out_tmp" "$dst"
+  rm -f "$body_tmp"
+}
+
+# Ensure a file has a leading header (e.g., SPDX) and optionally a YAML document start (---),
+# taking the header from a source file and the body from the target file.
+# Usage: ensure_header_from_source <src_with_header> <target_to_fix> [add_separator]
+ensure_header_from_source() {
+  local src="$1"
+  local dst="$2"
+  local add_separator="${3:-true}"
+
+  local header=""
+  if [[ -f "$src" ]]; then
+    # Collect contiguous leading comment or blank lines from source
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^[[:space:]]*# ]]; then
+        header+="$line"$'\n'
+        continue
+      fi
+      if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+        header+="$line"$'\n'
+        continue
+      fi
+      break
+    done < "$src"
+  fi
+
+  # If no header found in source, nothing to do
+  if [[ -z "$header" ]]; then
+    return 0
+  fi
+
+  # Prepare body from destination (stripping any existing leading comments/---)
+  local body_tmp
+  body_tmp="$(mktemp)"
+  awk '
+    BEGIN { drop=1 }
+    {
+      if (drop) {
+        if ($0 ~ /^[[:space:]]*#/ || $0 ~ /^[[:space:]]*$/ || $0 ~ /^---[[:space:]]*$/) { next }
+        drop=0
+      }
+      print
+    }
+  ' "$dst" > "$body_tmp"
+
+  # Assemble final file
+  local out_tmp
+  out_tmp="$(mktemp)"
+  printf "%s" "$header" > "$out_tmp"
+  [[ "$header" != *$'\n' ]] && echo "" >> "$out_tmp"
+  if [[ "$add_separator" == "true" ]]; then
+    echo "---" >> "$out_tmp"
+  fi
   cat "$body_tmp" >> "$out_tmp"
 
   mv "$out_tmp" "$dst"
@@ -193,12 +259,27 @@ for f in "$BASE_DIR"/*.yaml; do
     # Merge additionalPrinterColumns where possible; otherwise replace
     merge_additional_printer_columns "$f" "$target"
     echo "Synced $f -> $target"
+    # Ensure SPDX headers are preserved/restored in base CRDs as well (with separator)
+    ensure_header_from_source "$target" "$f" "true"
   else
-    # Only copy if you also want to add new CRDs into the chart automatically
-    # Uncomment the next 2 lines if desired:
-    # cp "$f" "$target"
-    # echo "Added $f -> $target"
-    :
+    # Automatically add new CRDs into the chart if they don't exist
+    target="$CHART_DIR/$(kind_to_filename "$kind")"
+    # No separator for chart CRDs
+    write_with_preserved_header "$f" "$target" "false"
+    # Ensure SPDX headers are preserved when adding new CRDs
+    ensure_header_from_source "$f" "$target" "false"
+    echo "Added new CRD: $f -> $target"
+    # Ensure SPDX headers are preserved/restored in base CRDs as well (with separator)
+    ensure_header_from_source "$target" "$f" "true"
   fi
 
 done
+
+# Ensure SPDX header for config/rbac/role.yaml
+# We can take the header from manager-rbac.yaml template as a source
+ROLE_YAML="config/rbac/role.yaml"
+RBAC_TEMPLATE="charts/repo-guard/templates/manager-rbac.yaml"
+if [[ -f "$ROLE_YAML" ]] && [[ -f "$RBAC_TEMPLATE" ]]; then
+  ensure_header_from_source "$RBAC_TEMPLATE" "$ROLE_YAML" "true"
+  echo "Ensured SPDX header for $ROLE_YAML"
+fi

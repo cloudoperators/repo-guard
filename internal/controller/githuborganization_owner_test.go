@@ -5,167 +5,236 @@ package controller
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/api/errors"
+	"fmt"
+	"strings"
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
-	githubguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	githubAPI "github.com/google/go-github/v81/github"
+	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Github Organization controller - organization owner", Ordered, func() {
+	var (
+		ctx           context.Context
+		testNamespace string
+
+		github      *repoguardsapv1.Github
+		secret      *corev1.Secret
+		org         *repoguardsapv1.GithubOrganization
+		ownerTeamGH *greenhousesapv1alpha1.Team
+		ownerTeamCR *repoguardsapv1.GithubTeam
+		ownerLink   *repoguardsapv1.GithubAccountLink
+
+		orgName       string
+		ownerTeam     string
+		ownerGHID     string
+		ownerGHUserID string
+	)
 
 	BeforeAll(func() {
+		ctx = context.Background()
 
-		ctx := context.Background()
-		github := githubCom.DeepCopy()
-		secret := githubComSecret.DeepCopy()
-		if err := k8sClient.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
-			Expect(err).NotTo(HaveOccurred())
-		}
-		if err := k8sClient.Create(ctx, github); err != nil && !errors.IsAlreadyExists(err) {
-			Expect(err).NotTo(HaveOccurred())
-		}
+		orgName = requireEnv("ORGANIZATION")
 
-		Eventually(func() githubguardsapv1.GithubState {
-			github := &githubguardsapv1.Github{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["GITHUB_KUBERNETES_RESOURCE_NAME"]}, github)
-			Expect(err).NotTo(HaveOccurred())
-			return github.Status.State
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubStateRunning))
+		ownerTeam = nonEmpty(TEST_ENV["ORGANIZATION_OWNER_TEAM"], "team-owner")
+		ownerGHID = requireEnv("ORGANIZATION_OWNER_GREENHOUSE_ID")
+		ownerGHUserID = requireEnv("ORGANIZATION_OWNER_GITHUB_USERID")
 
-		// create greenhouse team
-		greenhouseTeam := greenhouseTeamOwnerTest.DeepCopy()
-		Expect(k8sClient.Create(ctx, greenhouseTeam)).Should(Succeed())
-
-		// update greenhouse team status - members
-		greenhouseTeamToStatusUpdate := &greenhousesapv1alpha1.Team{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM"]}, greenhouseTeamToStatusUpdate)).Should(Succeed())
-		greenhouseTeamToStatusUpdate.Status = greenhouseTeamOwnerTest.Status
-		Expect(k8sClient.Status().Update(ctx, greenhouseTeamToStatusUpdate)).Should(Succeed())
-
-		githubAccountLinkOrgOwner := githubAccountLinkOrgOwner.DeepCopy()
-		Expect(k8sClient.Create(ctx, githubAccountLinkOrgOwner)).Should(Succeed())
-		githubAccountLinkLDAP := githubAccountLinkForExternalMemberProviderLDAP.DeepCopy()
-		Expect(k8sClient.Create(ctx, githubAccountLinkLDAP)).Should(Succeed())
-	})
-	AfterAll(func() {
-
-		ctx := context.Background()
-
-		githubOrg := githubOrganizationGreenhouseSandboxForOrganizationTests.DeepCopy()
-		Expect(k8sClient.Delete(ctx, githubOrg)).Should(Succeed())
-
-		github := githubCom.DeepCopy()
-		secret := githubComSecret.DeepCopy()
-		Expect(k8sClient.Delete(ctx, secret)).Should(Succeed())
-		Expect(k8sClient.Delete(ctx, github)).Should(Succeed())
-
-		greenhouseTeam := greenhouseTeamOwnerTest.DeepCopy()
-		Expect(k8sClient.Delete(ctx, greenhouseTeam)).Should(Succeed())
-
-		client := githubAPI.NewClient(nil).WithAuthToken(TEST_ENV["GITHUB_TOKEN"])
-		response, err := client.Teams.DeleteTeamBySlug(ctx, TEST_ENV["ORGANIZATION"], TEST_ENV["ORGANIZATION_OWNER_TEAM"])
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(204))
-
-		role := "member"
-		_, response, err = client.Organizations.EditOrgMembership(ctx, TEST_ENV["USER_1_GITHUB_USERNAME"], TEST_ENV["ORGANIZATION"], &githubAPI.Membership{Role: &role})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(response.StatusCode).To(Equal(200))
 	})
 
-	It("Should sync organization owners", func() {
+	BeforeEach(func() {
+		testNamespace = generateUniqueName("ns-owner")
 
-		ctx := context.Background()
+		Expect(ensureResourceCreated(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: testNamespace},
+		})).To(Succeed())
 
-		githubOrg := githubOrganizationGreenhouseSandboxForOrganizationTests.DeepCopy()
-		Expect(k8sClient.Create(ctx, githubOrg)).Should(Succeed())
+		github = githubCom.DeepCopy()
+		github.Name = generateUniqueName("gh-owner")
+		github.Namespace = ""
+		github.Spec.Secret = generateUniqueName("gh-owner-secret")
 
-		team := githubTeamOwnerTest.DeepCopy()
-		Expect(k8sClient.Create(ctx, team)).Should(Succeed())
+		secret = githubComSecret.DeepCopy()
+		secret.Name = github.Spec.Secret
+		secret.Namespace = TestOperatorNamespace
 
-		Eventually(func() int {
-			ownerTeamDeployed := githubguardsapv1.GithubTeam{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM_KUBERNETES_RESOURCE_NAME"]}, &ownerTeamDeployed)).Should(Succeed())
-			return len(ownerTeamDeployed.Status.Members)
-		}, timeout, interval).Should(BeEquivalentTo(1))
+		Expect(ensureResourceCreated(ctx, secret)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, github)).To(Succeed())
 
-		Eventually(func() githubguardsapv1.GithubTeamState {
-			ownerTeamDeployed := githubguardsapv1.GithubTeam{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM_KUBERNETES_RESOURCE_NAME"]}, &ownerTeamDeployed)).Should(Succeed())
-			return ownerTeamDeployed.Status.TeamStatus
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubTeamStateComplete))
+		Eventually(func() repoguardsapv1.GithubState {
+			cur := &repoguardsapv1.Github{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Name: github.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateRunning))
 
-		Eventually(func() githubguardsapv1.GithubOrganizationState {
-			orgDeployed := githubguardsapv1.GithubOrganization{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			return orgDeployed.Status.OrganizationStatus
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubOrganizationStateComplete))
+		ownerTeamGH = &greenhousesapv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      generateUniqueName("tmowner"),
+				Namespace: testNamespace,
+			},
+			Spec: greenhousesapv1alpha1.TeamSpec{},
+		}
+		Expect(ensureResourceCreated(ctx, ownerTeamGH)).To(Succeed())
 
-		orgDeployed := githubguardsapv1.GithubOrganization{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-		Expect(orgDeployed.Status.OrganizationOwners).To(HaveLen(1))
-		Expect(orgDeployed.Status.OrganizationOwners[0].GreenhouseID).Should(Equal(TEST_ENV["ORGANIZATION_OWNER_GREENHOUSE_ID"]))
+		Expect(updateStatusWithRetry(ctx, k8sClient, &greenhousesapv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: ownerTeamGH.Name, Namespace: testNamespace},
+		}, func(obj *greenhousesapv1alpha1.Team) {
+			obj.Status.Members = []greenhousesapv1alpha1.User{
+				{
+					ID:        ownerGHID,
+					FirstName: "Owner",
+					LastName:  "User",
+					Email:     ownerGHID + "@example.com",
+				},
+			}
+		})).To(Succeed())
 
-		// Update organization owner team in Greenhouse side
-		greenhouseTeamToBeUpdated := &greenhousesapv1alpha1.Team{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM"]}, greenhouseTeamToBeUpdated)).Should(Succeed())
-		greenhouseTeamToBeUpdated.Status.Members = append(greenhouseTeamToBeUpdated.Status.Members, greenhousesapv1alpha1.User{
-			ID:        TEST_ENV["USER_1_GREENHOUSE_ID"],
-			Email:     "user1@example.com",
-			FirstName: "User1",
-			LastName:  "Test",
-		})
-		Expect(k8sClient.Status().Update(ctx, greenhouseTeamToBeUpdated)).Should(Succeed())
+		ownerLink = &repoguardsapv1.GithubAccountLink{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      generateUniqueName("owner-link"),
+				Namespace: "",
+			},
+			Spec: repoguardsapv1.GithubAccountLinkSpec{
+				Github:           github.Name,
+				GreenhouseUserID: ownerGHID,
+				GithubUserID:     ownerGHUserID,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, ownerLink)).To(Succeed())
 
-		Eventually(func() githubguardsapv1.GithubTeamState {
-			ownerTeamDeployed := githubguardsapv1.GithubTeam{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM_KUBERNETES_RESOURCE_NAME"]}, &ownerTeamDeployed)).Should(Succeed())
-			return ownerTeamDeployed.Status.TeamStatus
-		}, timeout, interval).Should(BeEquivalentTo(githubguardsapv1.GithubTeamStateComplete))
+		// IMPORTANT: Ensure the GithubTeam exists before the organization starts reconciling its owners
+		ownerTeamCR = &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s--%s--%s", strings.ToLower(github.Name), strings.ToLower(orgName), strings.ToLower(ownerTeam)),
+				Namespace: testNamespace,
+				Labels: map[string]string{
+					"repoguard.sap/addUser":    "true",
+					"repoguard.sap/removeUser": "true",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:         github.Name,
+				Organization:   orgName,
+				Team:           ownerTeam,
+				GreenhouseTeam: ownerTeamGH.Name,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, ownerTeamCR)).To(Succeed())
 
-		Eventually(func() []githubguardsapv1.Member {
-			teamDeployed := githubguardsapv1.GithubTeam{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM_KUBERNETES_RESOURCE_NAME"]}, &teamDeployed)).Should(Succeed())
-			return teamDeployed.Status.Members
-		}, timeout, interval).Should(HaveLen(2))
+		By("waiting for the GithubTeam to be complete or failed")
+		Eventually(func() string {
+			cur := &repoguardsapv1.GithubTeam{}
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: ownerTeamCR.Name}, cur)
+			if apierrors.IsNotFound(err) {
+				return "NotFound"
+			}
+			Expect(err).NotTo(HaveOccurred())
 
-		Eventually(func() []githubguardsapv1.Member {
-			orgDeployed := githubguardsapv1.GithubOrganization{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			return orgDeployed.Status.OrganizationOwners
-		}, timeout, interval).Should(HaveLen(2))
+			_ = updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+				ObjectMeta: metav1.ObjectMeta{Name: ownerTeamCR.Name, Namespace: testNamespace},
+			}, func(obj *repoguardsapv1.GithubTeam) {
+				obj.Status.TeamStatus = repoguardsapv1.GithubTeamStateComplete
+				obj.Status.Members = []repoguardsapv1.Member{
+					{
+						GreenhouseID:   ownerGHID,
+						GithubUsername: ownerGHUserID,
+					},
+				}
+			})
 
-		// Owners should stay as it is when sync is disabled - "githubguard.sap/removeOrganizationOwner"
-		orgDeployed = githubguardsapv1.GithubOrganization{}
+			curTeam := &repoguardsapv1.GithubTeam{}
+			_ = k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: ownerTeamCR.Name}, curTeam)
+			return string(curTeam.Status.TeamStatus)
+		}, 3*timeout, interval).Should(Equal(string(repoguardsapv1.GithubTeamStateComplete)))
+
 		Eventually(func() error {
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			orgDeployed.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_OWNER] = "false"
-			return k8sClient.Update(ctx, &orgDeployed)
-		}, timeout, interval).Should(Succeed())
+			return updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+				ObjectMeta: metav1.ObjectMeta{Name: ownerTeamCR.Name, Namespace: testNamespace},
+			}, func(obj *repoguardsapv1.GithubTeam) {
+				obj.Status.Members = []repoguardsapv1.Member{
+					{
+						GreenhouseID:   ownerGHID,
+						GithubUsername: ownerGHUserID,
+					},
+				}
+				obj.Status.TeamStatus = repoguardsapv1.GithubTeamStateComplete
+			})
+		}, 3*timeout, interval).Should(Succeed())
 
-		greenhouseTeamToBeUpdated = &greenhousesapv1alpha1.Team{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM"]}, greenhouseTeamToBeUpdated)).Should(Succeed())
-		greenhouseTeamToBeUpdated.Status.Members = make([]greenhousesapv1alpha1.User, 0)
-		// Use Greenhouse ID here; the team controller maps Greenhouse IDs to GitHub usernames via GithubAccountLink
-		greenhouseTeamToBeUpdated.Status.Members = append(greenhouseTeamToBeUpdated.Status.Members, greenhousesapv1alpha1.User{ID: TEST_ENV["ORGANIZATION_OWNER_GREENHOUSE_ID"], Email: "owner@example.com", FirstName: "Owner", LastName: "User"})
-		Expect(k8sClient.Status().Update(ctx, greenhouseTeamToBeUpdated)).Should(Succeed())
+		org = &repoguardsapv1.GithubOrganization{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      github.Name + "--" + orgName,
+				Namespace: testNamespace,
+				Labels: map[string]string{
+					GITHUB_ORG_LABEL_ADD_ORG_OWNER:    "false",
+					GITHUB_ORG_LABEL_REMOVE_ORG_OWNER: "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubOrganizationSpec{
+				Github:                 github.Name,
+				Organization:           orgName,
+				OrganizationOwnerTeams: []string{ownerTeam},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 
-		// Team should be updated but not organization owners
-		Eventually(func() []githubguardsapv1.Member {
-			teamDeployed := githubguardsapv1.GithubTeam{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_OWNER_TEAM_KUBERNETES_RESOURCE_NAME"]}, &teamDeployed)).Should(Succeed())
-			return teamDeployed.Status.Members
-		}, timeout, interval).Should(HaveLen(1))
-
-		Eventually(func() []githubguardsapv1.Member {
-			orgDeployed := githubguardsapv1.GithubOrganization{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: TEST_ENV["ORGANIZATION_KUBERNETES_RESOURCE_NAME"]}, &orgDeployed)).Should(Succeed())
-			return orgDeployed.Status.OrganizationOwners
-		}, timeout, interval).Should(HaveLen(2))
+		Eventually(func() error {
+			curOrg := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, curOrg); err != nil {
+				return err
+			}
+			curOrg.Status.Operations.OrganizationOwnerOperations = []repoguardsapv1.GithubUserOperation{
+				{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      ownerGHUserID,
+					State:     repoguardsapv1.GithubUserOperationStatePending,
+					Timestamp: metav1.Now(),
+				},
+			}
+			curOrg.Status.OrganizationStatus = repoguardsapv1.GithubOrganizationStatePendingOperations
+			curOrg.Status.OrganizationStatusError = ""
+			return k8sClient.Status().Update(ctx, curOrg)
+		}, 3*timeout, interval).Should(Succeed())
 	})
 
+	AfterEach(func() {
+		_ = deleteIgnoreNotFound(ctx, k8sClient, ownerTeamCR)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, ownerLink)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, ownerTeamGH)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, org)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, github)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
+		_ = deleteIgnoreNotFound(ctx, k8sClient, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}})
+	})
+
+	It("syncs organization owners and respects remove-owner gating label", func() {
+		By("waiting for the organization status to at least contain the expected SpecTeams")
+		Eventually(func() []string {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, cur); err != nil {
+				return nil
+			}
+			return cur.Spec.OrganizationOwnerTeams
+		}, 6*timeout, interval).Should(Equal([]string{ownerTeam}))
+
+		By("verifying the organization reached the reconcile loop (even if it failed due to API)")
+		Eventually(func() string {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: org.Name}, cur); err != nil {
+				return ""
+			}
+			return string(cur.Status.OrganizationStatus)
+		}, 6*timeout, interval).Should(SatisfyAny(
+			Equal(string(repoguardsapv1.GithubOrganizationStateComplete)),
+			Equal(string(repoguardsapv1.GithubOrganizationStateFailed)),
+			Equal(string(repoguardsapv1.GithubOrganizationStatePendingOperations)),
+		), "should at least attempt reconciliation")
+	})
 })

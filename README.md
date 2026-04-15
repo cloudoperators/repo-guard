@@ -18,8 +18,11 @@ flowchart LR
       GTR[(GithubTeamRepository)]
       GAL[(GithubAccountLink)]
       LDAP[(LDAPGroupProvider)]
+      CLDAP[(ClusterLDAPGroupProvider)]
       GEMP[(GenericExternalMemberProvider)]
+      CGEMP[(ClusterGenericExternalMemberProvider)]
       SMP[(StaticMemberProvider)]
+      CSMP[(ClusterStaticMemberProvider)]
     end
 
     subgraph ctrl[Controllers]
@@ -28,7 +31,7 @@ flowchart LR
       C_GO[GithubOrganization Controller]
       C_GT[GithubTeam Controller]
       C_GAL[GithubAccountLink Controller]
-      C_LDAP[LDAPGroupProvider Controller]
+      C_LDAP[LDAP/AD Provider Controller]
       C_GEMP[Generic HTTP Provider Controller]
       C_SMP[Static Provider Controller]
     end
@@ -49,8 +52,11 @@ flowchart LR
   GTR --> C_GO
   GAL --> C_GAL
   LDAP --> C_LDAP
+  CLDAP --> C_LDAP
   GEMP --> C_GEMP
+  CGEMP --> C_GEMP
   SMP --> C_SMP
+  CSMP --> C_SMP
 
   C_GT -->|resolves members| Greenhouse
   C_GT -->|resolves members| C_LDAP
@@ -69,17 +75,18 @@ flowchart LR
 
 ## Custom Resources Overview
 
-The operator defines the following CRDs (all under apiVersion: githubguard.sap/v1):
+The operator defines the following CRDs (all under apiVersion: repoguard.sap/v1):
 
-Note:
-- [`Github`](api/v1/github_types.go): Connection to a GitHub App installation (base URL, API URL, app ID, secret).
-- [`GithubOrganization`](api/v1/githuborganization_types.go): Represents a GitHub organization scoped to a `Github` resource; exposes action flags via labels to enable/disable operations.
-- [`GithubTeam`](api/v1/githubteam_types.go): Desired GitHub team with a member provider. A `GithubTeam` supports exactly one team membership source at a time. By design, this plugin is created to read team memberships from Greenhouse but external member providers are also available.
+### Cluster Scoped
+- [`Github`](api/v1/github_types.go): Connection to a GitHub App installation (base URL, API URL, app ID, secret). Secrets are looked up in the operator's namespace.
+- [`GithubAccountLink`](api/v1/githubaccountlink_types.go): Global mapping of an internal user identity (e.g., employee ID) to a GitHub user ID and handles multi-organization email verification.
+- `ClusterLDAPGroupProvider`, `ClusterGenericExternalMemberProvider`, `ClusterStaticMemberProvider`: Shared identity sources accessible from all namespaces. Provider-related secrets are looked up in the operator's namespace.
+
+### Namespace Scoped
+- [`GithubOrganization`](api/v1/githuborganization_types.go): Represents a GitHub organization. References a `Github` resource by name.
+- [`GithubTeam`](api/v1/githubteam_types.go): Desired GitHub team with a member provider. Supports referencing both namespaced and cluster-wide providers.
 - [`GithubTeamRepository`](api/v1/githubteamrepository_types.go): Overrides/exception list for repository-to-team permission assignments.
-- [`GithubAccountLink`](api/v1/githubaccountlink_types.go): Maps an internal user identity (e.g., employee ID) to a GitHub user ID and handles multi-organization email verification.
-- [`LDAPGroupProvider`](api/v1/ldapgroupprovider_types.go): External member provider resolving members from LDAP/AD groups.
-- [`GenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go): External member provider fetching members from an arbitrary HTTP endpoint.
-- [`StaticMemberProvider`](api/v1/staticmemberprovider_types.go): Inline static member list.
+- [`LDAPGroupProvider`](api/v1/ldapgroupprovider_types.go), [`GenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go), [`StaticMemberProvider`](api/v1/staticmemberprovider_types.go): Namespace-private identity sources.
 
 
 ## Resource Relationships
@@ -94,6 +101,9 @@ graph TD
   GT -->|resolves members via| GEMP[Generic HTTP Provider]
   GT -->|resolves members via| SMP[StaticMemberProvider]
   GAL[GithubAccountLink] -->|maps internal -> github| GT
+  GT -->|resolves members via| CLDAP[ClusterLDAPGroupProvider]
+  GT -->|resolves members via| CGEMP[ClusterGeneric HTTP Provider]
+  GT -->|resolves members via| CSMP[ClusterStaticMemberProvider]
 ```
 
 ## How Reconciliation Works
@@ -115,35 +125,35 @@ sequenceDiagram
 
 ## End‑to‑End Walkthrough
 
-1. Create a [`Github`](api/v1/github_types.go) resource for your GitHub App installation:
+1. Create a [`Github`](api/v1/github_types.go) resource for your GitHub App installation (Cluster Scoped):
    ```yaml
-   apiVersion: githubguard.sap/v1
+   apiVersion: repoguard.sap/v1
    kind: Github
    metadata:
-     name: com
+     name: com # Cluster scoped, no namespace
    spec:
      webURL: https://github.com
      v3APIURL: https://api.github.com
      integrationID: 420328
-     clientUserAgent: greenhouse-github-guard
-     secret: github-com-secret
+     clientUserAgent: greenhouse-repo-guard
+     secret: github-com-secret # Secret must be in the operator's namespace
    ```
 
-2. Define the [`GithubOrganization`](api/v1/githuborganization_types.go) with required spec and enable actions with labels:
+2. Define the [`GithubOrganization`](api/v1/githuborganization_types.go) (Namespace Scoped) with required spec and enable actions with labels:
    ```yaml
-   apiVersion: githubguard.sap/v1
+   apiVersion: repoguard.sap/v1
    kind: GithubOrganization
    metadata:
      name: com--greenhouse-sandbox
-     # namespace: default
+     namespace: default
      labels:
-       githubguard.sap/addTeam: "true"
-       githubguard.sap/removeTeam: "true"
-       githubguard.sap/addOrganizationOwner: "true"
-       githubguard.sap/removeOrganizationOwner: "true"
-       githubguard.sap/addRepositoryTeam: "true"
-       githubguard.sap/removeRepositoryTeam: "true"
-       githubguard.sap/dryRun: "false"
+       repoguard.sap/addTeam: "true"
+       repoguard.sap/removeTeam: "true"
+       repoguard.sap/addOrganizationOwner: "true"
+       repoguard.sap/removeOrganizationOwner: "true"
+       repoguard.sap/addRepositoryTeam: "true"
+       repoguard.sap/removeRepositoryTeam: "true"
+       repoguard.sap/dryRun: "false"
    spec:
      github: com
      organization: greenhouse-sandbox
@@ -167,12 +177,13 @@ sequenceDiagram
    ```
 
 3. Create member providers and then you can refer to them in `GitHubTeam` resources:
-    - [`LDAPGroupProvider`](api/v1/ldapgroupprovider_types.go):
+    - [`LDAPGroupProvider`](api/v1/ldapgroupprovider_types.go) (Namespace Scoped):
     ```yaml
-    apiVersion: githubguard.sap/v1
+    apiVersion: repoguard.sap/v1
     kind: LDAPGroupProvider
     metadata:
       name: engineering-ldap
+      namespace: default
     spec:
       host: ldap.example.com:636
       baseDN: dc=example,dc=com
@@ -184,17 +195,44 @@ sequenceDiagram
     kind: Secret
     metadata:
       name: ldap-bind-secret
+      namespace: default
     stringData:
       bindDN: "cn=bind,dc=example,dc=com"
       bindPW: "super-secret"
     ```
 
-    - [`GenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP):
+    - [`ClusterLDAPGroupProvider`](api/v1/ldapgroupprovider_types.go) (Cluster Scoped):
     ```yaml
-    apiVersion: githubguard.sap/v1
+    apiVersion: repoguard.sap/v1
+    kind: ClusterLDAPGroupProvider
+    metadata:
+      name: shared-ldap
+    spec:
+      host: ldap.global.com:636
+      baseDN: dc=global,dc=com
+      secret: ldap-global-secret # Secret must be in the operator's namespace
+    ```
+
+    - [`ClusterStaticMemberProvider`](api/v1/staticmemberprovider_types.go) (Cluster Scoped):
+    ```yaml
+    apiVersion: repoguard.sap/v1
+    kind: ClusterStaticMemberProvider
+    metadata:
+      name: global-static
+    spec:
+      groups:
+        - group: admins
+          members:
+            - superuser
+    ```
+
+    - [`GenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP, Namespace Scoped):
+    ```yaml
+    apiVersion: repoguard.sap/v1
     kind: GenericExternalMemberProvider
     metadata:
       name: http-eng
+      namespace: default
     spec:
       endpoint: https://api.example.com/members
       secret: http-cred
@@ -210,16 +248,31 @@ sequenceDiagram
     kind: Secret
     metadata:
       name: http-cred
+      namespace: default
     stringData:
       username: "api-user"
       password: "api-pass"
     ```
-    - [`StaticMemberProvider`](api/v1/staticmemberprovider_types.go):
+    - [`ClusterGenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP, Cluster Scoped):
     ```yaml
-    apiVersion: githubguard.sap/v1
+    apiVersion: repoguard.sap/v1
+    kind: ClusterGenericExternalMemberProvider
+    metadata:
+      name: global-http
+    spec:
+      endpoint: https://api.global.com/members
+      secret: http-global-secret # Secret must be in the operator's namespace
+      resultsField: results
+      idField: id
+    ```
+
+    - [`StaticMemberProvider`](api/v1/staticmemberprovider_types.go) (Namespace Scoped):
+    ```yaml
+    apiVersion: repoguard.sap/v1
     kind: StaticMemberProvider
     metadata:
       name: static-seed
+      namespace: default
     spec:
       groups:
         - group: any
@@ -228,15 +281,16 @@ sequenceDiagram
             - janedoe
     ```
 
-4. Define a `GithubTeam` and choose one membership source. Labels control add/remove operations:
+4. Define a `GithubTeam` (Namespace Scoped) and choose one membership source. Labels control add/remove operations:
   ```yaml
-  apiVersion: githubguard.sap/v1
+  apiVersion: repoguard.sap/v1
   kind: GithubTeam
   metadata:
     name: com--greenhouse-sandbox--eng
+    namespace: default
     labels:
-      githubguard.sap/addUser: "true"
-      githubguard.sap/removeUser: "true"
+      repoguard.sap/addUser: "true"
+      repoguard.sap/removeUser: "true"
   spec:
     github: com
     organization: greenhouse-sandbox
@@ -245,31 +299,53 @@ sequenceDiagram
     # greenhouseTeam: engineering
 
     # Alternative sources
-    # Option A: LDAP group
+    # Option A: Namespaced LDAP provider
     # externalMemberProvider:
     #   ldap:
     #     provider: engineering-ldap
     #     group: cn=eng,ou=groups,dc=example,dc=com
 
-    # Option B: Generic HTTP provider via generic adapter
+    # Option B: Cluster-scoped LDAP provider
+    # externalMemberProvider:
+    #   ldap:
+    #     kind: ClusterLDAPGroupProvider
+    #     provider: shared-ldap
+    #     group: cn=shared,ou=groups,dc=global,dc=com
+
+    # Option C: Cluster-scoped Static provider
+    # externalMemberProvider:
+    #   static:
+    #     kind: ClusterStaticMemberProvider
+    #     provider: global-static
+    #     group: admins
+
+    # Option D: Namespaced HTTP provider
     # externalMemberProvider:
     #   genericHTTP:
     #     provider: http-eng
     #     group: results
 
-    # Option C: Static members
+    # Option E: Cluster-scoped HTTP provider
+    # externalMemberProvider:
+    #   genericHTTP:
+    #     kind: ClusterGenericExternalMemberProvider
+    #     provider: global-http
+    #     group: results
+
+    # Option F: Static members
     # externalMemberProvider:
     #   static:
     #     provider: static-seed
     #     group: any
   ```
 
-5. Add exceptions/overrides with [`GithubTeamRepository`](api/v1/githubteamrepository_types.go):
+5. Add exceptions/overrides with [`GithubTeamRepository`](api/v1/githubteamrepository_types.go) (Namespace Scoped):
   ```yaml
-  apiVersion: githubguard.sap/v1
+  apiVersion: repoguard.sap/v1
   kind: GithubTeamRepository
   metadata:
     name: com--greenhouse-sandbox--eng--overrides
+    namespace: default
   spec:
     github: com
     organization: greenhouse-sandbox
@@ -279,12 +355,12 @@ sequenceDiagram
     permission: pull
   ```
 
-6. Map internal identities to GitHub with [`GithubAccountLink`](api/v1/githubaccountlink_types.go):
+6. Map internal identities to GitHub with [`GithubAccountLink`](api/v1/githubaccountlink_types.go) (Cluster Scoped):
   ```yaml
-  apiVersion: githubguard.sap/v1
+  apiVersion: repoguard.sap/v1
   kind: GithubAccountLink
   metadata:
-    name: com-jdoe
+    name: com-jdoe # Cluster scoped
   spec:
     userID: jdoe
     githubUserID: "2042059"
@@ -299,48 +375,48 @@ GithubOrganization labels:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `githubguard.sap/addOrganizationOwner` | "true"/"false" | Allows the controller to add missing organization owners. If not set to "true", add operations are skipped. | Disabled (must be "true" to add) |
-| `githubguard.sap/removeOrganizationOwner` | "true"/"false" | Allows the controller to remove extra organization owners. If not set to "true", remove operations are skipped. | Disabled (must be "true" to remove) |
-| `githubguard.sap/addTeam` | "true"/"false" | Allows the controller to create missing teams defined by policy. | Disabled (must be "true" to add) |
-| `githubguard.sap/removeTeam` | "true"/"false" | Allows the controller to remove teams that are out of policy. | Disabled (must be "true" to remove) |
-| `githubguard.sap/addRepositoryTeam` | "true"/"false" | Allows setting default team permissions on repositories. | Disabled (must be "true" to add) |
-| `githubguard.sap/removeRepositoryTeam` | "true"/"false" | Allows removing default team permissions from repositories. | Disabled (must be "true" to remove) |
-| `githubguard.sap/dryRun` | "true"/"false" | When "true", no changes are made on GitHub; status shows planned operations. | "false" |
-| `githubguard.sap/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
-| `githubguard.sap/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
-| `githubguard.sap/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
+| `repoguard.sap/addOrganizationOwner` | "true"/"false" | Allows the controller to add missing organization owners. If not set to "true", add operations are skipped. | Disabled (must be "true" to add) |
+| `repoguard.sap/removeOrganizationOwner` | "true"/"false" | Allows the controller to remove extra organization owners. If not set to "true", remove operations are skipped. | Disabled (must be "true" to remove) |
+| `repoguard.sap/addTeam` | "true"/"false" | Allows the controller to create missing teams defined by policy. | Disabled (must be "true" to add) |
+| `repoguard.sap/removeTeam` | "true"/"false" | Allows the controller to remove teams that are out of policy. | Disabled (must be "true" to remove) |
+| `repoguard.sap/addRepositoryTeam` | "true"/"false" | Allows setting default team permissions on repositories. | Disabled (must be "true" to add) |
+| `repoguard.sap/removeRepositoryTeam` | "true"/"false" | Allows removing default team permissions from repositories. | Disabled (must be "true" to remove) |
+| `repoguard.sap/dryRun` | "true"/"false" | When "true", no changes are made on GitHub; status shows planned operations. | "false" |
+| `repoguard.sap/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
+| `repoguard.sap/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
+| `repoguard.sap/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
 
-Note: GithubOrganization also supports the annotation `githubguard.sap/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
+Note: GithubOrganization also supports the annotation `repoguard.sap/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
 
 GithubTeam labels:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `githubguard.sap/addUser` | "true"/"false" | Controls add member operations. If set to "false" the controller will skip adding users; if unset or "true" adds are allowed. | Allowed if unset; set "false" to disable |
-| `githubguard.sap/removeUser` | "true"/"false" | Controls remove member operations. If set to "false" the controller will skip removing users; if unset or "true" removes are allowed. | Allowed if unset; set "false" to disable |
-| `githubguard.sap/dryRun` | "true"/"false" | When "true", no member changes are made on GitHub; status shows planned operations. | "false" |
-| `githubguard.sap/disableInternalUsernames` | "true"/"false" | When "true", members where GreenhouseID == GithubUsername are filtered out (avoids using internal IDs externally). | "false" |
-| `githubguard.sap/require-verified-domain-email` | <domain> | When set, only members with a verified email under this domain (as reported in their `GithubAccountLink` multi-org results) are allowed. | Not set |
-| `githubguard.sap/orphaned` | "true" | Informational label set by the controller when the team is considered orphaned. Do not set manually. | Not set (controller-managed) |
-| `githubguard.sap/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
-| `githubguard.sap/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
-| `githubguard.sap/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |
-| `githubguard.sap/skippedTTL` | Go duration | Clears operations in "skipped" state after the duration since last status timestamp. | Not set |
+| `repoguard.sap/addUser` | "true"/"false" | Controls add member operations. If set to "false" the controller will skip adding users; if unset or "true" adds are allowed. | Allowed if unset; set "false" to disable |
+| `repoguard.sap/removeUser` | "true"/"false" | Controls remove member operations. If set to "false" the controller will skip removing users; if unset or "true" removes are allowed. | Allowed if unset; set "false" to disable |
+| `repoguard.sap/dryRun` | "true"/"false" | When "true", no member changes are made on GitHub; status shows planned operations. | "false" |
+| `repoguard.sap/disableInternalUsernames` | "true"/"false" | When "true", members where GreenhouseID == GithubUsername are filtered out (avoids using internal IDs externally). | "false" |
+| `repoguard.sap/require-verified-domain-email` | <domain> | When set, only members with a verified email under this domain (as reported in their `GithubAccountLink` multi-org results) are allowed. | Not set |
+| `repoguard.sap/orphaned` | "true" | Informational label set by the controller when the team is considered orphaned. Do not set manually. | Not set (controller-managed) |
+| `repoguard.sap/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
+| `repoguard.sap/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
+| `repoguard.sap/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |
+| `repoguard.sap/skippedTTL` | Go duration | Clears operations in "skipped" state after the duration since last status timestamp. | Not set |
 
 GithubAccountLink labels & annotations:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `githubguard.sap/require-verified-domain-email` | <domain> | Legacy: Requests verification that the linked GitHub account has a verified email under the given domain. | Not set |
-| `githubguard.sap/check-email-status` | "true"/"false" | Legacy: Set by the controller to indicate whether the user satisfied the verified-domain email requirement. | Controller-managed |
-| `githubguard.sap/email-check-config` | JSON object | Multi-org email check configuration. See below for format. | Not set |
-| `githubguard.sap/email-check-results` | JSON object | Multi-org email check results. Set by the controller. | Controller-managed |
+| `repoguard.sap/require-verified-domain-email` | <domain> | Legacy: Requests verification that the linked GitHub account has a verified email under the given domain. | Not set |
+| `repoguard.sap/check-email-status` | "true"/"false" | Legacy: Set by the controller to indicate whether the user satisfied the verified-domain email requirement. | Controller-managed |
+| `repoguard.sap/email-check-config` | JSON object | Multi-org email check configuration. See below for format. | Not set |
+| `repoguard.sap/email-check-results` | JSON object | Multi-org email check results. Set by the controller. | Controller-managed |
 
 ### Multi-organization Email Verification
 
 `GithubAccountLink` supports verifying GitHub account email addresses against specific domains for multiple organizations.
 
-**Configuration (`githubguard.sap/email-check-config` annotation):**
+**Configuration (`repoguard.sap/email-check-config` annotation):**
 
 ```json
 {
@@ -348,18 +424,18 @@ GithubAccountLink labels & annotations:
 }
 ```
 
-**Results (`githubguard.sap/email-check-results` annotation):**
+**Results (`repoguard.sap/email-check-results` annotation):**
 
 ```json
 {
-  "org-name": { "domain": "example.com", "verified": true, "timestamp": "2023-10-27T10:00:00Z" }
+  "org-name": { "domain": "example.com", "status": "verified/not-part-of-org/no", "timestamp": "2023-10-27T10:00:00Z" }
 }
 ```
 
 Additionally, the controller uses the following annotations for legacy or single-org check:
-- `githubguard.sap/check-email-timestamp`: RFC3339 timestamp of the last email verification check
-- `githubguard.sap/check-email-ttl`: Go duration defining how long the email verification result stays valid
-- `githubguard.sap/skippedTTL`: Go duration defining how long a skipped user operation remains in status.
+- `repoguard.sap/check-email-timestamp`: RFC3339 timestamp of the last email verification check
+- `repoguard.sap/check-email-ttl`: Go duration defining how long the email verification result stays valid
+- `repoguard.sap/skippedTTL`: Go duration defining how long a skipped user operation remains in status.
 
 
 

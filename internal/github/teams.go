@@ -12,7 +12,7 @@ import (
 
 	"github.com/gosimple/slug"
 
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v84/github"
 )
 
 type TeamsProvider interface {
@@ -176,6 +176,9 @@ func (t DefaultTeamsProvider) RemoveTeam(team string) error {
 
 	response, err := t.service.DeleteTeamBySlug(context.Background(), t.organization, slug.Make(team))
 	if err != nil {
+		if response != nil && response.StatusCode == 404 {
+			return nil
+		}
 		return err
 	}
 
@@ -208,6 +211,9 @@ func (t DefaultTeamsProvider) RemoveUser(team, user string) error {
 
 	response, err := t.service.RemoveTeamMembershipBySlug(context.Background(), t.organization, slug.Make(team), user)
 	if err != nil {
+		if response != nil && response.StatusCode == 404 {
+			return nil
+		}
 		return err
 	}
 

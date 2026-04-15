@@ -2,10 +2,11 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
+cliVersion: 4.13.0
 domain: sap
 layout:
 - go.kubebuilder.io/v4
-projectName: github-guard-greenhouse
+projectName: repo-guard
 repo: github.com/cloudoperators/repo-guard
 resources:
 - api:
@@ -32,16 +33,20 @@ resources:
   kind: GithubOrganization
   path: github.com/cloudoperators/repo-guard/api/v1
   version: v1
-- controller: true
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
   domain: sap
-  group: githubguard
-  kind: Team
-  version: v1alpha1
+  group: repoguard
+  kind: GithubAccountLink
+  path: github.com/cloudoperators/repo-guard/api/v1
+  version: v1
 - api:
     crdVersion: v1
     namespaced: true
   domain: sap
-  group: githubguard
+  group: repoguard
   kind: GithubTeamRepository
   path: github.com/cloudoperators/repo-guard/api/v1
   version: v1
@@ -50,17 +55,17 @@ resources:
     namespaced: true
   controller: true
   domain: sap
-  group: githubguard
+  group: repoguard
   kind: LDAPGroupProvider
   path: github.com/cloudoperators/repo-guard/api/v1
   version: v1
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: sap
-  group: githubguard
-  kind: GenericExternalMemberProvider
+  group: repoguard
+  kind: ClusterLDAPGroupProvider
   path: github.com/cloudoperators/repo-guard/api/v1
   version: v1
 - api:
@@ -68,8 +73,35 @@ resources:
     namespaced: true
   controller: true
   domain: sap
-  group: githubguard
-  kind: StaticExternalMemberProvider
+  group: repoguard
+  kind: GenericExternalMemberProvider
+  path: github.com/cloudoperators/repo-guard/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
+  domain: sap
+  group: repoguard
+  kind: ClusterGenericExternalMemberProvider
+  path: github.com/cloudoperators/repo-guard/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: sap
+  group: repoguard
+  kind: StaticMemberProvider
+  path: github.com/cloudoperators/repo-guard/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: false
+  controller: true
+  domain: sap
+  group: repoguard
+  kind: ClusterStaticMemberProvider
   path: github.com/cloudoperators/repo-guard/api/v1
   version: v1
 version: "3"

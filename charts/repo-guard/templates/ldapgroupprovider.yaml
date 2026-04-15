@@ -1,22 +1,23 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-{{ if .Values.ldap }}
-apiVersion: githubguard.sap/v1
-kind: LDAPGroupProvider
+{{ range .Values.ldaps }}
+apiVersion: repoguard.sap/v1
+kind: {{ if .clusterScoped }}ClusterLDAPGroupProvider{{ else }}LDAPGroupProvider{{ end }}
 metadata:
-  name: {{ (.Values.ldap.name | default "ldap") | lower }}
+  name: {{ (.name | default "ldap") | lower }}
 spec:
-  secret: {{ (.Values.ldap.name | default "ldap") | lower }}
-  host: {{ .Values.ldap.host }}
-  baseDN:  {{ .Values.ldap.baseDN }}
+  secret: {{ (.name | default "ldap") | lower }}
+  host: {{ .host }}
+  baseDN:  {{ .baseDN }}
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: {{ (.Values.ldap.name | default "ldap") | lower }}
+  name: {{ (.name | default "ldap") | lower }}
 type: Opaque
 data:
-  bindDN: {{ .Values.ldap.bindDN | b64enc }}
-  bindPW: {{ .Values.ldap.bindPW | b64enc }}
+  bindDN: {{ .bindDN | b64enc }}
+  bindPW: {{ .bindPW | b64enc }}
+---
 {{ end }}

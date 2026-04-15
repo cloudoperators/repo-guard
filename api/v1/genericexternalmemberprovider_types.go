@@ -56,6 +56,30 @@ type GenericExternalMemberProviderList struct {
 
 func init() {
 	SchemeBuilder.Register(&GenericExternalMemberProvider{}, &GenericExternalMemberProviderList{})
+	SchemeBuilder.Register(&ClusterGenericExternalMemberProvider{}, &ClusterGenericExternalMemberProviderList{})
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state"
+// +kubebuilder:printcolumn:name="Last Change",type="date",JSONPath=".status.timestamp"
+
+// ClusterGenericExternalMemberProvider is the Schema for HTTP based external member providers (cluster-wide)
+type ClusterGenericExternalMemberProvider struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   GenericExternalMemberProviderSpec   `json:"spec,omitempty"`
+	Status GenericExternalMemberProviderStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+type ClusterGenericExternalMemberProviderList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []ClusterGenericExternalMemberProvider `json:"items"`
 }
 
 const (
