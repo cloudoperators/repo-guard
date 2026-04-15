@@ -23,7 +23,7 @@ require (
 
 replace (
 	// DEX import matches version v2.44.0.
-	github.com/dexidp/dex => github.com/dexidp/dex v0.0.0-20250829100637-2dce75009acf
+	github.com/dexidp/dex => github.com/dexidp/dex v0.6.1
 
 	// Keep Flux dependencies in sync with v2.6.1.
 	github.com/fluxcd/helm-controller/api => github.com/fluxcd/helm-controller/api v1.4.2
