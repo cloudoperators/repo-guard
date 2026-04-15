@@ -31,7 +31,7 @@ replace (
 	github.com/fluxcd/pkg/apis/kustomize => github.com/fluxcd/pkg/apis/kustomize v1.12.0
 	github.com/fluxcd/pkg/apis/meta => github.com/fluxcd/pkg/apis/meta v1.21.0
 	github.com/fluxcd/source-controller/api => github.com/fluxcd/source-controller/api v1.7.2
-	github.com/fluxcd/source-watcher/api/v2 => github.com/fluxcd/source-watcher/api/v2 v2.0.2
+	github.com/fluxcd/source-watcher/api/v2 => github.com/fluxcd/source-watcher/api/v2 v2.1.1
 )
 
 require (
