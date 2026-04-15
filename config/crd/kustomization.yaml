@@ -13,6 +13,9 @@ resources:
 - bases/repoguard.sap_githubaccountlinks.yaml
 - bases/repoguard.sap_genericexternalmemberproviders.yaml
 - bases/repoguard.sap_staticmemberproviders.yaml
+- bases/repoguard.sap_clusterldapgroupproviders.yaml
+- bases/repoguard.sap_clustergenericexternalmemberproviders.yaml
+- bases/repoguard.sap_clusterstaticmemberproviders.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
