@@ -164,9 +164,12 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 			var status string
 			if installationID == 0 {
-				l.Info("installation not resolved for email check; skipping GitHub call and marking as not-part-of-org",
+				l.Info("installation not resolved for email check; skipping GitHub call and marking as skipped",
 					"github", githubName, "org", orgName)
-				status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG
+				status = v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_SKIPPED
+				if minRequeueAfter == 0 || minRequeueAfter > 10*time.Second {
+					minRequeueAfter = 10 * time.Second
+				}
 			} else {
 				usersProvider, err := github.NewUsersProvider(githubClient, installationID)
 				if err != nil {
