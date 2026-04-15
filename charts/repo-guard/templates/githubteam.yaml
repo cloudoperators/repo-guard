@@ -45,16 +45,75 @@ spec:
     {{- if $team.ldap }}
     ldap:
       provider: "{{ if $team.ldap.provider }}{{ $team.ldap.provider }}{{ else if $.Values.ldaps }}{{ (index $.Values.ldaps 0).name | default "ldap" }}{{ else }}ldap{{ end }}"
+      {{- $ldapProviderName := "" -}}
+      {{- if $team.ldap.provider -}}
+        {{- $ldapProviderName = $team.ldap.provider -}}
+      {{- else if $.Values.ldaps -}}
+        {{- $ldapProviderName = (index $.Values.ldaps 0).name | default "ldap" -}}
+      {{- else -}}
+        {{- $ldapProviderName = "ldap" -}}
+      {{- end -}}
+      {{- $kind := "" -}}
+      {{- if $team.ldap.kind -}}
+        {{- $kind = $team.ldap.kind -}}
+      {{- else -}}
+        {{- range $.Values.ldaps -}}
+          {{- if eq .name $ldapProviderName -}}
+            {{- if .clusterScoped -}}
+              {{- $kind = "ClusterLDAPGroupProvider" -}}
+            {{- else -}}
+              {{- $kind = "LDAPGroupProvider" -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{- if $kind }}
+      kind: {{ $kind }}
+      {{- end }}
       group: {{ $team.ldap.group }}
     {{- end }}
     {{- if $team.genericHTTP }}
     genericHTTP:
       provider: {{ $team.genericHTTP.provider }}
+      {{- $kind := "" -}}
+      {{- if $team.genericHTTP.kind -}}
+        {{- $kind = $team.genericHTTP.kind -}}
+      {{- else -}}
+        {{- range $.Values.genericExternalMemberProviders -}}
+          {{- if eq .name $team.genericHTTP.provider -}}
+            {{- if .clusterScoped -}}
+              {{- $kind = "ClusterGenericExternalMemberProvider" -}}
+            {{- else -}}
+              {{- $kind = "GenericExternalMemberProvider" -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{- if $kind }}
+      kind: {{ $kind }}
+      {{- end }}
       group: {{ $team.genericHTTP.group }}
     {{- end }}
     {{- if $team.static }}
     static:
       provider: {{ $team.static.provider }}
+      {{- $kind := "" -}}
+      {{- if $team.static.kind -}}
+        {{- $kind = $team.static.kind -}}
+      {{- else -}}
+        {{- range $.Values.staticMemberProviders -}}
+          {{- if eq .name $team.static.provider -}}
+            {{- if .clusterScoped -}}
+              {{- $kind = "ClusterStaticMemberProvider" -}}
+            {{- else -}}
+              {{- $kind = "StaticMemberProvider" -}}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{- if $kind }}
+      kind: {{ $kind }}
+      {{- end }}
       group: {{ $team.static.group }}
     {{- end }}
   {{- end }}

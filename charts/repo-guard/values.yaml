@@ -135,17 +135,20 @@ monitoring:
 #          greenhouseTeam:
 #          # ldap group example referencing top-level ldap provider name:
 #          # ldapGroup: cn=my-group,ou=groups,dc=example,dc=org
-#          # ldap object example allowing provider override:
+#          # ldap object example allowing provider and kind override:
 #          # ldap:
 #          #   provider: corp-ldap   # defaults to .Values.ldaps[0].name if omitted
+#          #   kind: ClusterLDAPGroupProvider # optional, auto-populated if provider matches an entry in .Values.ldaps
 #          #   group: cn=my-group,ou=groups,dc=example,dc=org
 #          # generic http example:
 #          # genericHTTP:
 #          #   provider: my-http-provider  # must match an entry in genericExternalMemberProviders.name
+#          #   kind: ClusterGenericExternalMemberProvider # optional, auto-populated if provider matches an entry in .Values.genericExternalMemberProviders
 #          #   group: engineers
 #          # static example:
 #          # static:
 #          #   provider: my-static-provider # must match an entry in staticMemberProviders.name
+#          #   kind: ClusterStaticMemberProvider # optional, auto-populated if provider matches an entry in .Values.staticMemberProviders
 #          #   group: team-a
 
 #        teamRepositoryAssignments:
