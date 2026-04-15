@@ -7,6 +7,10 @@
   "constraints": {
     "go": "1.24"
   },
+  "ignoreDeps": [
+    "github.com/dexidp/dex",
+    "github.com/fluxcd"
+  ],
   "packageRules": [
     {
       "groupName": "github actions",
