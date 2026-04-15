@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-/*
-Copyright 2023 cc.
-*/
-
 // Package v1 contains API Schema definitions for the  v1 API group
 // +kubebuilder:object:generate=true
 // +groupName=repoguard.sap

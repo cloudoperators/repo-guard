@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-/*
-Copyright 2023 cc.
-*/
-
 package controller
 
 import (
@@ -60,8 +56,6 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	if err != nil {
 		if errors.IsNotFound(err) {
 			l.Info("resource not found in kubernetes: reconcile is skipped")
-			// if not found -- skip
-			//delete(GithubClients, req.NamespacedName.String())
 			return ctrl.Result{}, nil
 		}
 		l.Error(err, "error during getting the resource")
@@ -163,8 +157,6 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	l.Info("github is configured and running as part of controller")
 	return ctrl.Result{}, nil
 }
-
-// SetupWithManager sets up the controller with the Manager.
 func (r *GithubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&repoguardsapv1.Github{}).

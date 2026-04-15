@@ -1,10 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-/*
-Copyright 2023 cc.
-*/
-
 package main
 
 import (
@@ -73,7 +69,6 @@ func main() {
 		Cache: cache.Options{
 			SyncPeriod: &resyncPeriod,
 		},
-		// Bind metrics server to the address provided via flag
 		Metrics: server.Options{BindAddress: metricsAddr},
 
 		HealthProbeBindAddress: probeAddr,
