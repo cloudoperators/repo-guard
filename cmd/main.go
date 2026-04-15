@@ -61,6 +61,8 @@ func main() {
 
 	if os.Getenv("POD_NAMESPACE") != "" {
 		controller.OperatorNamespace = os.Getenv("POD_NAMESPACE")
+	} else if currentNamespace != "" {
+		controller.OperatorNamespace = currentNamespace
 	}
 
 	resyncPeriod := time.Duration(15 * time.Minute)
