@@ -266,6 +266,8 @@ for f in "$BASE_DIR"/*.yaml; do
     target="$CHART_DIR/$(kind_to_filename "$kind")"
     # No separator for chart CRDs
     write_with_preserved_header "$f" "$target" "false"
+    # Ensure SPDX headers are preserved when adding new CRDs
+    ensure_header_from_source "$f" "$target" "false"
     echo "Added new CRD: $f -> $target"
     # Ensure SPDX headers are preserved/restored in base CRDs as well (with separator)
     ensure_header_from_source "$target" "$f" "true"
