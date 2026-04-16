@@ -3,7 +3,7 @@ module github.com/cloudoperators/repo-guard
 go 1.26.0
 
 require (
-	github.com/cloudoperators/greenhouse v0.10.0
+	github.com/cloudoperators/greenhouse v0.11.0
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/go-github/v84 v84.0.0
 	github.com/gosimple/slug v1.15.0
@@ -44,7 +44,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.25.0 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.25.1 // indirect
 	github.com/fluxcd/source-controller/api v1.8.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
