@@ -1,13 +1,11 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-{{- range $githubKey, $githubItem := .Values.githubs }}
-  {{- if $githubItem.organizations }}
-    {{- range $idx, $org := $githubItem.organizations }}
+{{- range $org := .Values.githubOrganizations }}
 apiVersion: repoguard.sap/v1
 kind: GithubOrganization
 metadata:
-  name: {{ $githubKey }}--{{ $org.organization | replace "/" "-" | lower }}
+  name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}
   labels:
     repoguard.sap/addTeam: "{{ $org.addTeam | default "true" }}"
     repoguard.sap/removeTeam: "{{ $org.removeTeam | default "true" }}"
@@ -26,7 +24,7 @@ metadata:
     repoguard.sap/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
   {{- end }}
 spec:
-  github: {{ $githubKey }}
+  github: {{ $org.github }}
   organization: {{ $org.organization }}
   {{- if and $org.defaultPublicRepositoryTeams (gt (len $org.defaultPublicRepositoryTeams) 0) }}
   defaultPublicRepositoryTeams:
@@ -42,6 +40,4 @@ spec:
   {{- end }}
   installationID: {{ $org.installationID | int64 }}
 ---
-    {{- end }}
-  {{- end }}
 {{- end }}

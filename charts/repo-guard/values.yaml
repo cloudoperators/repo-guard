@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 manager:
-  enabled: true
+  enabled: false
   image:
       repository: ghcr.io/cloudoperators/repo-guard
   resources:
@@ -74,85 +74,87 @@ monitoring:
 #          - user2
 
 # githubs:
-#  enterprise:
-#    webURL: 
-#    v3APIURL: 
-#    integrationID: 
-#    clientID:
-#    clientSecret: 
-#    privateKey: 
-#    
-#    githubAccountLinks:
-#    - userID: 
-#      githubUsername:
-#      githubID:
+#   - name: enterprise
+#     webURL:
+#     v3APIURL:
+#     integrationID:
+#     clientID:
+#     clientSecret:
+#     privateKey:
 
-#    organizations:
-#      - organization:
-#        installationID:
-#        # TTL overrides applied to this organization and all its teams
-#        # If omitted, chart-wide defaults in .Values.ttl are used.
-#        ttl:
-#          failed: 24h        # overrides ttl.team.failed and ttl.organization.failed where applicable
-#          notfound: 24h      # overrides ttl.team.notfound
-#          completed: 72h     # overrides ttl.team.completed and ttl.organization.completed where applicable
-#        addTeam:  
-#        removeTeam:  
-#        addOrganizationOwner:  
-#        removeOrganizationOwner:  
-#        addRepositoryTeam: 
-#        removeRepositoryTeam:  
-#        dryRun:  
-#        disableInternalUsernames:  
-#        # GithubAccountLink email verification settings applied to all GALs
-#        # associated with this GitHub (organization-level policy).
-#        # When set, the Helm chart will populate a JSON annotation on each
-#        # GithubAccountLink containing per-organization config entries:
-#        #   repoguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
-#        # The controller will write results into:
-#        #   repoguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","status":"verified|not-part-of-org|no","timestamp":"..."} }'
-#        githubAccountLinkEmailCheck:
-#          # Domain to require for verified email, e.g., example.com
-#          domain: ""
-#          # Whether to actively check email verification status
-#          enabled: false
-#          # Optional TTL for re-checking email status
-#          ttl: ""
+# githubAccountLinks:
+#   - github: enterprise
+#     userID:
+#     githubUsername:
+#     githubID:
 
-#        defaultPublicRepositoryTeams:  
-#        - team:
-#          permission:
-#       
-#        defaultPrivateRepositoryTeams: 
-#        - team:
-#          permission:
-#    
-#        organizationOwnerTeams:
-#          -
-
-#        teams:
-#        - name:  
-#          greenhouseTeam:
-#          # ldap group example referencing top-level ldap provider name:
-#          # ldapGroup: cn=my-group,ou=groups,dc=example,dc=org
-#          # ldap object example allowing provider and kind override:
-#          # ldap:
-#          #   provider: corp-ldap   # defaults to .Values.ldaps[0].name if omitted
-#          #   kind: ClusterLDAPGroupProvider # optional, auto-populated if provider matches an entry in .Values.ldaps
-#          #   group: cn=my-group,ou=groups,dc=example,dc=org
-#          # generic http example:
-#          # genericHTTP:
-#          #   provider: my-http-provider  # must match an entry in genericExternalMemberProviders.name
-#          #   kind: ClusterGenericExternalMemberProvider # optional, auto-populated if provider matches an entry in .Values.genericExternalMemberProviders
-#          #   group: engineers
-#          # static example:
-#          # static:
-#          #   provider: my-static-provider # must match an entry in staticMemberProviders.name
-#          #   kind: ClusterStaticMemberProvider # optional, auto-populated if provider matches an entry in .Values.staticMemberProviders
-#          #   group: team-a
-
-#        teamRepositoryAssignments:
-#          - team: 
-#            repositories:
-#             - 
-#            permission: 
+# githubOrganizations:
+#   - github: enterprise
+#     organization:
+#     installationID:
+#     # TTL overrides applied to this organization and all its teams
+#     # If omitted, chart-wide defaults in .Values.ttl are used.
+#     ttl:
+#       failed: 24h        # overrides ttl.team.failed and ttl.organization.failed where applicable
+#       notfound: 24h      # overrides ttl.team.notfound
+#       completed: 72h     # overrides ttl.team.completed and ttl.organization.completed where applicable
+#     addTeam:
+#     removeTeam:
+#     addOrganizationOwner:
+#     removeOrganizationOwner:
+#     addRepositoryTeam:
+#     removeRepositoryTeam:
+#     dryRun:
+#     disableInternalUsernames:
+#     # GithubAccountLink email verification settings applied to all GALs
+#     # associated with this GitHub (organization-level policy).
+#     # When set, the Helm chart will populate a JSON annotation on each
+#     # GithubAccountLink containing per-organization config entries:
+#     #   repoguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
+#     # The controller will write results into:
+#     #   repoguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","status":"verified|not-part-of-org|no","timestamp":"..."} }'
+#     githubAccountLinkEmailCheck:
+#       # Domain to require for verified email, e.g., example.com
+#       domain: ""
+#       # Whether to actively check email verification status
+#       enabled: false
+#       # Optional TTL for re-checking email status
+#       ttl: ""
+#
+#     defaultPublicRepositoryTeams:
+#       - team:
+#         permission:
+#
+#     defaultPrivateRepositoryTeams:
+#       - team:
+#         permission:
+#
+#     organizationOwnerTeams:
+#       -
+#
+#     teams:
+#       - name:
+#         greenhouseTeam:
+#         # ldap group example referencing top-level ldap provider name:
+#         # ldapGroup: cn=my-group,ou=groups,dc=example,dc=org
+#         # ldap object example allowing provider and kind override:
+#         # ldap:
+#         #   provider: corp-ldap   # defaults to .Values.ldaps[0].name if omitted
+#         #   kind: ClusterLDAPGroupProvider # optional, auto-populated if provider matches an entry in .Values.ldaps
+#         #   group: cn=my-group,ou=groups,dc=example,dc=org
+#         # generic http example:
+#         # genericHTTP:
+#         #   provider: my-http-provider  # must match an entry in genericExternalMemberProviders.name
+#         #   kind: ClusterGenericExternalMemberProvider # optional, auto-populated if provider matches an entry in .Values.genericExternalMemberProviders
+#         #   group: engineers
+#         # static example:
+#         # static:
+#         #   provider: my-static-provider # must match an entry in staticMemberProviders.name
+#         #   kind: ClusterStaticMemberProvider # optional, auto-populated if provider matches an entry in .Values.staticMemberProviders
+#         #   group: team-a
+#
+#     teamRepositoryAssignments:
+#       - team:
+#         repositories:
+#           -
+#         permission:

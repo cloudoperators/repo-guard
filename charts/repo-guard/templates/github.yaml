@@ -1,22 +1,22 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-{{- range $githubKey, $githubItem := .Values.githubs }}
+{{- range $githubItem := .Values.githubs }}
 apiVersion: repoguard.sap/v1
 kind: Github
 metadata:
-  name: {{ $githubKey | lower }}
+  name: {{ $githubItem.name | lower }}
 spec:
   webURL: {{ $githubItem.webURL | default "" }}
   v3APIURL: {{ $githubItem.v3APIURL | default "" }}
   integrationID: {{ $githubItem.integrationID | int64 }}
-  clientUserAgent: repo-guard-{{ $githubKey | lower }}
-  secret: github-{{ $githubKey | lower }}-secret
+  clientUserAgent: repo-guard-{{ $githubItem.name | lower }}
+  secret: github-{{ $githubItem.name | lower }}-secret
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: github-{{ $githubKey | lower }}-secret
+  name: github-{{ $githubItem.name | lower }}-secret
 type: Opaque
 data:
   clientID: {{ $githubItem.clientID | b64enc }}

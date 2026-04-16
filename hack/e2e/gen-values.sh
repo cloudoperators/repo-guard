@@ -256,7 +256,7 @@ fi
 cat <<EOF
 
 githubs:
-  com:
+  - name: com
     webURL: ${GITHUB_WEB_URL}
     v3APIURL: ${GITHUB_V3_API_URL}
     integrationID: ${GITHUB_INTEGRATION_ID}
@@ -265,65 +265,68 @@ githubs:
     privateKey: |-
 $(printf "%s\n" "${GITHUB_PRIVATE_KEY}" | sed 's/^/      /')
 
-    organizations:
-      - organization: ${ORGANIZATION}
-        installationID: ${GITHUB_INSTALLATION_ID}
-        requireVerifiedDomainEmailForMembers: false
-        ttl:
-          completed: 5s
-          skipped: 5s
-        disableInternalUsernames: false
-        organizationOwnerTeams:
-          - ${OWNER_TEAM}
+githubOrganizations:
+  - github: com
+    organization: ${ORGANIZATION}
+    installationID: ${GITHUB_INSTALLATION_ID}
+    requireVerifiedDomainEmailForMembers: false
+    ttl:
+      completed: 5s
+      skipped: 5s
+    disableInternalUsernames: false
+    organizationOwnerTeams:
+      - ${OWNER_TEAM}
 
-        teams:
-          - name: ${TEAM_1}
-            greenhouseTeam: ${TEAM_1}
-          - name: ${TEAM_2}
-            greenhouseTeam: ${TEAM_2}
-          - name: ${OWNER_TEAM}
-            greenhouseTeam: ${OWNER_TEAM}
-          - name: ${LDAP_TEAM_NAME}
-            disableInternalUsernames: true
-            ldap:
-              provider: ${LDAP_NAME}
-              group: ${LDAP_GROUP_NAME}
-          - name: ${EMP_HTTP_TEAM_NAME}
-            genericHTTP:
-              provider: ${EMP_HTTP_NAME}
-              group: ${EMP_HTTP_GROUP_ID}
-          - name: ${STATIC_TEAM_NAME}
-            static:
-              provider: ${STATIC_NAME}
-              group: ${STATIC_TEAM_NAME}
+    teams:
+      - name: ${TEAM_1}
+        greenhouseTeam: ${TEAM_1}
+      - name: ${TEAM_2}
+        greenhouseTeam: ${TEAM_2}
+      - name: ${OWNER_TEAM}
+        greenhouseTeam: ${OWNER_TEAM}
+      - name: ${LDAP_TEAM_NAME}
+        disableInternalUsernames: true
+        ldap:
+          provider: ${LDAP_NAME}
+          group: ${LDAP_GROUP_NAME}
+      - name: ${EMP_HTTP_TEAM_NAME}
+        genericHTTP:
+          provider: ${EMP_HTTP_NAME}
+          group: ${EMP_HTTP_GROUP_ID}
+      - name: ${STATIC_TEAM_NAME}
+        static:
+          provider: ${STATIC_NAME}
+          group: ${STATIC_TEAM_NAME}
 
-        defaultPublicRepositoryTeams:
-          - team: ${DEF_PUB_PULL}
-            permission: pull
-          - team: ${DEF_PUB_PUSH}
-            permission: push
-          - team: ${DEF_PUB_ADMIN}
-            permission: admin
-        defaultPrivateRepositoryTeams:
-          - team: ${DEF_PRIV_PULL}
-            permission: pull
-          - team: ${DEF_PRIV_PUSH}
-            permission: push
-          - team: ${DEF_PRIV_ADMIN}
-            permission: admin
+    defaultPublicRepositoryTeams:
+      - team: ${DEF_PUB_PULL}
+        permission: pull
+      - team: ${DEF_PUB_PUSH}
+        permission: push
+      - team: ${DEF_PUB_ADMIN}
+        permission: admin
+    defaultPrivateRepositoryTeams:
+      - team: ${DEF_PRIV_PULL}
+        permission: pull
+      - team: ${DEF_PRIV_PUSH}
+        permission: push
+      - team: ${DEF_PRIV_ADMIN}
+        permission: admin
 
 $( if [[ -n "${CUSTOM_PRIV_TEAM}" ]]; then \
     printf "%s\n" \
-"        teamRepositoryAssignments:" \
-"          - team: ${CUSTOM_PRIV_TEAM}" \
-"            repositories:" \
-"              - ${E2E_REPO_PRIVATE}" \
-"            permission: ${CUSTOM_PRIV_PERMISSION}"; \
+"    teamRepositoryAssignments:" \
+"      - team: ${CUSTOM_PRIV_TEAM}" \
+"        repositories:" \
+"          - ${E2E_REPO_PRIVATE}" \
+"        permission: ${CUSTOM_PRIV_PERMISSION}"; \
   fi )
     
-    githubAccountLinks:
-      - userID: $(read_var USER_0_GREENHOUSE_ID)
-        githubID: $(read_var USER_0_GITHUB_USERID)
-      - userID: $(read_var USER_1_GREENHOUSE_ID)
-        githubID: $(read_var USER_1_GITHUB_USERID)
+githubAccountLinks:
+  - github: com
+    userID: $(read_var USER_0_GREENHOUSE_ID)
+    githubID: $(read_var USER_0_GITHUB_USERID)
+  - github: com
+    userID: $(read_var USER_1_GREENHOUSE_ID)
+    githubID: $(read_var USER_1_GITHUB_USERID)
 EOF

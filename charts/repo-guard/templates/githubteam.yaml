@@ -1,15 +1,13 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-{{- range $githubKey, $githubItem := .Values.githubs }}
-  {{- if $githubItem.organizations }}
-    {{- range $idx, $org := $githubItem.organizations }}
-      {{- if $org.teams }}
-        {{- range $tidx, $team := $org.teams }}
+{{- range $org := .Values.githubOrganizations }}
+  {{- if $org.teams }}
+    {{- range $tidx, $team := $org.teams }}
 apiVersion: repoguard.sap/v1
 kind: GithubTeam
 metadata:
-  name: {{ $githubKey }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $team.name | replace "_" "-" | replace " " "-" | lower }}
+  name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $team.name | replace "_" "-" | replace " " "-" | lower }}
   labels:
     repoguard.sap/addUser: "{{ $team.addUsers | default "true" }}"
     repoguard.sap/removeUser: "{{ $team.removeUsers | default "true" }}"
@@ -117,15 +115,13 @@ spec:
       group: {{ $team.static.group }}
     {{- end }}
   {{- end }}
-  github: {{ $githubKey }}
+  github: {{ $org.github }}
   organization: {{ $org.organization }}
   team: {{ $team.name }}
   {{- if $team.greenhouseTeam }}
   greenhouseTeam: {{ $team.greenhouseTeam }}
   {{- end }}
 ---
-        {{- end }}
-      {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}
