@@ -6,9 +6,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: clusterstaticmemberproviders.repoguard.sap
+  name: clusterstaticmemberproviders.repoguard.cloudoperators.dev
 spec:
-  group: repoguard.sap
+  group: repoguard.cloudoperators.dev
   names:
     kind: ClusterStaticMemberProvider
     listKind: ClusterStaticMemberProviderList

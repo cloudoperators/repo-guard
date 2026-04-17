@@ -57,8 +57,8 @@ func init() {
 //	  "<org>": { "domain": "example.com", "status": "verified/not-part-of-org/no", "timestamp": "RFC3339" },
 //	  ...
 //	}
-const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_CONFIG = "repoguard.sap/email-check-config"
-const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS = "repoguard.sap/email-check-results"
+const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_CONFIG = "repoguard.cloudoperators.dev/email-check-config"
+const GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS = "repoguard.cloudoperators.dev/email-check-results"
 
 const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED = "verified"
 const GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG = "not-part-of-org"

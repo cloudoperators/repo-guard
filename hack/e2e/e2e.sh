@@ -34,7 +34,7 @@ CONTAINER_TOOL=${CONTAINER_TOOL:-docker}
 E2E_IMAGE_REPO=${E2E_IMAGE_REPO:-repo-guard}
 E2E_IMAGE_TAG=${E2E_IMAGE_TAG:-e2e}
 E2E_IMAGE=${E2E_IMAGE:-${E2E_IMAGE_REPO}:${E2E_IMAGE_TAG}}
-E2E_TRIGGER_LABEL_KEY=${E2E_TRIGGER_LABEL_KEY:-repoguard.sap/trigger}
+E2E_TRIGGER_LABEL_KEY=${E2E_TRIGGER_LABEL_KEY:-repoguard.cloudoperators.dev/trigger}
 # Default to using the in-repo dummy EMP HTTP server for E2E runs.
 # Set USE_DUMMY_EMP_HTTP=false to use external Profiles instead.
 USE_DUMMY_EMP_HTTP=${USE_DUMMY_EMP_HTTP:-true}
@@ -704,7 +704,7 @@ cmd_test() {
 
   # 1) Ensure CRDs are present
   log_step "Checking required CRDs exist"
-  for crd in githubs.repoguard.sap githuborganizations.repoguard.sap githubteams.repoguard.sap githubteamrepositories.repoguard.sap githubaccountlinks.repoguard.sap staticmemberproviders.repoguard.sap ldapgroupproviders.repoguard.sap genericexternalmemberproviders.repoguard.sap; do
+  for crd in githubs.repoguard.cloudoperators.dev githuborganizations.repoguard.cloudoperators.dev githubteams.repoguard.cloudoperators.dev githubteamrepositories.repoguard.cloudoperators.dev githubaccountlinks.repoguard.cloudoperators.dev staticmemberproviders.repoguard.cloudoperators.dev ldapgroupproviders.repoguard.cloudoperators.dev genericexternalmemberproviders.repoguard.cloudoperators.dev; do
     echo -n "Checking CRD $crd ... "
     kubectl get crd "$crd" >/dev/null
     echo OK
@@ -1889,8 +1889,8 @@ run_teams_scenario() {
 
   log_step "Scenario: label toggles on ${GT1_NAME} in ${ns}"
   # Disable removal; try to remove member in Greenhouse -> should remain 1
-  log_step "Setting label repoguard.sap/removeUser=false on GithubTeam/${GT1_NAME} in ${ns}"
-  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/removeUser":"false"}}}'
+  log_step "Setting label repoguard.cloudoperators.dev/removeUser=false on GithubTeam/${GT1_NAME} in ${ns}"
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.cloudoperators.dev/removeUser":"false"}}}'
   kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p '{"status":{"members":[], "statusConditions": {"conditions": []}}}'
   # Wait briefly and assert still 1
   if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} in ${ns} to remain at count=1 despite empty Greenhouse members (remove disabled)"; fi
@@ -1898,15 +1898,15 @@ run_teams_scenario() {
   wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
   # Disable addition; add USER1 back in Greenhouse -> count should stay 1
-  log_step "Setting label repoguard.sap/addUser=false on GithubTeam/${GT1_NAME} in ${ns}"
-  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/addUser":"false"}}}'
+  log_step "Setting label repoguard.cloudoperators.dev/addUser=false on GithubTeam/${GT1_NAME} in ${ns}"
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.cloudoperators.dev/addUser":"false"}}}'
   kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" '{status:{members:[{id:$u1, email:($u1+"@example.com"), firstName:$u1, lastName:$u1}], statusConditions: {conditions: []}}}')"
   if e2e_verbose_true; then log_expect "GithubTeam/${GT1_NAME} in ${ns} to remain at count=1 despite Greenhouse adding ${USER1} (add disabled)"; fi
   wait_for_members_count "$GT1_NAME" 1 "${ns}"
 
   # Re-enable both and converge to two members
   log_step "Re-enabling addUser/removeUser on GithubTeam/${GT1_NAME} in ${ns}"
-  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.sap/addUser":"true","repoguard.sap/removeUser":"true"}}}'
+  kubectl -n "${ns}" patch githubteam "$GT1_NAME" --type merge -p '{"metadata":{"labels":{"repoguard.cloudoperators.dev/addUser":"true","repoguard.cloudoperators.dev/removeUser":"true"}}}'
   kubectl -n "${ns}" patch team "$TEAM1" --type=merge --subresource=status -p "$(jq -nc --arg u1 "$USER1" --arg u2 "$USER2" '{status:{members:[{id:$u1, email:($u1+"@example.com"), firstName:$u1, lastName:$u1},{id:$u2, email:($u2+"@example.com"), firstName:$u2, lastName:$u2}], statusConditions: {conditions: []}}}')"
   wait_for_members_count "$GT1_NAME" 2 "${ns}"
 

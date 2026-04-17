@@ -7,26 +7,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: githubs.repoguard.sap
+  name: clusterstaticmemberproviders.repoguard.cloudoperators.dev
 spec:
-  group: repoguard.sap
+  group: repoguard.cloudoperators.dev
   names:
-    kind: Github
-    listKind: GithubList
-    plural: githubs
-    singular: github
+    kind: ClusterStaticMemberProvider
+    listKind: ClusterStaticMemberProviderList
+    plural: clusterstaticmemberproviders
+    singular: clusterstaticmemberprovider
   scope: Cluster
   versions:
-  - additionalPrinterColumns:
-    - jsonPath: .status.state
-      name: Status
-      type: string
-    - jsonPath: .status.timestamp
-      name: Last Change
-      type: date
-    name: v1
+  - name: v1
     schema:
       openAPIV3Schema:
+        description: ClusterStaticMemberProvider provides static members by group
+          (cluster-wide)
         properties:
           apiVersion:
             description: |-
@@ -46,22 +41,20 @@ spec:
           metadata:
             type: object
           spec:
-            description: GithubSpec defines the desired state of Github
             properties:
-              clientUserAgent:
-                type: string
-              integrationID:
-                format: int64
-                type: integer
-              secret:
-                type: string
-              v3APIURL:
-                type: string
-              webURL:
-                type: string
+              groups:
+                items:
+                  properties:
+                    group:
+                      type: string
+                    members:
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                type: array
             type: object
           status:
-            description: GithubStatus defines the observed state of Github
             properties:
               error:
                 type: string

@@ -11,7 +11,7 @@ metadata:
 rules:
   # Main repoguard resources with full CRUD-ish verbs
   - apiGroups:
-      - repoguard.sap
+      - repoguard.cloudoperators.dev
     resources:
       - githuborganizations
       - githubs
@@ -32,7 +32,7 @@ rules:
 
   # Finalizers for those resources (update only)
   - apiGroups:
-      - repoguard.sap
+      - repoguard.cloudoperators.dev
     resources:
       - githuborganizations/finalizers
       - githubs/finalizers
@@ -48,7 +48,7 @@ rules:
 
   # Status subresources
   - apiGroups:
-      - repoguard.sap
+      - repoguard.cloudoperators.dev
     resources:
       - githuborganizations/status
       - githubs/status
@@ -66,7 +66,7 @@ rules:
 
   # Read-only repoguard resources
   - apiGroups:
-      - repoguard.sap
+      - repoguard.cloudoperators.dev
     resources:
       - githubteamrepositories
       - githubusernames

@@ -3,7 +3,7 @@
 
 {{- if .Values.genericExternalMemberProviders }}
 {{- range $idx, $gep := .Values.genericExternalMemberProviders }}
-apiVersion: repoguard.sap/v1
+apiVersion: repoguard.cloudoperators.dev/v1
 kind: {{ if $gep.clusterScoped }}ClusterGenericExternalMemberProvider{{ else }}GenericExternalMemberProvider{{ end }}
 metadata:
   name: {{ $gep.name | required "genericExternalMemberProviders[].name is required" }}

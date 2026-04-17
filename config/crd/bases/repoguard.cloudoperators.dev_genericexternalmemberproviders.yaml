@@ -7,29 +7,28 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: githubaccountlinks.repoguard.sap
+  name: genericexternalmemberproviders.repoguard.cloudoperators.dev
 spec:
-  group: repoguard.sap
+  group: repoguard.cloudoperators.dev
   names:
-    kind: GithubAccountLink
-    listKind: GithubAccountLinkList
-    plural: githubaccountlinks
-    singular: githubaccountlink
-  scope: Cluster
+    kind: GenericExternalMemberProvider
+    listKind: GenericExternalMemberProviderList
+    plural: genericexternalmemberproviders
+    singular: genericexternalmemberprovider
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.github
-      name: Github
+    - jsonPath: .status.state
+      name: Status
       type: string
-    - jsonPath: .spec.userID
-      name: User
-      type: string
-    - jsonPath: .spec.githubUserID
-      name: Github ID
-      type: string
+    - jsonPath: .status.timestamp
+      name: Last Change
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
+        description: GenericExternalMemberProvider is the Schema for HTTP based external
+          member providers
         properties:
           apiVersion:
             description: |-
@@ -49,15 +48,36 @@ spec:
           metadata:
             type: object
           spec:
+            description: |-
+              GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
+              Secret may contain username/password or token.
             properties:
-              github:
+              endpoint:
                 type: string
-              githubUserID:
+              idField:
                 type: string
-              userID:
+              pageParam:
+                type: string
+              paginated:
+                type: boolean
+              resultsField:
+                type: string
+              secret:
+                type: string
+              testConnectionURL:
+                type: string
+              totalPagesField:
                 type: string
             type: object
           status:
+            properties:
+              error:
+                type: string
+              state:
+                type: string
+              timestamp:
+                format: date-time
+                type: string
             type: object
         type: object
     served: true

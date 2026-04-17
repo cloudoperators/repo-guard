@@ -736,4 +736,4 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 
 }
 
-const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "repoguard.sap/skipDefaultRepositoryTeams"
+const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "repoguard.cloudoperators.dev/skipDefaultRepositoryTeams"

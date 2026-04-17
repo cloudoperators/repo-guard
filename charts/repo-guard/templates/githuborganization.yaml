@@ -2,26 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{- range $org := .Values.githubOrganizations }}
-apiVersion: repoguard.sap/v1
+apiVersion: repoguard.cloudoperators.dev/v1
 kind: GithubOrganization
 metadata:
   name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}
   labels:
-    repoguard.sap/addTeam: "{{ $org.addTeam | default "true" }}"
-    repoguard.sap/removeTeam: "{{ $org.removeTeam | default "true" }}"
-    repoguard.sap/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
-    repoguard.sap/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
-    repoguard.sap/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
-    repoguard.sap/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
-    repoguard.sap/dryRun: "{{ $org.dryRun | default "false" }}"
+    repoguard.cloudoperators.dev/addTeam: "{{ $org.addTeam | default "true" }}"
+    repoguard.cloudoperators.dev/removeTeam: "{{ $org.removeTeam | default "true" }}"
+    repoguard.cloudoperators.dev/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
+    repoguard.cloudoperators.dev/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
+    repoguard.cloudoperators.dev/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
+    repoguard.cloudoperators.dev/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
+    repoguard.cloudoperators.dev/dryRun: "{{ $org.dryRun | default "false" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
-    repoguard.sap/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
-    repoguard.sap/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
+    repoguard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
+    repoguard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}
   {{- if $skipTeams }}
   annotations:
-    repoguard.sap/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
+    repoguard.cloudoperators.dev/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
   {{- end }}
 spec:
   github: {{ $org.github }}

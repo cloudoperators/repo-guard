@@ -26,14 +26,14 @@
 {{- end -}}
 
 {{- range $user := .Values.githubAccountLinks }}
-apiVersion: repoguard.sap/v1
+apiVersion: repoguard.cloudoperators.dev/v1
 kind: GithubAccountLink
 metadata:
   name: {{ $user.github | lower }}--{{ $user.userID | lower }}
   {{- $emailCfgByOrg := index $emailConfigs $user.github -}}
   {{- if $emailCfgByOrg }}
   annotations:
-    repoguard.sap/email-check-config: {{ toJson $emailCfgByOrg | quote }}
+    repoguard.cloudoperators.dev/email-check-config: {{ toJson $emailCfgByOrg | quote }}
   {{- end }}
 spec:
   github: {{ $user.github | lower }}

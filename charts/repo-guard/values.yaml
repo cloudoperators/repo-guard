@@ -110,9 +110,9 @@ monitoring:
 #     # associated with this GitHub (organization-level policy).
 #     # When set, the Helm chart will populate a JSON annotation on each
 #     # GithubAccountLink containing per-organization config entries:
-#     #   repoguard.sap/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
+#     #   repoguard.cloudoperators.dev/email-check-config: '{ "<org>": {"domain": "example.com", "enabled": true, "ttl": "1h" } }'
 #     # The controller will write results into:
-#     #   repoguard.sap/email-check-results: '{ "<org>": {"domain":"example.com","status":"verified|not-part-of-org|no","timestamp":"..."} }'
+#     #   repoguard.cloudoperators.dev/email-check-results: '{ "<org>": {"domain":"example.com","status":"verified|not-part-of-org|no","timestamp":"..."} }'
 #     githubAccountLinkEmailCheck:
 #       # Domain to require for verified email, e.g., example.com
 #       domain: ""

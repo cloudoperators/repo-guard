@@ -7,26 +7,23 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: githubteamrepositories.repoguard.sap
+  name: githubs.repoguard.cloudoperators.dev
 spec:
-  group: repoguard.sap
+  group: repoguard.cloudoperators.dev
   names:
-    kind: GithubTeamRepository
-    listKind: GithubTeamRepositoryList
-    plural: githubteamrepositories
-    singular: githubteamrepository
-  scope: Namespaced
+    kind: Github
+    listKind: GithubList
+    plural: githubs
+    singular: github
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.github
-      name: Github
+    - jsonPath: .status.state
+      name: Status
       type: string
-    - jsonPath: .spec.organization
-      name: Organization
-      type: string
-    - jsonPath: .spec.team
-      name: Team
-      type: string
+    - jsonPath: .status.timestamp
+      name: Last Change
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
@@ -49,25 +46,30 @@ spec:
           metadata:
             type: object
           spec:
-            description: GithubTeamRepositorySpec defines the exceptional additions
-              to default organization team & repo assignments
+            description: GithubSpec defines the desired state of Github
             properties:
-              github:
+              clientUserAgent:
                 type: string
-              organization:
+              integrationID:
+                format: int64
+                type: integer
+              secret:
                 type: string
-              permission:
+              v3APIURL:
                 type: string
-              repository:
-                items:
-                  type: string
-                type: array
-              team:
+              webURL:
                 type: string
             type: object
           status:
-            description: GithubTeamRepositoryStatus defines the observed state of
-              GithubTeamRepository
+            description: GithubStatus defines the observed state of Github
+            properties:
+              error:
+                type: string
+              state:
+                type: string
+              timestamp:
+                format: date-time
+                type: string
             type: object
         type: object
     served: true

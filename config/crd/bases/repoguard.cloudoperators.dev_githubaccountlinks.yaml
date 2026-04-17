@@ -7,28 +7,29 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: clustergenericexternalmemberproviders.repoguard.sap
+  name: githubaccountlinks.repoguard.cloudoperators.dev
 spec:
-  group: repoguard.sap
+  group: repoguard.cloudoperators.dev
   names:
-    kind: ClusterGenericExternalMemberProvider
-    listKind: ClusterGenericExternalMemberProviderList
-    plural: clustergenericexternalmemberproviders
-    singular: clustergenericexternalmemberprovider
+    kind: GithubAccountLink
+    listKind: GithubAccountLinkList
+    plural: githubaccountlinks
+    singular: githubaccountlink
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.state
-      name: Status
+    - jsonPath: .spec.github
+      name: Github
       type: string
-    - jsonPath: .status.timestamp
-      name: Last Change
-      type: date
+    - jsonPath: .spec.userID
+      name: User
+      type: string
+    - jsonPath: .spec.githubUserID
+      name: Github ID
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
-        description: ClusterGenericExternalMemberProvider is the Schema for HTTP based
-          external member providers (cluster-wide)
         properties:
           apiVersion:
             description: |-
@@ -48,36 +49,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
-              Secret may contain username/password or token.
             properties:
-              endpoint:
+              github:
                 type: string
-              idField:
+              githubUserID:
                 type: string
-              pageParam:
-                type: string
-              paginated:
-                type: boolean
-              resultsField:
-                type: string
-              secret:
-                type: string
-              testConnectionURL:
-                type: string
-              totalPagesField:
+              userID:
                 type: string
             type: object
           status:
-            properties:
-              error:
-                type: string
-              state:
-                type: string
-              timestamp:
-                format: date-time
-                type: string
             type: object
         type: object
     served: true

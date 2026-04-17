@@ -136,7 +136,7 @@ var _ = Describe("Github Team controller", func() {
 			if obj.Labels == nil {
 				obj.Labels = map[string]string{}
 			}
-			obj.Labels["repoguard.sap/disableInternalUsernames"] = "false"
+			obj.Labels["repoguard.cloudoperators.dev/disableInternalUsernames"] = "false"
 		})).To(Succeed())
 
 		Eventually(func() int {
