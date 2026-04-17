@@ -1,23 +1,23 @@
 # SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-# permissions for end users to edit githubaccountlinks.
+# permissions for end users to edit ldapgroupproviders.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: clusterrole
-    app.kubernetes.io/instance: githubaccountlink-editor-role
+    app.kubernetes.io/instance: ldapgroupprovider-editor-role
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: github-guard-greenhouse
     app.kubernetes.io/part-of: github-guard-greenhouse
     app.kubernetes.io/managed-by: kustomize
-  name: githubaccountlink-editor-role
+  name: ldapgroupprovider-editor-role
 rules:
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
-  - githubaccountlinks
+  - ldapgroupproviders
   verbs:
   - create
   - delete
@@ -27,8 +27,8 @@ rules:
   - update
   - watch
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
-  - githubaccountlinks/status
+  - ldapgroupproviders/status
   verbs:
   - get

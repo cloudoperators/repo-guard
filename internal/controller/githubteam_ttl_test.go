@@ -77,9 +77,9 @@ var _ = Describe("GithubTeam TTL labels maintenance", Ordered, func() {
 				Name:      name,
 				Namespace: TEST_ENV["NAMESPACE"],
 				Labels: map[string]string{
-					GITHUB_TEAM_LABEL_FAILED_TTL:              "1s",
-					"repoguard.cloudoperators.dev/addUser":    "false",
-					"repoguard.cloudoperators.dev/removeUser": "false",
+					GITHUB_TEAM_LABEL_FAILED_TTL:               "1s",
+					"repo-guard.cloudoperators.dev/addUser":    "false",
+					"repo-guard.cloudoperators.dev/removeUser": "false",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{

@@ -4,19 +4,19 @@
 {{- range $org := .Values.githubOrganizations }}
   {{- if $org.teams }}
     {{- range $tidx, $team := $org.teams }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubTeam
 metadata:
   name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $team.name | replace "_" "-" | replace " " "-" | lower }}
   labels:
-    repoguard.cloudoperators.dev/addUser: "{{ $team.addUsers | default "true" }}"
-    repoguard.cloudoperators.dev/removeUser: "{{ $team.removeUsers | default "true" }}"
+    repo-guard.cloudoperators.dev/addUser: "{{ $team.addUsers | default "true" }}"
+    repo-guard.cloudoperators.dev/removeUser: "{{ $team.removeUsers | default "true" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
-    repoguard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.team.failed) }}"
-    repoguard.cloudoperators.dev/notfoundTTL: "{{ ((get $ttl "notfound") | default $.Values.ttl.team.notfound) }}"
-    repoguard.cloudoperators.dev/skippedTTL: "{{ ((get $ttl "skipped") | default $.Values.ttl.team.skipped) }}"
-    repoguard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.team.completed) }}"
+    repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.team.failed) }}"
+    repo-guard.cloudoperators.dev/notfoundTTL: "{{ ((get $ttl "notfound") | default $.Values.ttl.team.notfound) }}"
+    repo-guard.cloudoperators.dev/skippedTTL: "{{ ((get $ttl "skipped") | default $.Values.ttl.team.skipped) }}"
+    repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.team.completed) }}"
     {{- /* allow team-level override for disableInternalUsernames; fallback to org-level */ -}}
     {{- $teamDisable := false -}}
     {{- if hasKey $team "disableInternalUsernames" -}}
@@ -26,11 +26,11 @@ metadata:
     {{- end -}}
     {{- $disStr := printf "%v" $teamDisable -}}
     {{- if eq $disStr "true" }}
-    repoguard.cloudoperators.dev/disableInternalUsernames: "true"
+    repo-guard.cloudoperators.dev/disableInternalUsernames: "true"
     {{- end }}
     {{- /* New: if org defines a required domain, set domain-valued label on all teams */ -}}
     {{- if and $org.githubAccountLinkEmailCheck $org.githubAccountLinkEmailCheck.domain }}
-    repoguard.cloudoperators.dev/require-verified-domain-email: {{ $org.githubAccountLinkEmailCheck.domain | quote }}
+    repo-guard.cloudoperators.dev/require-verified-domain-email: {{ $org.githubAccountLinkEmailCheck.domain | quote }}
     {{- end }}
 spec:
   {{- if or $team.ldapGroup $team.ldap $team.genericHTTP $team.static }}

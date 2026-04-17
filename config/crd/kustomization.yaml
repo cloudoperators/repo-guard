@@ -5,17 +5,17 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/repoguard.cloudoperators.dev_githubteams.yaml
-- bases/repoguard.cloudoperators.dev_githubs.yaml
-- bases/repoguard.cloudoperators.dev_githuborganizations.yaml
-- bases/repoguard.cloudoperators.dev_githubteamrepositories.yaml
-- bases/repoguard.cloudoperators.dev_ldapgroupproviders.yaml
-- bases/repoguard.cloudoperators.dev_githubaccountlinks.yaml
-- bases/repoguard.cloudoperators.dev_genericexternalmemberproviders.yaml
-- bases/repoguard.cloudoperators.dev_staticmemberproviders.yaml
-- bases/repoguard.cloudoperators.dev_clusterldapgroupproviders.yaml
-- bases/repoguard.cloudoperators.dev_clustergenericexternalmemberproviders.yaml
-- bases/repoguard.cloudoperators.dev_clusterstaticmemberproviders.yaml
+- bases/repo-guard.cloudoperators.dev_githubteams.yaml
+- bases/repo-guard.cloudoperators.dev_githubs.yaml
+- bases/repo-guard.cloudoperators.dev_githuborganizations.yaml
+- bases/repo-guard.cloudoperators.dev_githubteamrepositories.yaml
+- bases/repo-guard.cloudoperators.dev_ldapgroupproviders.yaml
+- bases/repo-guard.cloudoperators.dev_githubaccountlinks.yaml
+- bases/repo-guard.cloudoperators.dev_genericexternalmemberproviders.yaml
+- bases/repo-guard.cloudoperators.dev_staticmemberproviders.yaml
+- bases/repo-guard.cloudoperators.dev_clusterldapgroupproviders.yaml
+- bases/repo-guard.cloudoperators.dev_clustergenericexternalmemberproviders.yaml
+- bases/repo-guard.cloudoperators.dev_clusterstaticmemberproviders.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
@@ -25,8 +25,8 @@ patchesStrategicMerge:
 #- patches/webhook_in_githubs.yaml
 #- patches/webhook_in_githuborganizations.yaml
 #- path: patches/webhook_in_githubteamrepositories.yaml
-#- path: patches/webhook_in_repoguard.cloudoperators.dev_ldapgroupproviders.yaml
-#- path: patches/webhook_in_repoguard.cloudoperators.dev_githubaccountlinks.yaml
+#- path: patches/webhook_in_repo-guard.cloudoperators.dev_ldapgroupproviders.yaml
+#- path: patches/webhook_in_repo-guard.cloudoperators.dev_githubaccountlinks.yaml
 #+kubebuilder:scaffold:crdkustomizewebhookpatch
 
 # [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
@@ -35,8 +35,8 @@ patchesStrategicMerge:
 #- patches/cainjection_in_githubs.yaml
 #- patches/cainjection_in_githuborganizations.yaml
 #- path: patches/cainjection_in_githubteamrepositories.yaml
-#- path: patches/cainjection_in_repoguard.cloudoperators.dev_ldapgroupproviders.yaml
-#- path: patches/cainjection_in_repoguard.cloudoperators.dev_githubaccountlinks.yaml
+#- path: patches/cainjection_in_repo-guard.cloudoperators.dev_ldapgroupproviders.yaml
+#- path: patches/cainjection_in_repo-guard.cloudoperators.dev_githubaccountlinks.yaml
 #+kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.

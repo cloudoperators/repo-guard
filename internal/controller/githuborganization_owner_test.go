@@ -115,8 +115,8 @@ var _ = Describe("Github Organization controller - organization owner", Ordered,
 				Name:      fmt.Sprintf("%s--%s--%s", strings.ToLower(github.Name), strings.ToLower(orgName), strings.ToLower(ownerTeam)),
 				Namespace: testNamespace,
 				Labels: map[string]string{
-					"repoguard.cloudoperators.dev/addUser":    "true",
-					"repoguard.cloudoperators.dev/removeUser": "true",
+					"repo-guard.cloudoperators.dev/addUser":    "true",
+					"repo-guard.cloudoperators.dev/removeUser": "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{

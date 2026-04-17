@@ -6,9 +6,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: clusterldapgroupproviders.repoguard.cloudoperators.dev
+  name: clusterldapgroupproviders.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
     kind: ClusterLDAPGroupProvider
     listKind: ClusterLDAPGroupProviderList

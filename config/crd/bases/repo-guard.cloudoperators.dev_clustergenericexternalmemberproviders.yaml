@@ -7,14 +7,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: clusterldapgroupproviders.repoguard.cloudoperators.dev
+  name: clustergenericexternalmemberproviders.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
-    kind: ClusterLDAPGroupProvider
-    listKind: ClusterLDAPGroupProviderList
-    plural: clusterldapgroupproviders
-    singular: clusterldapgroupprovider
+    kind: ClusterGenericExternalMemberProvider
+    listKind: ClusterGenericExternalMemberProviderList
+    plural: clustergenericexternalmemberproviders
+    singular: clustergenericexternalmemberprovider
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -27,8 +27,8 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: ClusterLDAPGroupProvider is the Schema for the clusterldapgroupproviders
-          API
+        description: ClusterGenericExternalMemberProvider is the Schema for HTTP based
+          external member providers (cluster-wide)
         properties:
           apiVersion:
             description: |-
@@ -48,17 +48,28 @@ spec:
           metadata:
             type: object
           spec:
-            description: LDAPGroupProviderSpec defines the desired state of LDAPGroupProvider
+            description: |-
+              GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
+              Secret may contain username/password or token.
             properties:
-              baseDN:
+              endpoint:
                 type: string
-              host:
+              idField:
+                type: string
+              pageParam:
+                type: string
+              paginated:
+                type: boolean
+              resultsField:
                 type: string
               secret:
                 type: string
+              testConnectionURL:
+                type: string
+              totalPagesField:
+                type: string
             type: object
           status:
-            description: LDAPGroupProviderStatus defines the observed state of LDAPGroupProvider
             properties:
               error:
                 type: string

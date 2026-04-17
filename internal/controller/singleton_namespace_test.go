@@ -170,9 +170,9 @@ var _ = Describe("Controller Singleton Multi-Namespace support", Ordered, func()
 				Name:      fmt.Sprintf("%s--%s--gt1", github.Name, orgName),
 				Namespace: ns1,
 				Labels: map[string]string{
-					"repoguard.cloudoperators.dev/dryRun":     "true",
-					"repoguard.cloudoperators.dev/addUser":    "true",
-					"repoguard.cloudoperators.dev/removeUser": "true",
+					"repo-guard.cloudoperators.dev/dryRun":     "true",
+					"repo-guard.cloudoperators.dev/addUser":    "true",
+					"repo-guard.cloudoperators.dev/removeUser": "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{
@@ -190,9 +190,9 @@ var _ = Describe("Controller Singleton Multi-Namespace support", Ordered, func()
 				Name:      fmt.Sprintf("%s--%s--gt2", github.Name, orgName),
 				Namespace: ns2,
 				Labels: map[string]string{
-					"repoguard.cloudoperators.dev/dryRun":     "true",
-					"repoguard.cloudoperators.dev/addUser":    "true",
-					"repoguard.cloudoperators.dev/removeUser": "true",
+					"repo-guard.cloudoperators.dev/dryRun":     "true",
+					"repo-guard.cloudoperators.dev/addUser":    "true",
+					"repo-guard.cloudoperators.dev/removeUser": "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{

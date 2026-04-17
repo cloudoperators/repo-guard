@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{- range $githubItem := .Values.githubs }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: Github
 metadata:
   name: {{ $githubItem.name | lower }}

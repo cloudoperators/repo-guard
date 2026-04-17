@@ -75,7 +75,7 @@ flowchart LR
 
 ## Custom Resources Overview
 
-The operator defines the following CRDs (all under apiVersion: repoguard.cloudoperators.dev/v1):
+The operator defines the following CRDs (all under apiVersion: repo-guard.cloudoperators.dev/v1):
 
 ### Cluster Scoped
 - [`Github`](api/v1/github_types.go): Connection to a GitHub App installation (base URL, API URL, app ID, secret). Secrets are looked up in the operator's namespace.
@@ -127,7 +127,7 @@ sequenceDiagram
 
 1. Create a [`Github`](api/v1/github_types.go) resource for your GitHub App installation (Cluster Scoped):
    ```yaml
-   apiVersion: repoguard.cloudoperators.dev/v1
+   apiVersion: repo-guard.cloudoperators.dev/v1
    kind: Github
    metadata:
      name: com # Cluster scoped, no namespace
@@ -141,19 +141,19 @@ sequenceDiagram
 
 2. Define the [`GithubOrganization`](api/v1/githuborganization_types.go) (Namespace Scoped) with required spec and enable actions with labels:
    ```yaml
-   apiVersion: repoguard.cloudoperators.dev/v1
+   apiVersion: repo-guard.cloudoperators.dev/v1
    kind: GithubOrganization
    metadata:
      name: com--greenhouse-sandbox
      namespace: default
      labels:
-       repoguard.cloudoperators.dev/addTeam: "true"
-       repoguard.cloudoperators.dev/removeTeam: "true"
-       repoguard.cloudoperators.dev/addOrganizationOwner: "true"
-       repoguard.cloudoperators.dev/removeOrganizationOwner: "true"
-       repoguard.cloudoperators.dev/addRepositoryTeam: "true"
-       repoguard.cloudoperators.dev/removeRepositoryTeam: "true"
-       repoguard.cloudoperators.dev/dryRun: "false"
+       repo-guard.cloudoperators.dev/addTeam: "true"
+       repo-guard.cloudoperators.dev/removeTeam: "true"
+       repo-guard.cloudoperators.dev/addOrganizationOwner: "true"
+       repo-guard.cloudoperators.dev/removeOrganizationOwner: "true"
+       repo-guard.cloudoperators.dev/addRepositoryTeam: "true"
+       repo-guard.cloudoperators.dev/removeRepositoryTeam: "true"
+       repo-guard.cloudoperators.dev/dryRun: "false"
    spec:
      github: com
      organization: greenhouse-sandbox
@@ -179,7 +179,7 @@ sequenceDiagram
 3. Create member providers and then you can refer to them in `GitHubTeam` resources:
     - [`LDAPGroupProvider`](api/v1/ldapgroupprovider_types.go) (Namespace Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: LDAPGroupProvider
     metadata:
       name: engineering-ldap
@@ -203,7 +203,7 @@ sequenceDiagram
 
     - [`ClusterLDAPGroupProvider`](api/v1/ldapgroupprovider_types.go) (Cluster Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: ClusterLDAPGroupProvider
     metadata:
       name: shared-ldap
@@ -215,7 +215,7 @@ sequenceDiagram
 
     - [`ClusterStaticMemberProvider`](api/v1/staticmemberprovider_types.go) (Cluster Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: ClusterStaticMemberProvider
     metadata:
       name: global-static
@@ -228,7 +228,7 @@ sequenceDiagram
 
     - [`GenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP, Namespace Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: GenericExternalMemberProvider
     metadata:
       name: http-eng
@@ -255,7 +255,7 @@ sequenceDiagram
     ```
     - [`ClusterGenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP, Cluster Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: ClusterGenericExternalMemberProvider
     metadata:
       name: global-http
@@ -268,7 +268,7 @@ sequenceDiagram
 
     - [`StaticMemberProvider`](api/v1/staticmemberprovider_types.go) (Namespace Scoped):
     ```yaml
-    apiVersion: repoguard.cloudoperators.dev/v1
+    apiVersion: repo-guard.cloudoperators.dev/v1
     kind: StaticMemberProvider
     metadata:
       name: static-seed
@@ -283,14 +283,14 @@ sequenceDiagram
 
 4. Define a `GithubTeam` (Namespace Scoped) and choose one membership source. Labels control add/remove operations:
   ```yaml
-  apiVersion: repoguard.cloudoperators.dev/v1
+  apiVersion: repo-guard.cloudoperators.dev/v1
   kind: GithubTeam
   metadata:
     name: com--greenhouse-sandbox--eng
     namespace: default
     labels:
-      repoguard.cloudoperators.dev/addUser: "true"
-      repoguard.cloudoperators.dev/removeUser: "true"
+      repo-guard.cloudoperators.dev/addUser: "true"
+      repo-guard.cloudoperators.dev/removeUser: "true"
   spec:
     github: com
     organization: greenhouse-sandbox
@@ -341,7 +341,7 @@ sequenceDiagram
 
 5. Add exceptions/overrides with [`GithubTeamRepository`](api/v1/githubteamrepository_types.go) (Namespace Scoped):
   ```yaml
-  apiVersion: repoguard.cloudoperators.dev/v1
+  apiVersion: repo-guard.cloudoperators.dev/v1
   kind: GithubTeamRepository
   metadata:
     name: com--greenhouse-sandbox--eng--overrides
@@ -357,7 +357,7 @@ sequenceDiagram
 
 6. Map internal identities to GitHub with [`GithubAccountLink`](api/v1/githubaccountlink_types.go) (Cluster Scoped):
   ```yaml
-  apiVersion: repoguard.cloudoperators.dev/v1
+  apiVersion: repo-guard.cloudoperators.dev/v1
   kind: GithubAccountLink
   metadata:
     name: com-jdoe # Cluster scoped
@@ -375,48 +375,48 @@ GithubOrganization labels:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `repoguard.cloudoperators.dev/addOrganizationOwner` | "true"/"false" | Allows the controller to add missing organization owners. If not set to "true", add operations are skipped. | Disabled (must be "true" to add) |
-| `repoguard.cloudoperators.dev/removeOrganizationOwner` | "true"/"false" | Allows the controller to remove extra organization owners. If not set to "true", remove operations are skipped. | Disabled (must be "true" to remove) |
-| `repoguard.cloudoperators.dev/addTeam` | "true"/"false" | Allows the controller to create missing teams defined by policy. | Disabled (must be "true" to add) |
-| `repoguard.cloudoperators.dev/removeTeam` | "true"/"false" | Allows the controller to remove teams that are out of policy. | Disabled (must be "true" to remove) |
-| `repoguard.cloudoperators.dev/addRepositoryTeam` | "true"/"false" | Allows setting default team permissions on repositories. | Disabled (must be "true" to add) |
-| `repoguard.cloudoperators.dev/removeRepositoryTeam` | "true"/"false" | Allows removing default team permissions from repositories. | Disabled (must be "true" to remove) |
-| `repoguard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no changes are made on GitHub; status shows planned operations. | "false" |
-| `repoguard.cloudoperators.dev/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
-| `repoguard.cloudoperators.dev/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
-| `repoguard.cloudoperators.dev/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/addOrganizationOwner` | "true"/"false" | Allows the controller to add missing organization owners. If not set to "true", add operations are skipped. | Disabled (must be "true" to add) |
+| `repo-guard.cloudoperators.dev/removeOrganizationOwner` | "true"/"false" | Allows the controller to remove extra organization owners. If not set to "true", remove operations are skipped. | Disabled (must be "true" to remove) |
+| `repo-guard.cloudoperators.dev/addTeam` | "true"/"false" | Allows the controller to create missing teams defined by policy. | Disabled (must be "true" to add) |
+| `repo-guard.cloudoperators.dev/removeTeam` | "true"/"false" | Allows the controller to remove teams that are out of policy. | Disabled (must be "true" to remove) |
+| `repo-guard.cloudoperators.dev/addRepositoryTeam` | "true"/"false" | Allows setting default team permissions on repositories. | Disabled (must be "true" to add) |
+| `repo-guard.cloudoperators.dev/removeRepositoryTeam` | "true"/"false" | Allows removing default team permissions from repositories. | Disabled (must be "true" to remove) |
+| `repo-guard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no changes are made on GitHub; status shows planned operations. | "false" |
+| `repo-guard.cloudoperators.dev/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
+| `repo-guard.cloudoperators.dev/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
 
-Note: GithubOrganization also supports the annotation `repoguard.cloudoperators.dev/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
+Note: GithubOrganization also supports the annotation `repo-guard.cloudoperators.dev/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
 
 GithubTeam labels:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `repoguard.cloudoperators.dev/addUser` | "true"/"false" | Controls add member operations. If set to "false" the controller will skip adding users; if unset or "true" adds are allowed. | Allowed if unset; set "false" to disable |
-| `repoguard.cloudoperators.dev/removeUser` | "true"/"false" | Controls remove member operations. If set to "false" the controller will skip removing users; if unset or "true" removes are allowed. | Allowed if unset; set "false" to disable |
-| `repoguard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no member changes are made on GitHub; status shows planned operations. | "false" |
-| `repoguard.cloudoperators.dev/disableInternalUsernames` | "true"/"false" | When "true", members where GreenhouseID == GithubUsername are filtered out (avoids using internal IDs externally). | "false" |
-| `repoguard.cloudoperators.dev/require-verified-domain-email` | <domain> | When set, only members with a verified email under this domain (as reported in their `GithubAccountLink` multi-org results) are allowed. | Not set |
-| `repoguard.cloudoperators.dev/orphaned` | "true" | Informational label set by the controller when the team is considered orphaned. Do not set manually. | Not set (controller-managed) |
-| `repoguard.cloudoperators.dev/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
-| `repoguard.cloudoperators.dev/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
-| `repoguard.cloudoperators.dev/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |
-| `repoguard.cloudoperators.dev/skippedTTL` | Go duration | Clears operations in "skipped" state after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/addUser` | "true"/"false" | Controls add member operations. If set to "false" the controller will skip adding users; if unset or "true" adds are allowed. | Allowed if unset; set "false" to disable |
+| `repo-guard.cloudoperators.dev/removeUser` | "true"/"false" | Controls remove member operations. If set to "false" the controller will skip removing users; if unset or "true" removes are allowed. | Allowed if unset; set "false" to disable |
+| `repo-guard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no member changes are made on GitHub; status shows planned operations. | "false" |
+| `repo-guard.cloudoperators.dev/disableInternalUsernames` | "true"/"false" | When "true", members where GreenhouseID == GithubUsername are filtered out (avoids using internal IDs externally). | "false" |
+| `repo-guard.cloudoperators.dev/require-verified-domain-email` | <domain> | When set, only members with a verified email under this domain (as reported in their `GithubAccountLink` multi-org results) are allowed. | Not set |
+| `repo-guard.cloudoperators.dev/orphaned` | "true" | Informational label set by the controller when the team is considered orphaned. Do not set manually. | Not set (controller-managed) |
+| `repo-guard.cloudoperators.dev/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/skippedTTL` | Go duration | Clears operations in "skipped" state after the duration since last status timestamp. | Not set |
 
 GithubAccountLink labels & annotations:
 
 | Key | Allowed values | Description | Default |
 | --- | --- | --- | --- |
-| `repoguard.cloudoperators.dev/require-verified-domain-email` | <domain> | Legacy: Requests verification that the linked GitHub account has a verified email under the given domain. | Not set |
-| `repoguard.cloudoperators.dev/check-email-status` | "true"/"false" | Legacy: Set by the controller to indicate whether the user satisfied the verified-domain email requirement. | Controller-managed |
-| `repoguard.cloudoperators.dev/email-check-config` | JSON object | Multi-org email check configuration. See below for format. | Not set |
-| `repoguard.cloudoperators.dev/email-check-results` | JSON object | Multi-org email check results. Set by the controller. | Controller-managed |
+| `repo-guard.cloudoperators.dev/require-verified-domain-email` | <domain> | Legacy: Requests verification that the linked GitHub account has a verified email under the given domain. | Not set |
+| `repo-guard.cloudoperators.dev/check-email-status` | "true"/"false" | Legacy: Set by the controller to indicate whether the user satisfied the verified-domain email requirement. | Controller-managed |
+| `repo-guard.cloudoperators.dev/email-check-config` | JSON object | Multi-org email check configuration. See below for format. | Not set |
+| `repo-guard.cloudoperators.dev/email-check-results` | JSON object | Multi-org email check results. Set by the controller. | Controller-managed |
 
 ### Multi-organization Email Verification
 
 `GithubAccountLink` supports verifying GitHub account email addresses against specific domains for multiple organizations.
 
-**Configuration (`repoguard.cloudoperators.dev/email-check-config` annotation):**
+**Configuration (`repo-guard.cloudoperators.dev/email-check-config` annotation):**
 
 ```json
 {
@@ -424,7 +424,7 @@ GithubAccountLink labels & annotations:
 }
 ```
 
-**Results (`repoguard.cloudoperators.dev/email-check-results` annotation):**
+**Results (`repo-guard.cloudoperators.dev/email-check-results` annotation):**
 
 ```json
 {
@@ -433,9 +433,9 @@ GithubAccountLink labels & annotations:
 ```
 
 Additionally, the controller uses the following annotations for legacy or single-org check:
-- `repoguard.cloudoperators.dev/check-email-timestamp`: RFC3339 timestamp of the last email verification check
-- `repoguard.cloudoperators.dev/check-email-ttl`: Go duration defining how long the email verification result stays valid
-- `repoguard.cloudoperators.dev/skippedTTL`: Go duration defining how long a skipped user operation remains in status.
+- `repo-guard.cloudoperators.dev/check-email-timestamp`: RFC3339 timestamp of the last email verification check
+- `repo-guard.cloudoperators.dev/check-email-ttl`: Go duration defining how long the email verification result stays valid
+- `repo-guard.cloudoperators.dev/skippedTTL`: Go duration defining how long a skipped user operation remains in status.
 
 
 

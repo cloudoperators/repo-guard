@@ -15,7 +15,7 @@ metadata:
   name: github-viewer-role
 rules:
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - githubs
   verbs:
@@ -23,7 +23,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - githubs/status
   verbs:

@@ -263,12 +263,12 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 				Namespace: ns,
 				Labels: map[string]string{
 					// the thing under test
-					"repoguard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
+					"repo-guard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
 
 					// prevent accidental side effects in CI / shared org
-					"repoguard.cloudoperators.dev/dryRun":     "true",
-					"repoguard.cloudoperators.dev/addUser":    "true",
-					"repoguard.cloudoperators.dev/removeUser": "true",
+					"repo-guard.cloudoperators.dev/dryRun":     "true",
+					"repo-guard.cloudoperators.dev/addUser":    "true",
+					"repo-guard.cloudoperators.dev/removeUser": "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{
@@ -299,7 +299,7 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 				if obj.Labels == nil {
 					obj.Labels = map[string]string{}
 				}
-				obj.Labels["repoguard.cloudoperators.dev/require-verified-domain-email"] = "other.com"
+				obj.Labels["repo-guard.cloudoperators.dev/require-verified-domain-email"] = "other.com"
 			})
 		}, 3*timeout, interval).Should(Succeed(), "failed to update team domain")
 
@@ -358,8 +358,8 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 				Name:      fmt.Sprintf("%s--%s--%s", github.Name, orgName, teamName),
 				Namespace: ns,
 				Labels: map[string]string{
-					"repoguard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
-					"repoguard.cloudoperators.dev/dryRun":                        "true",
+					"repo-guard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
+					"repo-guard.cloudoperators.dev/dryRun":                        "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{
@@ -429,8 +429,8 @@ var _ = Describe("Github Team verified domain email filtering", Ordered, func() 
 				Name:      fmt.Sprintf("%s--%s--%s", github.Name, orgName, teamName),
 				Namespace: ns,
 				Labels: map[string]string{
-					"repoguard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
-					"repoguard.cloudoperators.dev/dryRun":                        "true",
+					"repo-guard.cloudoperators.dev/require-verified-domain-email": requiredDomain,
+					"repo-guard.cloudoperators.dev/dryRun":                        "true",
 				},
 			},
 			Spec: repoguardsapv1.GithubTeamSpec{

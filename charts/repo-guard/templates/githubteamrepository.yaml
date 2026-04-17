@@ -4,7 +4,7 @@
 {{- range $org := .Values.githubOrganizations }}
   {{- if $org.teamRepositoryAssignments }}
     {{- range $ridx, $assign := $org.teamRepositoryAssignments }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubTeamRepository
 metadata:
   name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $assign.team | replace "_" "-" | replace " " "-" | lower }}--{{ $assign.permission }}

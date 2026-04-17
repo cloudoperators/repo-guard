@@ -1415,28 +1415,28 @@ func LabelSelectorPredicate(s metav1.LabelSelector) predicate.Predicate {
 	})
 }
 
-const GITHUB_TEAMS_LABEL_ORPHANED = "repoguard.cloudoperators.dev/orphaned"
+const GITHUB_TEAMS_LABEL_ORPHANED = "repo-guard.cloudoperators.dev/orphaned"
 
-const GITHUB_TEAMS_LABEL_DRY_RUN = "repoguard.cloudoperators.dev/dryRun"
+const GITHUB_TEAMS_LABEL_DRY_RUN = "repo-guard.cloudoperators.dev/dryRun"
 const GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE = "true"
 
-const GITHUB_TEAMS_LABEL_ADD_USER = "repoguard.cloudoperators.dev/addUser"
-const GITHUB_TEAMS_LABEL_REMOVE_USER = "repoguard.cloudoperators.dev/removeUser"
+const GITHUB_TEAMS_LABEL_ADD_USER = "repo-guard.cloudoperators.dev/addUser"
+const GITHUB_TEAMS_LABEL_REMOVE_USER = "repo-guard.cloudoperators.dev/removeUser"
 const GITHUB_TEAMS_LABEL_ADD_REMOVE_USER_ENABLED_VALUE = "true"
-const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES = "repoguard.cloudoperators.dev/disableInternalUsernames"
+const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES = "repo-guard.cloudoperators.dev/disableInternalUsernames"
 const GITHUB_TEAMS_LABEL_DISABLE_INTERNAL_USERNAMES_VALUE = "true"
 
 // domain-valued label on GithubTeam. When set, the controller will consider only
 // GithubAccountLinks that report verified=true for this team's organization and this domain
 // in their results annotation.
-const GITHUB_TEAMS_LABEL_REQUIRE_VERIFIED_DOMAIN_EMAIL = "repoguard.cloudoperators.dev/require-verified-domain-email"
+const GITHUB_TEAMS_LABEL_REQUIRE_VERIFIED_DOMAIN_EMAIL = "repo-guard.cloudoperators.dev/require-verified-domain-email"
 
 // TTL labels for automatic cleanup on GithubTeam
 // When present on GithubTeam, failedTTL clears failed user operations and team failed status
 // completedTTL clears completed user operations to avoid status bloat
 // notfoundTTL clears notfound user operations to allow retry after some time
 // skippedTTL clears skipped user operations to allow retry/cleanup of skipped state after some time
-const GITHUB_TEAM_LABEL_FAILED_TTL = "repoguard.cloudoperators.dev/failedTTL"
-const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repoguard.cloudoperators.dev/completedTTL"
-const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repoguard.cloudoperators.dev/notfoundTTL"
-const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repoguard.cloudoperators.dev/skippedTTL"
+const GITHUB_TEAM_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
+const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
+const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repo-guard.cloudoperators.dev/notfoundTTL"
+const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repo-guard.cloudoperators.dev/skippedTTL"

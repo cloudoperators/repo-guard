@@ -2,26 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{- range $org := .Values.githubOrganizations }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubOrganization
 metadata:
   name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}
   labels:
-    repoguard.cloudoperators.dev/addTeam: "{{ $org.addTeam | default "true" }}"
-    repoguard.cloudoperators.dev/removeTeam: "{{ $org.removeTeam | default "true" }}"
-    repoguard.cloudoperators.dev/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
-    repoguard.cloudoperators.dev/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
-    repoguard.cloudoperators.dev/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
-    repoguard.cloudoperators.dev/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
-    repoguard.cloudoperators.dev/dryRun: "{{ $org.dryRun | default "false" }}"
+    repo-guard.cloudoperators.dev/addTeam: "{{ $org.addTeam | default "true" }}"
+    repo-guard.cloudoperators.dev/removeTeam: "{{ $org.removeTeam | default "true" }}"
+    repo-guard.cloudoperators.dev/addOrganizationOwner: "{{ $org.addOrganizationOwner | default "true" }}"
+    repo-guard.cloudoperators.dev/removeOrganizationOwner: "{{ $org.removeOrganizationOwner | default "true" }}"
+    repo-guard.cloudoperators.dev/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
+    repo-guard.cloudoperators.dev/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
+    repo-guard.cloudoperators.dev/dryRun: "{{ $org.dryRun | default "false" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
-    repoguard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
-    repoguard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
+    repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
+    repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}
   {{- if $skipTeams }}
   annotations:
-    repoguard.cloudoperators.dev/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
+    repo-guard.cloudoperators.dev/skipDefaultRepositoryTeams: "{{ $skipTeams }}"
   {{- end }}
 spec:
   github: {{ $org.github }}

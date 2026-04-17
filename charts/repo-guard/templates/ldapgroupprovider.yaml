@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{ range .Values.ldaps }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: {{ if .clusterScoped }}ClusterLDAPGroupProvider{{ else }}LDAPGroupProvider{{ end }}
 metadata:
   name: {{ (.name | default "ldap") | lower }}

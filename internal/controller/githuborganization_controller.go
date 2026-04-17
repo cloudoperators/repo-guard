@@ -31,30 +31,30 @@ type GithubOrganizationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githuborganizations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githuborganizations/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githuborganizations/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubaccountlinks/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubaccountlinks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteamrepositories,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteamrepositories/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteamrepositories/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteams,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteams/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=githubteams/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=ldapgroupproviders;clusterldapgroupproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=ldapgroupproviders/status;clusterldapgroupproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=ldapgroupproviders/finalizers;clusterldapgroupproviders/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=genericexternalmemberproviders;clustergenericexternalmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=genericexternalmemberproviders/status;clustergenericexternalmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=genericexternalmemberproviders/finalizers;clustergenericexternalmemberproviders/finalizers,verbs=update
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=staticmemberproviders;clusterstaticmemberproviders,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=staticmemberproviders/status;clusterstaticmemberproviders/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=repoguard.cloudoperators.dev,resources=staticmemberproviders/finalizers;clusterstaticmemberproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githuborganizations,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githuborganizations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githuborganizations/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubaccountlinks,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubaccountlinks/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubaccountlinks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteamrepositories,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteamrepositories/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteamrepositories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteams,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteams/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githubteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=ldapgroupproviders;clusterldapgroupproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=ldapgroupproviders/status;clusterldapgroupproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=ldapgroupproviders/finalizers;clusterldapgroupproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=genericexternalmemberproviders;clustergenericexternalmemberproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=genericexternalmemberproviders/status;clustergenericexternalmemberproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=genericexternalmemberproviders/finalizers;clustergenericexternalmemberproviders/finalizers,verbs=update
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=staticmemberproviders;clusterstaticmemberproviders,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=staticmemberproviders/status;clusterstaticmemberproviders/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=staticmemberproviders/finalizers;clusterstaticmemberproviders/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=greenhouse.sap,resources=teams,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -1217,30 +1217,30 @@ func (r *GithubOrganizationReconciler) githubTeamRepositoryToGithubOrganization(
 
 }
 
-const GITHUB_ORG_LABEL_ADD_ORG_OWNER = "repoguard.cloudoperators.dev/addOrganizationOwner"
-const GITHUB_ORG_LABEL_REMOVE_ORG_OWNER = "repoguard.cloudoperators.dev/removeOrganizationOwner"
+const GITHUB_ORG_LABEL_ADD_ORG_OWNER = "repo-guard.cloudoperators.dev/addOrganizationOwner"
+const GITHUB_ORG_LABEL_REMOVE_ORG_OWNER = "repo-guard.cloudoperators.dev/removeOrganizationOwner"
 const GITHUB_ORG_LABEL_ADD_REMOVE_ORG_OWNER_ENABLED_VALUE = "true"
 
-const GITHUB_ORG_LABEL_ADD_TEAM = "repoguard.cloudoperators.dev/addTeam"
-const GITHUB_ORG_LABEL_REMOVE_TEAM = "repoguard.cloudoperators.dev/removeTeam"
+const GITHUB_ORG_LABEL_ADD_TEAM = "repo-guard.cloudoperators.dev/addTeam"
+const GITHUB_ORG_LABEL_REMOVE_TEAM = "repo-guard.cloudoperators.dev/removeTeam"
 const GITHUB_ORG_LABEL_ADD_REMOVE_TEAM_ENABLED_VALUE = "true"
 
-const GITHUB_ORG_LABEL_DRY_RUN = "repoguard.cloudoperators.dev/dryRun"
+const GITHUB_ORG_LABEL_DRY_RUN = "repo-guard.cloudoperators.dev/dryRun"
 const GITHUB_ORG_LABEL_DRY_RUN_ENABLED_VALUE = "true"
 
-const GITHUB_ORG_LABEL_ADD_REPOSITORY_TEAM = "repoguard.cloudoperators.dev/addRepositoryTeam"
-const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_TEAM = "repoguard.cloudoperators.dev/removeRepositoryTeam"
+const GITHUB_ORG_LABEL_ADD_REPOSITORY_TEAM = "repo-guard.cloudoperators.dev/addRepositoryTeam"
+const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_TEAM = "repo-guard.cloudoperators.dev/removeRepositoryTeam"
 const GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE = "true"
 
-const GITHUB_ORG_LABEL_CLEAN_OPERATIONS = "repoguard.cloudoperators.dev/cleanOperations"
+const GITHUB_ORG_LABEL_CLEAN_OPERATIONS = "repo-guard.cloudoperators.dev/cleanOperations"
 const GITHUB_ORG_LABEL_CLEAN_OPERATIONS_COMPLETE = "complete"
 const GITHUB_ORG_LABEL_CLEAN_OPERATIONS_FAILED = "failed"
 
 // TTL labels for automatic cleanup
 // When present on GithubOrganization, failedTTL clears failed operations and org failed status
 // completedTTL clears completed operations to avoid status bloat
-const GITHUB_ORG_LABEL_FAILED_TTL = "repoguard.cloudoperators.dev/failedTTL"
-const GITHUB_ORG_LABEL_COMPLETED_TTL = "repoguard.cloudoperators.dev/completedTTL"
+const GITHUB_ORG_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
+const GITHUB_ORG_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {

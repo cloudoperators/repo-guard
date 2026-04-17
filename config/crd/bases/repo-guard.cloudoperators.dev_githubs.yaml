@@ -7,26 +7,23 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: githubaccountlinks.repoguard.cloudoperators.dev
+  name: githubs.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
-    kind: GithubAccountLink
-    listKind: GithubAccountLinkList
-    plural: githubaccountlinks
-    singular: githubaccountlink
+    kind: Github
+    listKind: GithubList
+    plural: githubs
+    singular: github
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.github
-      name: Github
+    - jsonPath: .status.state
+      name: Status
       type: string
-    - jsonPath: .spec.userID
-      name: User
-      type: string
-    - jsonPath: .spec.githubUserID
-      name: Github ID
-      type: string
+    - jsonPath: .status.timestamp
+      name: Last Change
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
@@ -49,15 +46,30 @@ spec:
           metadata:
             type: object
           spec:
+            description: GithubSpec defines the desired state of Github
             properties:
-              github:
+              clientUserAgent:
                 type: string
-              githubUserID:
+              integrationID:
+                format: int64
+                type: integer
+              secret:
                 type: string
-              userID:
+              v3APIURL:
+                type: string
+              webURL:
                 type: string
             type: object
           status:
+            description: GithubStatus defines the observed state of Github
+            properties:
+              error:
+                type: string
+              state:
+                type: string
+              timestamp:
+                format: date-time
+                type: string
             type: object
         type: object
     served: true

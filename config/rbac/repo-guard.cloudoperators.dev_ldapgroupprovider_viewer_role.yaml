@@ -1,33 +1,29 @@
 # SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-# permissions for end users to edit ldapgroupproviders.
+# permissions for end users to view ldapgroupproviders.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     app.kubernetes.io/name: clusterrole
-    app.kubernetes.io/instance: ldapgroupprovider-editor-role
+    app.kubernetes.io/instance: ldapgroupprovider-viewer-role
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: github-guard-greenhouse
     app.kubernetes.io/part-of: github-guard-greenhouse
     app.kubernetes.io/managed-by: kustomize
-  name: ldapgroupprovider-editor-role
+  name: ldapgroupprovider-viewer-role
 rules:
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - ldapgroupproviders
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - ldapgroupproviders/status
   verbs:

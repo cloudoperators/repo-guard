@@ -7,15 +7,15 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: ldapgroupproviders.repoguard.cloudoperators.dev
+  name: clusterldapgroupproviders.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
-    kind: LDAPGroupProvider
-    listKind: LDAPGroupProviderList
-    plural: ldapgroupproviders
-    singular: ldapgroupprovider
-  scope: Namespaced
+    kind: ClusterLDAPGroupProvider
+    listKind: ClusterLDAPGroupProviderList
+    plural: clusterldapgroupproviders
+    singular: clusterldapgroupprovider
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.state
@@ -27,7 +27,8 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: LDAPGroupProvider is the Schema for the ldapgroupproviders API
+        description: ClusterLDAPGroupProvider is the Schema for the clusterldapgroupproviders
+          API
         properties:
           apiVersion:
             description: |-

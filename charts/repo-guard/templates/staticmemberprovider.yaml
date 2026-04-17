@@ -3,7 +3,7 @@
 
 {{- if .Values.staticMemberProviders }}
 {{- range $idx, $smp := .Values.staticMemberProviders }}
-apiVersion: repoguard.cloudoperators.dev/v1
+apiVersion: repo-guard.cloudoperators.dev/v1
 kind: {{ if $smp.clusterScoped }}ClusterStaticMemberProvider{{ else }}StaticMemberProvider{{ end }}
 metadata:
   name: {{ $smp.name | required "staticMemberProviders[].name is required" }}

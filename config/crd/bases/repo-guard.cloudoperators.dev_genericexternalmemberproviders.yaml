@@ -7,15 +7,15 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: githubs.repoguard.cloudoperators.dev
+  name: genericexternalmemberproviders.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
-    kind: Github
-    listKind: GithubList
-    plural: githubs
-    singular: github
-  scope: Cluster
+    kind: GenericExternalMemberProvider
+    listKind: GenericExternalMemberProviderList
+    plural: genericexternalmemberproviders
+    singular: genericexternalmemberprovider
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.state
@@ -27,6 +27,8 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
+        description: GenericExternalMemberProvider is the Schema for HTTP based external
+          member providers
         properties:
           apiVersion:
             description: |-
@@ -46,22 +48,28 @@ spec:
           metadata:
             type: object
           spec:
-            description: GithubSpec defines the desired state of Github
+            description: |-
+              GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
+              Secret may contain username/password or token.
             properties:
-              clientUserAgent:
+              endpoint:
                 type: string
-              integrationID:
-                format: int64
-                type: integer
+              idField:
+                type: string
+              pageParam:
+                type: string
+              paginated:
+                type: boolean
+              resultsField:
+                type: string
               secret:
                 type: string
-              v3APIURL:
+              testConnectionURL:
                 type: string
-              webURL:
+              totalPagesField:
                 type: string
             type: object
           status:
-            description: GithubStatus defines the observed state of Github
             properties:
               error:
                 type: string

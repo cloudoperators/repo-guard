@@ -24,7 +24,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - clustergenericexternalmemberproviders
   - clusterldapgroupproviders
@@ -46,7 +46,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - clustergenericexternalmemberproviders/finalizers
   - clusterldapgroupproviders/finalizers
@@ -62,7 +62,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - repoguard.cloudoperators.dev
+  - repo-guard.cloudoperators.dev
   resources:
   - clustergenericexternalmemberproviders/status
   - clusterldapgroupproviders/status

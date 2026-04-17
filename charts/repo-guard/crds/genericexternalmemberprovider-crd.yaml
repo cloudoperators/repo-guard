@@ -6,9 +6,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: genericexternalmemberproviders.repoguard.cloudoperators.dev
+  name: genericexternalmemberproviders.repo-guard.cloudoperators.dev
 spec:
-  group: repoguard.cloudoperators.dev
+  group: repo-guard.cloudoperators.dev
   names:
     kind: GenericExternalMemberProvider
     listKind: GenericExternalMemberProviderList
