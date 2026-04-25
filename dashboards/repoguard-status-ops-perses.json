@@ -264,7 +264,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum(repo_guard_githuborganization_status{status=\"ratelimited\"} == 1) or vector(0)"
+                    "query": "sum(repo_guard_githuborganization_status{status=\"ratelimited\", github=~\"$github\", organization=~\"$org\"} == 1) or vector(0)"
                   }
                 }
               }
