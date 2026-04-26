@@ -62,13 +62,12 @@ func TestOAuthFlow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokenRequests)
 
-	// Wait for token to expire (cached for half of 2s = 1s)
-	time.Sleep(1500 * time.Millisecond)
-
-	// Third call should trigger new token request
-	_, err = client.Users(context.Background(), "group1")
-	assert.NoError(t, err)
-	assert.Equal(t, 2, tokenRequests, "Token requests should be 2 after expiration")
+	// Poll until the cached token expires and a new token is requested.
+	assert.Eventually(t, func() bool {
+		_, err = client.Users(context.Background(), "group1")
+		assert.NoError(t, err)
+		return tokenRequests == 2
+	}, 3*time.Second, 50*time.Millisecond, "Token requests should be 2 after expiration")
 }
 
 func TestBasicAuthFallback(t *testing.T) {
