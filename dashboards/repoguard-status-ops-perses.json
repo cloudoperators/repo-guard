@@ -195,7 +195,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)"
+                    "query": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)"
                   }
                 }
               }
