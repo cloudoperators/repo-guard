@@ -1,0 +1,757 @@
+{
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "repoguard-status-ops",
+    "version": 0,
+    "project": "greenhouse"
+  },
+  "spec": {
+    "display": {
+      "name": "Repo Guard • Status & Operations"
+    },
+    "panels": {
+      "apiAuthErrors": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "📡 API Errors"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(increase(repo_guard_external_api_requests_total{status=~\"error|[45]..\"}[1h])) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "apiErrorRates": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "📡 API Error Rates"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (status) (increase(repo_guard_external_api_requests_total{status!~\"2..|3..|success\"}[5m]))",
+                    "seriesNameFormat": "HTTP {{status}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "orgFailures": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🚫 Org Failures"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githuborganization_status{status=\"failed\", github=~\"$github\", organization=~\"$org\"} == 1) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "orgPending": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "⏳ Org Pending Ops"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githuborganization_operations{state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "orgsAttention": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🏢 Organizations Needing Attention"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "name": "value",
+                  "hide": true
+                },
+                {
+                  "name": "Value",
+                  "hide": true
+                },
+                {
+                  "name": "timestamp",
+                  "hide": true
+                },
+                {
+                  "name": "Time",
+                  "hide": true
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "last_over_time((sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1))[$__range:])"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "peopleOps": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "👤 People Operations"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (operation) (repo_guard_githubteam_operations{state=\"complete\", organization=~\"$org\", team=~\"$team\"}) + sum by (operation) (repo_guard_githuborganization_operations{scope=\"owners\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
+                    "seriesNameFormat": "Member {{operation}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "rateLimitStatus": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🚦 Rate Limit Status"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githuborganization_status{status=\"ratelimited\", github=~\"$github\", organization=~\"$org\"} == 1) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "reconcileDuration": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "⏱️ Reconcile Duration (p95)"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m])))",
+                    "seriesNameFormat": "{{controller}} p95"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "teamFailures": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🚫 Team Failures"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githubteam_status{status=\"failed\", organization=~\"$org\", team=~\"$team\"} == 1) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "teamPending": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "⏳ Team Pending Ops"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githubteam_operations{state=\"pending\", organization=~\"$org\", team=~\"$team\"}) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "teamRepoOps": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🏢 Team & Repo Operations"
+          },
+          "plugin": {
+            "kind": "TimeSeriesChart",
+            "spec": {
+              "legend": {
+                "position": "bottom"
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum by (scope, operation) (repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
+                    "seriesNameFormat": "{{scope}} {{operation}}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "teamsAttention": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "👥 Teams Needing Attention"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "name": "value",
+                  "hide": true
+                },
+                {
+                  "name": "Value",
+                  "hide": true
+                },
+                {
+                  "name": "timestamp",
+                  "hide": true
+                },
+                {
+                  "name": "Time",
+                  "hide": true
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "last_over_time((sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1))[$__range:])"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "orgsStatus": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "🏢 Organizations Status"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "name": "value",
+                  "hide": true
+                },
+                {
+                  "name": "Value",
+                  "hide": true
+                },
+                {
+                  "name": "timestamp",
+                  "hide": true
+                },
+                {
+                  "name": "Time",
+                  "hide": true
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "last_over_time((sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\"} == 1))[$__range:])"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "teamsStatus": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "👥 Teams Status"
+          },
+          "plugin": {
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                {
+                  "name": "value",
+                  "hide": true
+                },
+                {
+                  "name": "Value",
+                  "hide": true
+                },
+                {
+                  "name": "timestamp",
+                  "hide": true
+                },
+                {
+                  "name": "Time",
+                  "hide": true
+                }
+              ]
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "last_over_time((sum by (organization, team, status) (repo_guard_githubteam_status{organization=~\"$org\", team=~\"$team\"} == 1))[$__range:])"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": {
+            "title": "",
+            "collapse": {
+              "open": true
+            }
+          },
+          "items": [
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/orgFailures"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/orgPending"
+              }
+            },
+            {
+              "x": 12,
+              "y": 0,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/teamFailures"
+              }
+            },
+            {
+              "x": 18,
+              "y": 0,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/teamPending"
+              }
+            },
+            {
+              "x": 0,
+              "y": 4,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/orgsAttention"
+              }
+            },
+            {
+              "x": 12,
+              "y": 4,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/teamsAttention"
+              }
+            },
+            {
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/peopleOps"
+              }
+            },
+            {
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/teamRepoOps"
+              }
+            },
+            {
+              "x": 0,
+              "y": 20,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/apiAuthErrors"
+              }
+            },
+            {
+              "x": 6,
+              "y": 20,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/rateLimitStatus"
+              }
+            },
+            {
+              "x": 12,
+              "y": 20,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/apiErrorRates"
+              }
+            },
+            {
+              "x": 0,
+              "y": 24,
+              "width": 12,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/reconcileDuration"
+              }
+            },
+            {
+              "x": 0,
+              "y": 28,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/orgsStatus"
+              }
+            },
+            {
+              "x": 12,
+              "y": 28,
+              "width": 12,
+              "height": 8,
+              "content": {
+                "$ref": "#/spec/panels/teamsStatus"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "variables": [
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "GitHub",
+            "hidden": false
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "github",
+              "matchers": [
+                "repo_guard_githuborganization_status"
+              ]
+            }
+          },
+          "name": "github",
+          "defaultValue": "$__all"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Organization",
+            "hidden": false
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "organization",
+              "matchers": [
+                "repo_guard_githuborganization_status"
+              ]
+            }
+          },
+          "name": "org",
+          "defaultValue": "$__all"
+        }
+      },
+      {
+        "kind": "ListVariable",
+        "spec": {
+          "display": {
+            "name": "Team",
+            "hidden": false
+          },
+          "allowAllValue": true,
+          "allowMultiple": true,
+          "plugin": {
+            "kind": "PrometheusLabelValuesVariable",
+            "spec": {
+              "labelName": "team",
+              "matchers": [
+                "repo_guard_githubteam_status"
+              ]
+            }
+          },
+          "name": "team",
+          "defaultValue": "$__all"
+        }
+      }
+    ],
+    "duration": "1d",
+    "refreshInterval": "30s",
+    "datasources": {}
+  }
+}
