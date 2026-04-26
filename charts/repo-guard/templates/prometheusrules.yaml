@@ -69,7 +69,7 @@ spec:
     rules:
     - alert: GithubGuardExternalAPIHighErrorRate
       expr: |
-        (sum by (provider, operation) (increase(repo_guard_external_api_requests_total{status!~"2.."}[10m]))
+        (sum by (provider, operation) (increase(repo_guard_external_api_requests_total{status="error"}[10m]))
           /
          sum by (provider, operation) (increase(repo_guard_external_api_requests_total[10m])))
         > 0.1
@@ -79,7 +79,7 @@ spec:
       annotations:
         summary: High error rate calling {{ `{{ $labels.provider }}` }} {{ `{{ $labels.operation }}` }}
         description: >-
-          Non-2xx error rate exceeds 10% over the last 15 minutes.
+          API error rate exceeds 10% over the last 15 minutes.
 
     - alert: GithubGuardExternalAPISlowP95
       expr: |

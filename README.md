@@ -479,7 +479,7 @@ histogram_quantile(0.95, sum by (controller,le) (rate(repo_guard_controller_reco
 External API error rate per provider/operation:
 
 ```
-sum by (provider,operation) (increase(repo_guard_external_api_requests_total{status!~"2.."}[10m]))
+sum by (provider,operation) (increase(repo_guard_external_api_requests_total{status="error"}[10m]))
 /
 clamp_min(sum by (provider,operation) (increase(repo_guard_external_api_requests_total[10m])), 1)
 ```

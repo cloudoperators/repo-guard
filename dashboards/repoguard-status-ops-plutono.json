@@ -250,10 +250,10 @@
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
       "id": 40,
       "options": { "colorMode": "background", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
-      "title": "🔑 API Auth Errors (401)",
+      "title": "📡 API Errors",
       "type": "stat",
       "targets": [
-        { "expr": "sum(increase(repo_guard_external_api_requests_total{status=\"401\"}[1h])) or vector(0)", "refId": "A" }
+        { "expr": "sum(increase(repo_guard_external_api_requests_total{status=\"error\"}[1h])) or vector(0)", "refId": "A" }
       ]
     },
     {
@@ -284,10 +284,10 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "id": 42,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "📡 API Error Rates (Non-2xx)",
+      "title": "📡 API Error Rates",
       "type": "timeseries",
       "targets": [
-        { "expr": "sum by (status) (increase(repo_guard_external_api_requests_total{status!~\"2..|3..\"}[5m]))", "legendFormat": "HTTP {{status}}", "refId": "A" }
+        { "expr": "sum by (status) (increase(repo_guard_external_api_requests_total{status=\"error\"}[5m]))", "legendFormat": "HTTP {{status}}", "refId": "A" }
       ]
     },
     {
