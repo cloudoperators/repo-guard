@@ -2,8 +2,6 @@
   "kind": "Dashboard",
   "metadata": {
     "name": "repoguard-status-ops",
-    "createdAt": "2026-04-24T21:55:54.323800969Z",
-    "updatedAt": "2026-04-24T21:55:54.323800969Z",
     "version": 0,
     "project": "greenhouse"
   },
@@ -195,7 +193,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)"
+                    "query": "last_over_time((sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1))[$__range:])"
                   }
                 }
               }
@@ -446,7 +444,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1)"
+                    "query": "last_over_time((sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1))[$__range:])"
                   }
                 }
               }
@@ -490,7 +488,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\"} == 1)"
+                    "query": "last_over_time((sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\"} == 1))[$__range:])"
                   }
                 }
               }
@@ -534,7 +532,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (organization, team, status) (repo_guard_githubteam_status{organization=~\"$org\", team=~\"$team\"} == 1)"
+                    "query": "last_over_time((sum by (organization, team, status) (repo_guard_githubteam_status{organization=~\"$org\", team=~\"$team\"} == 1))[$__range:])"
                   }
                 }
               }
