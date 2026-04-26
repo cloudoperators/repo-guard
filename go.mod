@@ -6,6 +6,7 @@ require (
 	github.com/cloudoperators/greenhouse v0.11.1
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/go-github/v84 v84.0.0
+	github.com/google/go-github/v85 v85.0.0
 	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba
