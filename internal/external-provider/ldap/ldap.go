@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+	"github.com/cloudoperators/repo-guard/internal/metrics"
 	"github.com/go-ldap/ldap/v3"
 )
 
@@ -76,7 +78,7 @@ func (a *LDAPClient) reconnect() error {
 }
 
 func (l LDAPClient) Users(ctx context.Context, group string) ([]string, error) {
-
+	start := time.Now()
 	req := &ldap.SearchRequest{
 		BaseDN:     l.baseDN,
 		Filter:     fmt.Sprintf("(&(objectCategory=group)(CN=%s))", group),
@@ -89,16 +91,18 @@ func (l LDAPClient) Users(ctx context.Context, group string) ([]string, error) {
 	// Try for closed connection
 	if err != nil && ldap.IsErrorWithCode(err, 200) {
 		if err := l.reconnect(); err != nil {
+			metrics.ObserveExternalRequest("ldap_provider", "users", "error", start)
 			return nil, err
 		}
 		response, err = l.conn.Search(req)
-		if err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+	}
+
+	if err != nil {
+		metrics.ObserveExternalRequest("ldap_provider", "users", "error", start)
 		return nil, err
 	}
 
+	metrics.ObserveExternalRequest("ldap_provider", "users", "success", start)
 	var usernames []string
 
 	for _, responseEntry := range response.Entries {
@@ -126,6 +130,7 @@ func parseCN(data string) string {
 }
 
 func (l LDAPClient) TestConnection(ctx context.Context) error {
+	start := time.Now()
 	// Do a lightweight search against baseDN instead of calling Users with an empty group.
 	// Some LDAP servers (and our test server) reject filters like (CN=) used when group is empty.
 	req := &ldap.SearchRequest{
@@ -139,13 +144,17 @@ func (l LDAPClient) TestConnection(ctx context.Context) error {
 	_, err := l.conn.Search(req)
 	if err != nil && ldap.IsErrorWithCode(err, 200) {
 		if err := l.reconnect(); err != nil {
+			metrics.ObserveExternalRequest("ldap_provider", "test_connection", "error", start)
 			return err
 		}
 		_, err = l.conn.Search(req)
-		if err != nil {
-			return err
-		}
-		return nil
 	}
-	return err
+
+	if err != nil {
+		metrics.ObserveExternalRequest("ldap_provider", "test_connection", "error", start)
+		return err
+	}
+
+	metrics.ObserveExternalRequest("ldap_provider", "test_connection", "success", start)
+	return nil
 }

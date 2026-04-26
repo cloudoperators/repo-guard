@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -94,10 +93,8 @@ func (r *LDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return reconcile.Result{}, nil
 	}
 	// test the connection
-	start := time.Now()
 	err = c.TestConnection(ctx)
 	if err != nil {
-		ghmetrics.ObserveExternalRequest("ldap_group_provider", "test_connection", "error", start)
 		l.Error(err, "error during client creation")
 		ldap.Status.State = repoguardsapv1.LDAPGroupProviderStateFailed
 		ldap.Status.Error = fmt.Sprintf("error during client creation: %v", err)
@@ -109,8 +106,6 @@ func (r *LDAPGroupProviderReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return reconcile.Result{}, nil
 	}
-	ghmetrics.ObserveExternalRequest("ldap_group_provider", "test_connection", "success", start)
-
 	LDAPGroupProviders.Store(types.NamespacedName{Name: ldap.Name, Namespace: ldap.Namespace}, c)
 
 	// update status to running
@@ -197,10 +192,8 @@ func (r *ClusterLDAPGroupProviderReconciler) Reconcile(ctx context.Context, req 
 		return reconcile.Result{}, nil
 	}
 	// test the connection
-	start := time.Now()
 	err = c.TestConnection(ctx)
 	if err != nil {
-		ghmetrics.ObserveExternalRequest("cluster_ldap_group_provider", "test_connection", "error", start)
 		l.Error(err, "error during client creation")
 		ldap.Status.State = repoguardsapv1.LDAPGroupProviderStateFailed
 		ldap.Status.Error = fmt.Sprintf("error during client creation: %v", err)
@@ -212,8 +205,6 @@ func (r *ClusterLDAPGroupProviderReconciler) Reconcile(ctx context.Context, req 
 		}
 		return reconcile.Result{}, nil
 	}
-	ghmetrics.ObserveExternalRequest("cluster_ldap_group_provider", "test_connection", "success", start)
-
 	LDAPGroupProviders.Store(types.NamespacedName{Name: ldap.Name}, c)
 
 	// update status to running
