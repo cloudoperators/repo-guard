@@ -224,7 +224,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (operation) (increase(repo_guard_githubteam_operations{state=\"complete\", organization=~\"$org\", team=~\"$team\"}[5m])) + sum by (operation) (increase(repo_guard_githuborganization_operations{scope=\"owners\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
+                    "query": "sum by (operation) (repo_guard_githubteam_operations{state=\"complete\", organization=~\"$org\", team=~\"$team\"}) + sum by (operation) (repo_guard_githuborganization_operations{scope=\"owners\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
                     "seriesNameFormat": "Member {{operation}}"
                   }
                 }
