@@ -3,7 +3,7 @@ module github.com/cloudoperators/repo-guard
 go 1.26.0
 
 require (
-	github.com/cloudoperators/greenhouse v0.11.0
+	github.com/cloudoperators/greenhouse v0.11.1
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/go-github/v84 v84.0.0
 	github.com/gosimple/slug v1.15.0
