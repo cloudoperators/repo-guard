@@ -29,3 +29,4 @@ internal/controller/test.env
 /hack/e2e/values.generated.yaml
 /hack/e2e/*.txt
 /hack/*/checker.env
+/hack/e2e/.kubeconfig_repo-guard

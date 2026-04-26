@@ -257,6 +257,9 @@ cmd_gen_values() {
   local -a extra_env=()
   if [[ -n "${DUMMY_EMP_HTTP_BASE}" ]]; then
     extra_env+=(EMP_HTTP_DUMMY_BASE="${DUMMY_EMP_HTTP_BASE}")
+    # Ensure any existing EMP_HTTP_ENDPOINT in the environment does not override our dummy base
+    extra_env+=(EMP_HTTP_ENDPOINT="")
+    extra_env+=(EMP_HTTP_TEST_CONNECTION_URL="")
   fi
   if [[ -n "${DUMMY_LDAP_BASE}" ]]; then
     extra_env+=(LDAP_HOST_OVERRIDE="${DUMMY_LDAP_BASE}")
