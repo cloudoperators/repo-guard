@@ -58,7 +58,7 @@ func TestOAuthFlow(t *testing.T) {
 	assert.Equal(t, 1, tokenRequests)
 
 	// Second call should use cached token
-	users, err = client.Users(context.Background(), "group1")
+	_, err = client.Users(context.Background(), "group1")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokenRequests)
 
@@ -66,7 +66,7 @@ func TestOAuthFlow(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond)
 
 	// Third call should trigger new token request
-	users, err = client.Users(context.Background(), "group1")
+	_, err = client.Users(context.Background(), "group1")
 	assert.NoError(t, err)
 	assert.Equal(t, 2, tokenRequests, "Token requests should be 2 after expiration")
 }
