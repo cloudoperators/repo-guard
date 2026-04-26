@@ -8,7 +8,7 @@ import (
 )
 
 // GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
-// Secret may contain username/password or token.
+// Secret may contain username/password (Basic Auth), token (Bearer Token), or client_id/client_secret (OAuth2).
 type GenericExternalMemberProviderSpec struct {
 	Endpoint          string `json:"endpoint,omitempty"`
 	Secret            string `json:"secret,omitempty"`

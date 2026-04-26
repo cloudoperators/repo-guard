@@ -242,7 +242,7 @@ sequenceDiagram
       totalPagesField: total_pages
       pageParam: page
     ```
-   Secret for HTTP provider:
+   Secret for HTTP provider (Basic Auth):
     ```yaml
     apiVersion: v1
     kind: Secret
@@ -252,6 +252,20 @@ sequenceDiagram
     stringData:
       username: "api-user"
       password: "api-pass"
+    ```
+
+   Secret for HTTP provider (OAuth2):
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: http-oauth-cred
+      namespace: default
+    stringData:
+      username: "GITHUB-GUARD"
+      password: "password"
+      client_id: "JgDxEDTXp4i4..."
+      client_secret: "QpRex0w4NUTR..."
     ```
     - [`ClusterGenericExternalMemberProvider`](api/v1/genericexternalmemberprovider_types.go) (HTTP, Cluster Scoped):
     ```yaml

@@ -56,6 +56,8 @@ monitoring:
 #    endpoint: 
 #    username:
 #    password:
+#    clientID:
+#    clientSecret:
 #    # below fields are optional, depending on provider response shape
 #    idField: id
 #    resultsField: results

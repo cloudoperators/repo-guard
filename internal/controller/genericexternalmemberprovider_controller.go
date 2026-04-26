@@ -52,7 +52,7 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 	}
 
 	// credentials
-	var username, password, token string
+	var username, password, token, clientID, clientSecret string
 	if emp.Spec.Secret != "" {
 		sec := &corev1.Secret{}
 		err := r.Get(ctx, types.NamespacedName{Namespace: emp.Namespace, Name: emp.Spec.Secret}, sec)
@@ -74,6 +74,8 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 		username = string(sec.Data[repoguardsapv1.SECRET_USERNAME_KEY])
 		password = string(sec.Data[repoguardsapv1.SECRET_PASSWORD_KEY])
 		token = string(sec.Data["token"]) // optional
+		clientID = string(sec.Data["client_id"])
+		clientSecret = string(sec.Data["client_secret"])
 	}
 
 	cfg := &genericprovider.HTTPConfig{
@@ -84,7 +86,7 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 		PageParam:         emp.Spec.PageParam,
 		TestConnectionURL: emp.Spec.TestConnectionURL,
 	}
-	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, cfg)
+	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, clientID, clientSecret, cfg)
 
 	if err = c.TestConnection(ctx); err != nil {
 		l.Error(err, "error during client creation")
@@ -146,7 +148,7 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 	}
 
 	// credentials
-	var username, password, token string
+	var username, password, token, clientID, clientSecret string
 	if emp.Spec.Secret != "" {
 		sec := &corev1.Secret{}
 		// for cluster-scoped, look in operator namespace
@@ -164,6 +166,8 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 		username = string(sec.Data[repoguardsapv1.SECRET_USERNAME_KEY])
 		password = string(sec.Data[repoguardsapv1.SECRET_PASSWORD_KEY])
 		token = string(sec.Data["token"]) // optional
+		clientID = string(sec.Data["client_id"])
+		clientSecret = string(sec.Data["client_secret"])
 	}
 
 	cfg := &genericprovider.HTTPConfig{
@@ -174,7 +178,7 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 		PageParam:         emp.Spec.PageParam,
 		TestConnectionURL: emp.Spec.TestConnectionURL,
 	}
-	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, cfg)
+	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, clientID, clientSecret, cfg)
 
 	if err = c.TestConnection(ctx); err != nil {
 		l.Error(err, "error during client creation")
