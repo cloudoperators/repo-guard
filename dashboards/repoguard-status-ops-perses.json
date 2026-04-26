@@ -43,7 +43,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum(increase(repo_guard_external_api_requests_total{status=\"error\"}[1h])) or vector(0)"
+                    "query": "sum(increase(repo_guard_external_api_requests_total{status=~\"error|[45]..\"}[1h])) or vector(0)"
                   }
                 }
               }
@@ -72,7 +72,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (status) (increase(repo_guard_external_api_requests_total{status=\"error\"}[5m]))",
+                    "query": "sum by (status) (increase(repo_guard_external_api_requests_total{status!~\"2..|3..|success\"}[5m]))",
                     "seriesNameFormat": "HTTP {{status}}"
                   }
                 }

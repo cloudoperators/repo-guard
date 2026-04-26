@@ -4,6 +4,7 @@
 package metrics
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -125,6 +126,12 @@ func StartReconcileTimer(controller string) func(result string) {
 func ObserveExternalRequest(provider, operation, status string, started time.Time) {
 	ExternalAPIRequestsTotal.WithLabelValues(provider, operation, status).Inc()
 	ExternalAPIDuration.WithLabelValues(provider, operation).Observe(time.Since(started).Seconds())
+}
+
+// ObserveExternalHTTPRequest records duration and increments total counters for an external HTTP API call.
+func ObserveExternalHTTPRequest(provider, operation string, statusCode int, started time.Time) {
+	status := strconv.Itoa(statusCode)
+	ObserveExternalRequest(provider, operation, status, started)
 }
 
 // SetGithubOrganizationMetrics sets gauges for the given GithubOrganization's current status

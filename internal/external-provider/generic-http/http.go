@@ -7,11 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+	"github.com/cloudoperators/repo-guard/internal/metrics"
 	"net/http"
 	"strings"
 	"time"
-
-	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
 )
 
 type HTTPConfig struct {
@@ -70,6 +70,7 @@ func (c *HTTPClient) Users(ctx context.Context, group string) ([]string, error) 
 	if c.Cfg.Paginated {
 		return c.usersPaginated(ctx, group)
 	}
+	start := time.Now()
 	url := c.buildURL(group)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -83,9 +84,11 @@ func (c *HTTPClient) Users(ctx context.Context, group string) ([]string, error) 
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		metrics.ObserveExternalRequest("generic_http_provider", "users", "error", start)
 		return nil, err
 	}
 	defer resp.Body.Close() //nolint:errcheck
+	metrics.ObserveExternalHTTPRequest("generic_http_provider", "users", resp.StatusCode, start)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("non-200 status code received: %d", resp.StatusCode)
 	}
@@ -151,6 +154,7 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 	// first page to get total pages
 	page := 1
 	for {
+		start := time.Now()
 		url := c.buildURLWithPage(group, pageParam, page)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
@@ -164,9 +168,11 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
+			metrics.ObserveExternalRequest("generic_http_provider", "users_paginated", "error", start)
 			return nil, err
 		}
 		// Avoid deferring Close() inside a loop to prevent accumulating open bodies
+		metrics.ObserveExternalHTTPRequest("generic_http_provider", "users_paginated", resp.StatusCode, start)
 		if resp.StatusCode != http.StatusOK {
 			if resp.Body != nil {
 				_ = resp.Body.Close()
@@ -226,6 +232,7 @@ func (c *HTTPClient) buildURLWithPage(group, pageParam string, page int) string 
 
 func (c *HTTPClient) TestConnection(ctx context.Context) error {
 	if c.Cfg.TestConnectionURL != "" {
+		start := time.Now()
 		// Perform a lightweight request to verify credentials without requiring a valid group.
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Cfg.TestConnectionURL, nil)
 		if err != nil {
@@ -239,6 +246,7 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
+			metrics.ObserveExternalRequest("generic_http_provider", "test_connection", "error", start)
 			return err
 		}
 		defer func() {
@@ -246,6 +254,7 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 				_ = resp.Body.Close()
 			}
 		}()
+		metrics.ObserveExternalHTTPRequest("generic_http_provider", "test_connection", resp.StatusCode, start)
 		// Treat 401/403 as authentication/authorization failures. Any other status (e.g., 200 or 404)
 		// is acceptable for connection validation because the dummy group may not exist.
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {

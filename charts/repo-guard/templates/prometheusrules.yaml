@@ -69,7 +69,7 @@ spec:
     rules:
     - alert: GithubGuardExternalAPIHighErrorRate
       expr: |
-        (sum by (provider, operation) (increase(repo_guard_external_api_requests_total{status="error"}[10m]))
+        (sum by (provider, operation) (increase(repo_guard_external_api_requests_total{status=~"error|[45].."}[10m]))
           /
          sum by (provider, operation) (increase(repo_guard_external_api_requests_total[10m])))
         > 0.1
