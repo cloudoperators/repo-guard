@@ -81,7 +81,7 @@ spec:
       annotations:
         summary: High error rate calling {{ $labels.provider }} {{ $labels.operation }}
         description: >-
-          API error rate exceeds 10% over the last 15 minutes.
+          API error rate exceeds 10% over the last 10 minutes.
 
     - alert: GithubGuardExternalAPISlowP95
       expr: |
