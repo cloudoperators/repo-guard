@@ -401,7 +401,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
+                    "query": "sum by (scope, operation) (repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
                     "seriesNameFormat": "{{scope}} {{operation}}"
                   }
                 }
