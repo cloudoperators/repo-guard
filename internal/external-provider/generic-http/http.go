@@ -30,25 +30,32 @@ type HTTPConfig struct {
 }
 
 type HTTPClient struct {
-	Endpoint   string
-	Username   string
-	Password   string
-	Token      string
-	Cfg        HTTPConfig
-	HTTPClient *http.Client
+	Endpoint     string
+	Username     string
+	Password     string
+	Token        string
+	ClientID     string
+	ClientSecret string
+	Cfg          HTTPConfig
+	HTTPClient   *http.Client
+
+	accessToken string
+	tokenExpiry time.Time
 }
 
-func NewHTTPClient(endpoint, username, password, token string, cfg *HTTPConfig) externalprovider.ExternalProvider {
+func NewHTTPClient(endpoint, username, password, token, clientID, clientSecret string, cfg *HTTPConfig) externalprovider.ExternalProvider {
 	c := HTTPConfig{}
 	if cfg != nil {
 		c = *cfg
 	}
 	return &HTTPClient{
-		Endpoint: endpoint,
-		Username: username,
-		Password: password,
-		Token:    token,
-		Cfg:      c,
+		Endpoint:     endpoint,
+		Username:     username,
+		Password:     password,
+		Token:        token,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Cfg:          c,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -75,11 +82,8 @@ func (c *HTTPClient) Users(ctx context.Context, group string) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	if c.Username != "" || c.Password != "" {
-		req.SetBasicAuth(c.Username, c.Password)
-	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if err := c.authorizeRequest(ctx, req); err != nil {
+		return nil, err
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -156,11 +160,8 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 		if err != nil {
 			return nil, err
 		}
-		if c.Username != "" || c.Password != "" {
-			req.SetBasicAuth(c.Username, c.Password)
-		}
-		if c.Token != "" {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
+		if err := c.authorizeRequest(ctx, req); err != nil {
+			return nil, err
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
@@ -231,11 +232,8 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if c.Username != "" || c.Password != "" {
-			req.SetBasicAuth(c.Username, c.Password)
-		}
-		if c.Token != "" {
-			req.Header.Set("Authorization", "Bearer "+c.Token)
+		if err := c.authorizeRequest(ctx, req); err != nil {
+			return err
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
@@ -252,7 +250,68 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 			return fmt.Errorf("authentication failed: status %d", resp.StatusCode)
 		}
 		return nil
-
 	}
 	return nil
+}
+
+func (c *HTTPClient) authorizeRequest(ctx context.Context, req *http.Request) error {
+	if c.ClientID != "" && c.ClientSecret != "" {
+		token, err := c.getOAuthToken(ctx)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	}
+	if c.Username != "" || c.Password != "" {
+		req.SetBasicAuth(c.Username, c.Password)
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return nil
+}
+
+func (c *HTTPClient) getOAuthToken(ctx context.Context) (string, error) {
+	if c.accessToken != "" && time.Now().Before(c.tokenExpiry) {
+		return c.accessToken, nil
+	}
+
+	data := strings.NewReader(fmt.Sprintf("grant_type=password&username=%s&password=%s&client_id=%s&client_secret=%s&scope=read",
+		c.Username, c.Password, c.ClientID, c.ClientSecret))
+	baseURL := c.Endpoint
+	if idx := strings.Index(baseURL, "/api/"); idx != -1 {
+		baseURL = baseURL[:idx]
+	}
+	tokenURL := baseURL + "/oauth/token"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, data)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get oauth token: status %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", err
+	}
+
+	c.accessToken = tokenResp.AccessToken
+	// cache for half of the expiration time
+	c.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn/2) * time.Second)
+
+	return c.accessToken, nil
 }

@@ -50,7 +50,7 @@ spec:
           spec:
             description: |-
               GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
-              Secret may contain username/password or token.
+              Secret may contain username/password (Basic Auth), token (Bearer Token), or client_id/client_secret (OAuth2).
             properties:
               endpoint:
                 type: string

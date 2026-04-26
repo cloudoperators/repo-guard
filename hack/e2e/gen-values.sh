@@ -151,6 +151,8 @@ EMP_HTTP_ENDPOINT=$(read_var EMP_HTTP_ENDPOINT)
 EMP_HTTP_TEST_CONNECTION_URL=$(read_var EMP_HTTP_TEST_CONNECTION_URL)
 EMP_HTTP_USERNAME=$(read_var EMP_HTTP_USERNAME)
 EMP_HTTP_PASSWORD_RAW=$(read_var EMP_HTTP_PASSWORD)
+EMP_HTTP_CLIENT_ID=$(read_var EMP_HTTP_CLIENT_ID)
+EMP_HTTP_CLIENT_SECRET=$(read_var EMP_HTTP_CLIENT_SECRET)
 EMP_HTTP_GROUP_ID=$(read_var EMP_HTTP_GROUP_ID)
 
 # Derive endpoints from dummy base if not explicitly set
@@ -240,6 +242,8 @@ genericExternalMemberProviders:
     endpoint: ${EMP_HTTP_ENDPOINT}
     username: ${EMP_HTTP_USERNAME}
     password: ${EMP_HTTP_PASSWORD}
+    clientID: ${EMP_HTTP_CLIENT_ID}
+    clientSecret: ${EMP_HTTP_CLIENT_SECRET}
     idField: id
     resultsField: results
     paginated: true
