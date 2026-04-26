@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -89,9 +88,7 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 	}
 	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, clientID, clientSecret, cfg)
 
-	start := time.Now()
 	if err = c.TestConnection(ctx); err != nil {
-		ghmetrics.ObserveExternalRequest("generic_http_provider", "test_connection", "error", start)
 		l.Error(err, "error during client creation")
 		emp.Status.State = repoguardsapv1.ExternalMemberProviderStateFailed
 		emp.Status.Error = fmt.Sprintf("error during client creation: %v", err)
@@ -102,8 +99,6 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 		}
 		return reconcile.Result{}, nil
 	}
-	ghmetrics.ObserveExternalRequest("generic_http_provider", "test_connection", "success", start)
-
 	GenericHTTPProviders.Store(types.NamespacedName{Name: emp.Name, Namespace: emp.Namespace}, c)
 
 	// set running
@@ -185,9 +180,7 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 	}
 	c := genericprovider.NewHTTPClient(emp.Spec.Endpoint, username, password, token, clientID, clientSecret, cfg)
 
-	start := time.Now()
 	if err = c.TestConnection(ctx); err != nil {
-		ghmetrics.ObserveExternalRequest("cluster_generic_http_provider", "test_connection", "error", start)
 		l.Error(err, "error during client creation")
 		emp.Status.State = repoguardsapv1.ExternalMemberProviderStateFailed
 		emp.Status.Error = fmt.Sprintf("error during client creation: %v", err)
@@ -198,8 +191,6 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 		}
 		return reconcile.Result{}, nil
 	}
-	ghmetrics.ObserveExternalRequest("cluster_generic_http_provider", "test_connection", "success", start)
-
 	GenericHTTPProviders.Store(types.NamespacedName{Name: emp.Name}, c)
 
 	// set running
