@@ -7,11 +7,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+	"github.com/cloudoperators/repo-guard/internal/metrics"
 	"net/http"
 	"strings"
 	"time"
-
-	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
 )
 
 type HTTPConfig struct {
@@ -70,6 +70,7 @@ func (c *HTTPClient) Users(ctx context.Context, group string) ([]string, error) 
 	if c.Cfg.Paginated {
 		return c.usersPaginated(ctx, group)
 	}
+	start := time.Now()
 	url := c.buildURL(group)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -83,30 +84,51 @@ func (c *HTTPClient) Users(ctx context.Context, group string) ([]string, error) 
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		metrics.ObserveExternalRequest("generic_http_provider", "users", "error", start)
 		return nil, err
 	}
 	defer resp.Body.Close() //nolint:errcheck
+
+	var finalStatus string
+	defer func() {
+		if finalStatus != "" {
+			metrics.ObserveExternalRequest("generic_http_provider", "users", finalStatus, start)
+		} else {
+			metrics.ObserveExternalHTTPRequest("generic_http_provider", "users", resp.StatusCode, start)
+		}
+	}()
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("non-200 status code received: %d", resp.StatusCode)
 	}
 	if c.Cfg.ResultsField == "" {
 		var users []string
 		if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+			finalStatus = "error"
 			return nil, err
 		}
+		finalStatus = "success"
 		return users, nil
 	}
 	// structured response: extract from ResultsField
 	var payload map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		finalStatus = "error"
 		return nil, err
 	}
 	arrVal, ok := payload[c.Cfg.ResultsField]
 	if !ok {
 		// return empty rather than error to be tolerant
+		finalStatus = "success"
 		return []string{}, nil
 	}
-	return extractIDsFromArray(arrVal, c.idField())
+	res, err := extractIDsFromArray(arrVal, c.idField())
+	if err != nil {
+		finalStatus = "error"
+		return nil, err
+	}
+	finalStatus = "success"
+	return res, nil
 }
 
 func (c *HTTPClient) idField() string {
@@ -151,6 +173,7 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 	// first page to get total pages
 	page := 1
 	for {
+		start := time.Now()
 		url := c.buildURLWithPage(group, pageParam, page)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
@@ -164,13 +187,28 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
+			metrics.ObserveExternalRequest("generic_http_provider", "users_paginated", "error", start)
 			return nil, err
 		}
-		// Avoid deferring Close() inside a loop to prevent accumulating open bodies
+
+		var finalStatus string
+		// Avoid deferring ObserveExternalHTTPRequest inside a loop if we can help it, but here we need to capture success/error of processing.
+		// Actually, we can just call it explicitly before each return/break.
+		recordMetrics := func(err error) {
+			if finalStatus != "" {
+				metrics.ObserveExternalRequest("generic_http_provider", "users_paginated", finalStatus, start)
+			} else if err != nil && resp.StatusCode == http.StatusOK {
+				metrics.ObserveExternalRequest("generic_http_provider", "users_paginated", "error", start)
+			} else {
+				metrics.ObserveExternalHTTPRequest("generic_http_provider", "users_paginated", resp.StatusCode, start)
+			}
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			if resp.Body != nil {
 				_ = resp.Body.Close()
 			}
+			recordMetrics(fmt.Errorf("non-200"))
 			return nil, fmt.Errorf("non-200 status code received: %d", resp.StatusCode)
 		}
 		var payload map[string]any
@@ -179,6 +217,7 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 			_ = resp.Body.Close()
 		}
 		if decErr != nil {
+			recordMetrics(decErr)
 			return nil, decErr
 		}
 		arrVal := any(nil)
@@ -192,12 +231,16 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 		}
 		pageUsers, err := extractIDsFromArray(arrVal, c.idField())
 		if err != nil {
+			finalStatus = "error"
+			recordMetrics(err)
 			return nil, err
 		}
 		users = append(users, pageUsers...)
 		// figure total pages
 		tpRaw, ok := payload[totalPagesField]
 		if !ok {
+			finalStatus = "success"
+			recordMetrics(nil)
 			break // no pagination info, stop after first page
 		}
 		tp := 1
@@ -208,8 +251,11 @@ func (c *HTTPClient) usersPaginated(ctx context.Context, group string) ([]string
 			tp = n
 		}
 		if page >= tp {
+			finalStatus = "success"
+			recordMetrics(nil)
 			break
 		}
+		recordMetrics(nil)
 		page++
 	}
 	return users, nil
@@ -226,6 +272,7 @@ func (c *HTTPClient) buildURLWithPage(group, pageParam string, page int) string 
 
 func (c *HTTPClient) TestConnection(ctx context.Context) error {
 	if c.Cfg.TestConnectionURL != "" {
+		start := time.Now()
 		// Perform a lightweight request to verify credentials without requiring a valid group.
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Cfg.TestConnectionURL, nil)
 		if err != nil {
@@ -239,6 +286,7 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 		}
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
+			metrics.ObserveExternalRequest("generic_http_provider", "test_connection", "error", start)
 			return err
 		}
 		defer func() {
@@ -246,11 +294,22 @@ func (c *HTTPClient) TestConnection(ctx context.Context) error {
 				_ = resp.Body.Close()
 			}
 		}()
+
+		var finalStatus string
+		defer func() {
+			if finalStatus != "" {
+				metrics.ObserveExternalRequest("generic_http_provider", "test_connection", finalStatus, start)
+			} else {
+				metrics.ObserveExternalHTTPRequest("generic_http_provider", "test_connection", resp.StatusCode, start)
+			}
+		}()
+
 		// Treat 401/403 as authentication/authorization failures. Any other status (e.g., 200 or 404)
 		// is acceptable for connection validation because the dummy group may not exist.
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 			return fmt.Errorf("authentication failed: status %d", resp.StatusCode)
 		}
+		finalStatus = "success"
 		return nil
 
 	}
