@@ -370,7 +370,11 @@ func (c *HTTPClient) getOAuthToken(ctx context.Context) (string, error) {
 
 	c.accessToken = tokenResp.AccessToken
 	// cache for half of the expiration time
-	c.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn/2) * time.Second)
+	if tokenResp.ExpiresIn <= 0 {
+		c.tokenExpiry = time.Now()
+	} else {
+		c.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second / 2)
+	}
 
 	return c.accessToken, nil
 }
