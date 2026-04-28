@@ -14,18 +14,48 @@ import (
 )
 
 type server struct {
-	username string
-	password string
-	groupID  string
-	userID   string
+	username     string
+	password     string
+	clientID     string
+	clientSecret string
+	groupID      string
+	userID       string
 }
 
 func (s *server) authOK(r *http.Request) bool {
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return auth == "Bearer dummy-token"
+	}
+
 	if s.username == "" && s.password == "" {
 		return true
 	}
 	u, p, ok := r.BasicAuth()
 	return ok && u == s.username && p == s.password
+}
+
+func (s *server) handleToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	_ = r.ParseForm()
+	clientID := r.FormValue("client_id")
+	clientSecret := r.FormValue("client_secret")
+	username := r.FormValue("username")
+	password := r.FormValue("password")
+
+	if clientID != s.clientID || clientSecret != s.clientSecret || username != s.username || password != s.password {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"access_token": "dummy-token",
+		"expires_in":   3600,
+	})
 }
 
 func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -73,26 +103,38 @@ func (s *server) handleGroupUsers(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var (
-		listen     string
-		username   string
-		password   string
-		groupID    string
-		userID     string
-		readiness  string
-		readyAfter time.Duration
+		listen       string
+		username     string
+		password     string
+		clientID     string
+		clientSecret string
+		groupID      string
+		userID       string
+		readiness    string
+		readyAfter   time.Duration
 	)
 	flag.StringVar(&listen, "listen", ":18080", "listen address, e.g., :18080 or 127.0.0.1:0 for random port")
 	flag.StringVar(&username, "username", os.Getenv("EMP_HTTP_USERNAME"), "basic auth username")
 	flag.StringVar(&password, "password", os.Getenv("EMP_HTTP_PASSWORD"), "basic auth password")
+	flag.StringVar(&clientID, "client-id", os.Getenv("EMP_HTTP_CLIENT_ID"), "oauth client id")
+	flag.StringVar(&clientSecret, "client-secret", os.Getenv("EMP_HTTP_CLIENT_SECRET"), "oauth client secret")
 	flag.StringVar(&groupID, "group", os.Getenv("EMP_HTTP_GROUP_ID"), "group id to respond with")
 	flag.StringVar(&userID, "user", os.Getenv("EMP_HTTP_USER_INTERNAL_USERNAME"), "user id to return in results")
 	flag.StringVar(&readiness, "ready-file", "", "optional file path to write base URL when server is ready")
 	flag.DurationVar(&readyAfter, "ready-after", 0, "optional artificial delay before reporting readiness")
 	flag.Parse()
 
-	s := &server{username: username, password: password, groupID: groupID, userID: userID}
+	s := &server{
+		username:     username,
+		password:     password,
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		groupID:      groupID,
+		userID:       userID,
+	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth/token", s.handleToken)
 	mux.HandleFunc("/api/sp/search.json", s.handleSearch)
 	mux.HandleFunc("/api/sp/groups/", s.handleGroupUsers)
 

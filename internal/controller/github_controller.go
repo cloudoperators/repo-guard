@@ -93,8 +93,8 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	}
 	cfg.App.IntegrationID = github.Spec.IntegrationID
 
-	cfg.OAuth.ClientID = string(githubSecret.Data[repoguardsapv1.SECRET_CLIENT_ID_KEY])
-	cfg.OAuth.ClientSecret = string(githubSecret.Data[repoguardsapv1.SECRET_CLIENT_SECRET_KEY])
+	cfg.OAuth.ClientID = string(githubSecret.Data[repoguardsapv1.GITHUB_SECRET_CLIENT_ID_KEY])
+	cfg.OAuth.ClientSecret = string(githubSecret.Data[repoguardsapv1.GITHUB_SECRET_CLIENT_SECRET_KEY])
 	cfg.App.PrivateKey = string(githubSecret.Data[repoguardsapv1.SECRET_PRIVATE_KEY_KEY])
 	cc, err := githubapp.NewDefaultCachingClientCreator(
 		cfg,

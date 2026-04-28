@@ -852,6 +852,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during extending the members of the team in greenhouse team membership")
 			return reconcile.Result{}, err
 		}
+		l.Info("extended greenhouse members list", "members", greenHouseTeamMemberListExtended)
 
 		// "do not use internal usernames externally": If the flag is set,
 		// then the internal usernames will not be used in the external operations.
@@ -867,7 +868,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				if m.GreenhouseID != m.GithubUsername {
 					filteredMembers = append(filteredMembers, m)
 				} else {
-					l.Info("Member is filtered since disableInternalUsernames flag is set", "member", m)
+					l.Info("Member is filtered since disableInternalUsernames flag is set", "member", m, "greenhouseID", m.GreenhouseID, "githubUsername", m.GithubUsername)
 				}
 			}
 			greenHouseTeamMemberListExtended = filteredMembers
@@ -1276,10 +1277,11 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		if link.Spec.Github != githubInstance {
 			continue
 		}
-		idMap[link.Spec.GreenhouseUserID] = link.Spec.GithubUserID
+		greenhouseID := strings.ToLower(link.Spec.GreenhouseUserID)
+		idMap[greenhouseID] = link.Spec.GithubUserID
 		revMap[link.Spec.GithubUserID] = link.Spec.GreenhouseUserID
 		byGHID[link.Spec.GithubUserID] = link
-		byGHUser[link.Spec.GreenhouseUserID] = link
+		byGHUser[greenhouseID] = link
 	}
 
 	// 3) For each greenhouse member, try to resolve their GitHub username
@@ -1288,7 +1290,8 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		ghID := greenhouseInput
 		githubUsername := greenhouseInput // default fallback
 
-		if gitID, ok := idMap[greenhouseInput]; ok {
+		inputLower := strings.ToLower(greenhouseInput)
+		if gitID, ok := idMap[inputLower]; ok {
 			// Case A: input is a GreenhouseID → resolve GitHub login by mapped GitHub user ID
 			fetched, found, err := usersProvider.GithubUsernameByID(gitID)
 			if err != nil {
@@ -1296,6 +1299,12 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 				return nil, err
 			} else if found {
 				githubUsername = fetched
+				// Use the GreenhouseID from the map to ensure correct casing if needed,
+				// but greenhouseInput is what we got from the provider.
+				// However, if we found a match, we should use the canonical GreenhouseID from the link.
+				if mappedGreenhouseID, ok := revMap[gitID]; ok {
+					ghID = mappedGreenhouseID
+				}
 			}
 		} else {
 			// Case B: input might actually be a GitHub login; try to resolve numeric ID
@@ -1322,9 +1331,9 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		if requiredDomain != "" {
 			// resolve link by greenhouseID or by GitHub ID
 			var link v1.GithubAccountLink
-			if v, ok := byGHUser[ghID]; ok {
+			if v, ok := byGHUser[strings.ToLower(ghID)]; ok {
 				link = v
-			} else if v, ok := byGHID[idMap[ghID]]; ok {
+			} else if v, ok := byGHID[idMap[strings.ToLower(ghID)]]; ok {
 				link = v
 			}
 			include = false

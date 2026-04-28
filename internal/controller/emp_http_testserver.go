@@ -38,6 +38,28 @@ func newEMPHTTPTestServer(username, password, groupID, userID string) *empHTTPTe
 
 	mux := http.NewServeMux()
 
+	// OAuth token endpoint
+	mux.HandleFunc("/oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		_ = r.ParseForm()
+		if r.FormValue("grant_type") != "password" ||
+			r.FormValue("username") != h.username ||
+			r.FormValue("password") != h.password ||
+			r.FormValue("client_id") == "" ||
+			r.FormValue("client_secret") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "test-token",
+			"expires_in":   3600,
+		})
+	})
+
 	// Health/test endpoint
 	mux.HandleFunc("/api/sp/search.json", func(w http.ResponseWriter, r *http.Request) {
 		if !h.authOK(r) {
@@ -91,6 +113,11 @@ func newEMPHTTPTestServer(username, password, groupID, userID string) *empHTTPTe
 }
 
 func (s *empHTTPTestServer) authOK(r *http.Request) bool {
+	// If it's a bearer token, check if it matches our dummy token
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimPrefix(auth, "Bearer ") == "test-token"
+	}
+
 	// If credentials are configured, require BasicAuth to match. If empty, allow.
 	if s.username == "" && s.password == "" {
 		return true

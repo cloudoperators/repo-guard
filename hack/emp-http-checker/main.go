@@ -115,6 +115,8 @@ func main() {
 	testURL := getenv("EMP_HTTP_EXTERNAL_TEST_CONNECTION_URL")
 	username := getenv("EMP_HTTP_EXTERNAL_USERNAME")
 	password := getenv("EMP_HTTP_EXTERNAL_PASSWORD")
+	clientID := getenv("EMP_HTTP_EXTERNAL_CLIENT_ID")
+	clientSecret := getenv("EMP_HTTP_EXTERNAL_CLIENT_SECRET")
 
 	group := getenv("EMP_HTTP_EXTERNAL_GROUP_ID")
 
@@ -141,7 +143,7 @@ func main() {
 	}
 
 	// Build client
-	client := generichttp.NewHTTPClient(endpoint, username, password, "", cfg)
+	client := generichttp.NewHTTPClient(endpoint, username, password, "", clientID, clientSecret, cfg)
 
 	// Test connection
 	ctx := context.Background()
