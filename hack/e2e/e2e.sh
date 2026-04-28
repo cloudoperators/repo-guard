@@ -326,8 +326,8 @@ EOF
 # Deploy in-cluster EMP HTTP dummy as Deployment+Service
 deploy_incluster_emp_http() {
   local du dp gid uid
-  du=$(read_env_var EMP_HTTP_DUMMY_USERNAME)
-  dp=$(read_env_var EMP_HTTP_DUMMY_PASSWORD)
+  du=$(read_env_var EMP_HTTP_USERNAME)
+  dp=$(read_env_var EMP_HTTP_PASSWORD)
   gid=$(read_env_var EMP_HTTP_GROUP_ID)
   uid=$(read_env_var EMP_HTTP_USER_INTERNAL_USERNAME)
 
@@ -357,6 +357,10 @@ spec:
               value: "${du}"
             - name: EMP_HTTP_PASSWORD
               value: "${dp}"
+            - name: EMP_HTTP_CLIENT_ID
+              value: "dummy-client-id"
+            - name: EMP_HTTP_CLIENT_SECRET
+              value: "dummy-client-secret"
             - name: EMP_HTTP_GROUP_ID
               value: "${gid}"
             - name: EMP_HTTP_USER_INTERNAL_USERNAME
@@ -451,8 +455,8 @@ start_dummy_emp_http() {
   DUMMY_EMP_HTTP_READY_FILE="${SCRIPT_DIR}/.emp_http_ready_${$}.txt"
   # Read dummy credentials and ids from test.env
   local du dp gid uid
-  du=$(read_env_var EMP_HTTP_DUMMY_USERNAME)
-  dp=$(read_env_var EMP_HTTP_DUMMY_PASSWORD)
+  du=$(read_env_var EMP_HTTP_USERNAME)
+  dp=$(read_env_var EMP_HTTP_PASSWORD)
   gid=$(read_env_var EMP_HTTP_GROUP_ID)
   uid=$(read_env_var EMP_HTTP_USER_INTERNAL_USERNAME)
   # Start on random localhost port, write base URL to ready file when ready

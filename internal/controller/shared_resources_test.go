@@ -269,10 +269,10 @@ func initSharedResources() {
 			Namespace: ns,
 		},
 		StringData: map[string]string{
-			"username":      TEST_ENV["EMP_HTTP_USERNAME"],
-			"password":      TEST_ENV["EMP_HTTP_PASSWORD"],
-			"client_id":     TEST_ENV["EMP_HTTP_CLIENT_ID"],
-			"client_secret": TEST_ENV["EMP_HTTP_CLIENT_SECRET"],
+			repoguardsapv1.SECRET_USERNAME_KEY:      TEST_ENV["EMP_HTTP_USERNAME"],
+			repoguardsapv1.SECRET_PASSWORD_KEY:      TEST_ENV["EMP_HTTP_PASSWORD"],
+			repoguardsapv1.SECRET_CLIENT_ID_KEY:     TEST_ENV["EMP_HTTP_CLIENT_ID"],
+			repoguardsapv1.SECRET_CLIENT_SECRET_KEY: TEST_ENV["EMP_HTTP_CLIENT_SECRET"],
 		},
 	}
 

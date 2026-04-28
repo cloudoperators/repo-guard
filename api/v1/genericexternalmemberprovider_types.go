@@ -83,6 +83,9 @@ type ClusterGenericExternalMemberProviderList struct {
 }
 
 const (
-	SECRET_USERNAME_KEY = "username"
-	SECRET_PASSWORD_KEY = "password"
+	SECRET_USERNAME_KEY      = "username"
+	SECRET_PASSWORD_KEY      = "password"
+	SECRET_TOKEN_KEY         = "token"
+	SECRET_CLIENT_ID_KEY     = "client_id"
+	SECRET_CLIENT_SECRET_KEY = "client_secret"
 )

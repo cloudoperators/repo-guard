@@ -333,4 +333,7 @@ githubAccountLinks:
   - github: com
     userID: $(read_var USER_1_GREENHOUSE_ID)
     githubID: $(read_var USER_1_GITHUB_USERID)
+  - github: com
+    userID: $(read_var USER_2_GREENHOUSE_ID)
+    githubID: $(read_var USER_2_GITHUB_USERID)
 EOF

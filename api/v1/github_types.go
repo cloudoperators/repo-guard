@@ -17,9 +17,9 @@ type GithubSpec struct {
 }
 
 const (
-	SECRET_CLIENT_ID_KEY     = "clientID"
-	SECRET_CLIENT_SECRET_KEY = "clientSecret"
-	SECRET_PRIVATE_KEY_KEY   = "privateKey"
+	GITHUB_SECRET_CLIENT_ID_KEY     = "clientID"
+	GITHUB_SECRET_CLIENT_SECRET_KEY = "clientSecret"
+	SECRET_PRIVATE_KEY_KEY          = "privateKey"
 )
 
 // GithubStatus defines the observed state of Github

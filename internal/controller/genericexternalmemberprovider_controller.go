@@ -73,9 +73,9 @@ func (r *GenericExternalMemberProviderReconciler) Reconcile(ctx context.Context,
 		}
 		username = string(sec.Data[repoguardsapv1.SECRET_USERNAME_KEY])
 		password = string(sec.Data[repoguardsapv1.SECRET_PASSWORD_KEY])
-		token = string(sec.Data["token"]) // optional
-		clientID = string(sec.Data["client_id"])
-		clientSecret = string(sec.Data["client_secret"])
+		token = string(sec.Data[repoguardsapv1.SECRET_TOKEN_KEY]) // optional
+		clientID = string(sec.Data[repoguardsapv1.SECRET_CLIENT_ID_KEY])
+		clientSecret = string(sec.Data[repoguardsapv1.SECRET_CLIENT_SECRET_KEY])
 	}
 
 	cfg := &genericprovider.HTTPConfig{
@@ -165,9 +165,9 @@ func (r *ClusterGenericExternalMemberProviderReconciler) Reconcile(ctx context.C
 		}
 		username = string(sec.Data[repoguardsapv1.SECRET_USERNAME_KEY])
 		password = string(sec.Data[repoguardsapv1.SECRET_PASSWORD_KEY])
-		token = string(sec.Data["token"]) // optional
-		clientID = string(sec.Data["client_id"])
-		clientSecret = string(sec.Data["client_secret"])
+		token = string(sec.Data[repoguardsapv1.SECRET_TOKEN_KEY]) // optional
+		clientID = string(sec.Data[repoguardsapv1.SECRET_CLIENT_ID_KEY])
+		clientSecret = string(sec.Data[repoguardsapv1.SECRET_CLIENT_SECRET_KEY])
 	}
 
 	cfg := &genericprovider.HTTPConfig{
