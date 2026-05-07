@@ -52,7 +52,7 @@ func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
 		Role:        role,
 	}
 
-	var memberList []string
+	memberList := make([]string, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
 		if err != nil {
@@ -84,7 +84,7 @@ func (o *DefaultOrganizationProvider) membersExtended(role string) ([]GithubMemb
 		Role:        role,
 	}
 
-	var result []GithubMember
+	result := make([]GithubMember, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
 		if err != nil {
@@ -121,7 +121,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*gith
 		Role:        "all",
 		Filter:      "2fa_disabled",
 	}
-	var mfadisabled []*github.User
+	mfadisabled := make([]*github.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optMfa)
 		if err != nil {
@@ -138,7 +138,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*gith
 		ListOptions: github.ListOptions{PerPage: 100},
 		Role:        "all",
 	}
-	var allMembers []*github.User
+	allMembers := make([]*github.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optAll)
 		if err != nil {

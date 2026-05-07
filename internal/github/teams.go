@@ -58,7 +58,7 @@ func (t *DefaultTeamsProvider) List() ([]string, error) {
 		PerPage: 100,
 	}
 
-	var teamList []string
+	teamList := make([]string, 0)
 	for {
 		teams, response, err := t.service.ListTeams(context.Background(), t.organization, opt)
 		if err != nil {
@@ -90,7 +90,7 @@ func (t DefaultTeamsProvider) MembersExtended(team string) ([]GithubMember, erro
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
-	var userList []GithubMember
+	userList := make([]GithubMember, 0)
 	for {
 		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
 		if err != nil {
@@ -117,7 +117,7 @@ func (t DefaultTeamsProvider) Members(team string) ([]string, error) {
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
-	var userList []string
+	userList := make([]string, 0)
 	for {
 		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
 		if err != nil {
