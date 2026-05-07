@@ -124,7 +124,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			// reflect new status in metrics before proceeding
 			// (defer will also update it at the end)
 		}
 	}
@@ -162,7 +161,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						if err != nil {
 							return reconcile.Result{}, err
 						}
-						// reflect new status/operations in metrics
 						// (defer will also update it at the end)
 						return reconcile.Result{}, nil
 					}

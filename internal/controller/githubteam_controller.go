@@ -103,7 +103,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
 				return reconcile.Result{}, err
 			}
-			// reflect new status in metrics before proceeding
 			// (defer will also update it at the end)
 		}
 	}
