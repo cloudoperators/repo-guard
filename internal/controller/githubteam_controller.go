@@ -68,7 +68,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	err = r.Get(ctx, req.NamespacedName, githubTeam)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			l.Error(err, "resource not found in kubernetes: reconcile is skipped")
+			l.Info("resource not found in kubernetes: reconcile is skipped")
 			// if not found -- skip
 			return reconcile.Result{}, nil
 		}
@@ -101,6 +101,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			newStatus.TeamStatusTimestamp = metav1.Now()
 			githubTeam.Status = newStatus
 			if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+				if errors.IsNotFound(err) {
+					l.Info("resource not found in kubernetes: reconcile is skipped")
+					return reconcile.Result{}, nil
+				}
+				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
 			// reflect new status in metrics before proceeding
@@ -139,6 +144,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -173,6 +182,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -207,6 +220,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -241,6 +258,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -1313,8 +1334,20 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 				return nil, err
 			} else if found {
 				// If we can map that GitHub ID back to a GreenhouseID via AccountLink, prefer it
-				if mappedGreenhouseID, ok := revMap[gitID]; ok && mappedGreenhouseID != "" {
-					ghID = mappedGreenhouseID
+				var linkListByGH v1.GithubAccountLinkList
+				if err := k8sClient.List(ctx, &linkListByGH, client.MatchingFields{"spec.githubUserID": gitID}); err != nil {
+					l.Error(err, "listing GithubAccountLink by githubUserID", "githubUserID", gitID)
+					return nil, err
+				}
+				for _, lk := range linkListByGH.Items {
+					if lk.Spec.Github == githubInstance {
+						link = &lk
+						break
+					}
+				}
+
+				if link != nil && link.Spec.GreenhouseUserID != "" {
+					ghID = link.Spec.GreenhouseUserID
 				}
 				// Also ensure we have the canonical GitHub username for status consistency
 				if fetched, ok2, err2 := usersProvider.GithubUsernameByID(gitID); err2 != nil {
@@ -1329,36 +1362,26 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		// Optional filtering by verified-domain requirement
 		include := true
 		if requiredDomain != "" {
-			// resolve link by greenhouseID or by GitHub ID
-			var link v1.GithubAccountLink
-			if v, ok := byGHUser[strings.ToLower(ghID)]; ok {
-				link = v
-			} else if v, ok := byGHID[idMap[strings.ToLower(ghID)]]; ok {
-				link = v
-			}
 			include = false
-			if requiredDomain != "" {
-				// New flow: look at results annotation for this team org
-				if link.Annotations != nil {
-					if raw, ok := link.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]; ok && raw != "" {
-						var results map[string]struct {
-							Domain    string `json:"domain"`
-							Status    string `json:"status"`
-							Verified  bool   `json:"verified"` // Legacy support
-							Timestamp string `json:"timestamp"`
-						}
-						if err := json.Unmarshal([]byte(raw), &results); err == nil {
-							if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain {
-								// include if verified OR not yet in org
-								if r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED ||
-									r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG ||
-									(r.Status == "" && r.Verified) { // fallback for legacy result format
-									include = true
-								}
+			if link != nil && link.Annotations != nil {
+				if raw, ok := link.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]; ok && raw != "" {
+					var results map[string]struct {
+						Domain    string `json:"domain"`
+						Status    string `json:"status"`
+						Verified  bool   `json:"verified"` // Legacy support
+						Timestamp string `json:"timestamp"`
+					}
+					if err := json.Unmarshal([]byte(raw), &results); err == nil {
+						if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain {
+							// include if verified OR not yet in org
+							if r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED ||
+								r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG ||
+								(r.Status == "" && r.Verified) { // fallback for legacy result format
+								include = true
 							}
-						} else {
-							l.Error(err, "failed to unmarshal email check results", "member", ghID, "raw", raw)
 						}
+					} else {
+						l.Error(err, "failed to unmarshal email check results", "member", ghID, "raw", raw)
 					}
 				}
 			}
