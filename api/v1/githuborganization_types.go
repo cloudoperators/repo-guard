@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // GithubOrganizationSpec defines the desired state of GithubOrganization
@@ -199,7 +200,10 @@ type GithubOrganizationList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&GithubOrganization{}, &GithubOrganizationList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &GithubOrganization{}, &GithubOrganizationList{})
+		return nil
+	})
 }
 
 func (g GithubOrganization) OwnerChangeCalculator(ownersFromKubernetes []Member) (bool, *GithubOrganizationStatus) {

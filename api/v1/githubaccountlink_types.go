@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type GithubAccountLinkSpec struct {
@@ -40,7 +41,10 @@ type GithubAccountLinkList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&GithubAccountLink{}, &GithubAccountLinkList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &GithubAccountLink{}, &GithubAccountLinkList{})
+		return nil
+	})
 }
 
 // Email verification nnotations. When set on GithubAccountLink, controller checks whether the linked GitHub user  has a verified email address under the specified domain and stores the result.

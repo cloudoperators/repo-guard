@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // GithubTeamRepositorySpec defines the exceptional additions to default organization team & repo assignments
@@ -43,5 +44,8 @@ type GithubTeamRepositoryList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&GithubTeamRepository{}, &GithubTeamRepositoryList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &GithubTeamRepository{}, &GithubTeamRepositoryList{})
+		return nil
+	})
 }

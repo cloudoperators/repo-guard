@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // GithubSpec defines the desired state of Github
@@ -59,5 +60,8 @@ type GithubList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Github{}, &GithubList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &Github{}, &GithubList{})
+		return nil
+	})
 }

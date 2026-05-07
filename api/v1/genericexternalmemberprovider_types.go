@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // GenericExternalMemberProviderSpec contains HTTP configuration for generic providers
@@ -55,8 +56,11 @@ type GenericExternalMemberProviderList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&GenericExternalMemberProvider{}, &GenericExternalMemberProviderList{})
-	SchemeBuilder.Register(&ClusterGenericExternalMemberProvider{}, &ClusterGenericExternalMemberProviderList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &GenericExternalMemberProvider{}, &GenericExternalMemberProviderList{})
+		scheme.AddKnownTypes(GroupVersion, &ClusterGenericExternalMemberProvider{}, &ClusterGenericExternalMemberProviderList{})
+		return nil
+	})
 }
 
 // +kubebuilder:object:root=true

@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type StaticGroup struct {
@@ -43,8 +44,11 @@ type StaticMemberProviderList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&StaticMemberProvider{}, &StaticMemberProviderList{})
-	SchemeBuilder.Register(&ClusterStaticMemberProvider{}, &ClusterStaticMemberProviderList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &StaticMemberProvider{}, &StaticMemberProviderList{})
+		scheme.AddKnownTypes(GroupVersion, &ClusterStaticMemberProvider{}, &ClusterStaticMemberProviderList{})
+		return nil
+	})
 }
 
 // +kubebuilder:object:root=true

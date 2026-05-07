@@ -5,6 +5,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // LDAPGroupProviderSpec defines the desired state of LDAPGroupProvider
@@ -56,8 +57,11 @@ type LDAPGroupProviderList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&LDAPGroupProvider{}, &LDAPGroupProviderList{})
-	SchemeBuilder.Register(&ClusterLDAPGroupProvider{}, &ClusterLDAPGroupProviderList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &LDAPGroupProvider{}, &LDAPGroupProviderList{})
+		scheme.AddKnownTypes(GroupVersion, &ClusterLDAPGroupProvider{}, &ClusterLDAPGroupProviderList{})
+		return nil
+	})
 }
 
 // +kubebuilder:object:root=true

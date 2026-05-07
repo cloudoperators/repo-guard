@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // GithubTeamSpec defines the desired state of GithubTeam
@@ -113,7 +114,10 @@ type GithubTeamList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&GithubTeam{}, &GithubTeamList{})
+	SchemeBuilder.Register(func(scheme *runtime.Scheme) error {
+		scheme.AddKnownTypes(GroupVersion, &GithubTeam{}, &GithubTeamList{})
+		return nil
+	})
 }
 
 // Helper function to build a map of users with their operation states
