@@ -58,11 +58,11 @@ func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, owner := range users {
-			if owner == nil {
+		for _, member := range users {
+			if member == nil {
 				continue
 			}
-			login := owner.GetLogin()
+			login := member.GetLogin()
 			if login == "" {
 				continue
 			}

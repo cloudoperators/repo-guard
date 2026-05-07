@@ -320,12 +320,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return reconcile.Result{}, err
 	}
 
-	usersProvider, err := github.NewUsersProvider(githubClient, githubOrganization.Spec.InstallationID)
-	if err != nil {
-		l.Error(err, "error during creating the users provider")
-		return reconcile.Result{}, err
-	}
-
 	// pending means there are still waiting operations on Github side, otherwise check for owners, teams and repos in each side
 	if githubOrganization.Status.OrganizationStatus != v1.GithubOrganizationStatePendingOperations {
 
@@ -480,7 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// Convert owner usernames to GithubMember with UID for proper GreenhouseID mapping
-		ownerListExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, ownerList, githubName, r.Client, usersProvider)
+		ownerListExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, ownerList, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending github members with greenhouse ids")
 			return reconcile.Result{}, err

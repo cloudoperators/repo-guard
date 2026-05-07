@@ -577,7 +577,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return reconcile.Result{}, err
 		}
-		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client, usersProvider)
+		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending the members of the team in Github")
 			return reconcile.Result{}, err
@@ -1178,7 +1178,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				l.Error(err, "error during listing the members of the team in github", "team", githubTeamName)
 				return reconcile.Result{}, err
 			}
-			membersExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, members, githubName, r.Client, usersProvider)
+			membersExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, members, githubName, r.Client)
 			if err != nil {
 				l.Error(err, "error during extending the members of the team in github membership")
 				return reconcile.Result{}, err
@@ -1385,7 +1385,7 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 	return out, nil
 }
 
-func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client, usersProv github.UsersProvider) ([]v1.Member, error) {
+func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client) ([]v1.Member, error) {
 	l := log.FromContext(ctx)
 
 	// Fetch all GithubAccountLink resources for this github instance once to build a lookup map
