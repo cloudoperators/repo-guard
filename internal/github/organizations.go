@@ -45,62 +45,61 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 	return &DefaultOrganizationProvider{organizationService: *client.Organizations, organization: organization}, nil
 }
 
-func (o *DefaultOrganizationProvider) githubMembers(role string, filter string) ([]*github.User, error) {
+func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
 
 	opt := &github.ListMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
 		Role:        role,
-		Filter:      filter,
 	}
 
-	var allMembers []*github.User
+	memberList := make([]string, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
 		if err != nil {
 			return nil, err
 		}
-		allMembers = append(allMembers, users...)
+		for _, member := range users {
+			if member == nil {
+				continue
+			}
+			login := member.GetLogin()
+			if login == "" {
+				continue
+			}
+			memberList = append(memberList, login)
+		}
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
 	}
 
-	return allMembers, nil
-
-}
-func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
-
-	allMembers, err := o.githubMembers(role, "")
-	if err != nil {
-		return nil, err
-	}
-
-	ownerList := make([]string, 0)
-	for _, owner := range allMembers {
-		if owner == nil {
-			continue
-		}
-		login := owner.GetLogin()
-		if login == "" {
-			continue
-		}
-		ownerList = append(ownerList, login)
-	}
-
-	return ownerList, nil
+	return memberList, nil
 }
 
 func (o *DefaultOrganizationProvider) membersExtended(role string) ([]GithubMember, error) {
 
-	allMembers, err := o.githubMembers(role, "")
-	if err != nil {
-		return nil, err
+	opt := &github.ListMembersOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+		Role:        role,
 	}
 
 	result := make([]GithubMember, 0)
-	for _, m := range allMembers {
-		result = append(result, GithubMember{Login: m.GetLogin(), UID: m.GetID()})
+	for {
+		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range users {
+			if m == nil {
+				continue
+			}
+			result = append(result, GithubMember{Login: m.GetLogin(), UID: m.GetID()})
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
 	}
 
 	return result, nil
@@ -117,14 +116,39 @@ func (o *DefaultOrganizationProvider) OwnersExtended() ([]GithubMember, error) {
 
 func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*github.User, error) {
 
-	mfadisabled, err := o.githubMembers("all", "2fa_disabled")
-	if err != nil {
-		return nil, nil, err
+	optMfa := &github.ListMembersOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+		Role:        "all",
+		Filter:      "2fa_disabled",
+	}
+	mfadisabled := make([]*github.User, 0)
+	for {
+		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optMfa)
+		if err != nil {
+			return nil, nil, err
+		}
+		mfadisabled = append(mfadisabled, users...)
+		if resp.NextPage == 0 {
+			break
+		}
+		optMfa.Page = resp.NextPage
 	}
 
-	allMembers, err := o.githubMembers("all", "")
-	if err != nil {
-		return nil, nil, err
+	optAll := &github.ListMembersOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+		Role:        "all",
+	}
+	allMembers := make([]*github.User, 0)
+	for {
+		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optAll)
+		if err != nil {
+			return nil, nil, err
+		}
+		allMembers = append(allMembers, users...)
+		if resp.NextPage == 0 {
+			break
+		}
+		optAll.Page = resp.NextPage
 	}
 
 	return allMembers, mfadisabled, nil

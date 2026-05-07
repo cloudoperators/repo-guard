@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,7 +29,8 @@ import (
 // GithubOrganizationReconciler reconciles a GithubOrganization object
 type GithubOrganizationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githuborganizations,verbs=get;list;watch;create;update;patch;delete
@@ -318,12 +320,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return reconcile.Result{}, err
 	}
 
-	usersProvider, err := github.NewUsersProvider(githubClient, githubOrganization.Spec.InstallationID)
-	if err != nil {
-		l.Error(err, "error during creating the users provider")
-		return reconcile.Result{}, err
-	}
-
 	// pending means there are still waiting operations on Github side, otherwise check for owners, teams and repos in each side
 	if githubOrganization.Status.OrganizationStatus != v1.GithubOrganizationStatePendingOperations {
 
@@ -478,7 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// Convert owner usernames to GithubMember with UID for proper GreenhouseID mapping
-		ownerListExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, ownerList, githubName, r.Client, usersProvider)
+		ownerListExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, ownerList, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending github members with greenhouse ids")
 			return reconcile.Result{}, err
@@ -542,6 +538,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -564,6 +564,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -596,6 +600,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -613,6 +621,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -656,13 +668,16 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
 				return reconcile.Result{}, nil
 			}
 		}
-
 		// check for empty status in kubernetes resource (for the first run)
 		//  no error until here, if there is already error in the status, remove it
 		if githubOrganization.Status.OrganizationStatus == "" {
@@ -678,6 +693,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return r.Client.Status().Update(ctx, latest)
 			})
 			if err != nil {
+				if errors.IsNotFound(err) {
+					l.Info("resource not found in kubernetes: reconcile is skipped")
+					return reconcile.Result{}, nil
+				}
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
@@ -702,6 +721,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -734,6 +757,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -764,6 +791,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -796,6 +827,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
@@ -1067,6 +1102,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubOrganizationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		For(&v1.GithubOrganization{}).
 		Watches(&v1.GithubTeam{}, handler.EnqueueRequestsFromMapFunc(r.githubTeamToGithubOrganizationAsOrganizationOwner)).
 		Watches(&v1.GithubTeamRepository{}, handler.EnqueueRequestsFromMapFunc(r.githubTeamRepositoryToGithubOrganization)).

@@ -196,6 +196,8 @@ var _ = BeforeSuite(func() {
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 
+	Expect(SetupFieldIndexes(k8sManager)).To(Succeed())
+
 	Expect((&GithubReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubOrganizationReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubTeamReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())

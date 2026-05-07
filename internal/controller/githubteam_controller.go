@@ -23,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -40,7 +41,8 @@ import (
 // GithubTeamReconciler reconciles a GithubTeam object
 type GithubTeamReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=greenhouse.sap,resources=teams,verbs=get;list;watch
@@ -68,7 +70,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	err = r.Get(ctx, req.NamespacedName, githubTeam)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			l.Error(err, "resource not found in kubernetes: reconcile is skipped")
+			l.Info("resource not found in kubernetes: reconcile is skipped")
 			// if not found -- skip
 			return reconcile.Result{}, nil
 		}
@@ -101,6 +103,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			newStatus.TeamStatusTimestamp = metav1.Now()
 			githubTeam.Status = newStatus
 			if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+				if errors.IsNotFound(err) {
+					l.Info("resource not found in kubernetes: reconcile is skipped")
+					return reconcile.Result{}, nil
+				}
+				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
 			// (defer will also update it at the end)
@@ -138,6 +145,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -172,6 +183,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -206,6 +221,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -240,6 +259,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.TeamStatusTimestamp = metav1.Now()
 						githubTeam.Status = newStatus
 						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+							if errors.IsNotFound(err) {
+								l.Info("resource not found in kubernetes: reconcile is skipped")
+								return reconcile.Result{}, nil
+							}
 							l.Error(err, "error during status update")
 							return reconcile.Result{}, err
 						}
@@ -554,7 +577,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			return reconcile.Result{}, err
 		}
-		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client, usersProvider)
+		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending the members of the team in Github")
 			return reconcile.Result{}, err
@@ -1155,7 +1178,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				l.Error(err, "error during listing the members of the team in github", "team", githubTeamName)
 				return reconcile.Result{}, err
 			}
-			membersExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, members, githubName, r.Client, usersProvider)
+			membersExtended, err := extendGithubMembersWithGreenhouseIDs(ctx, members, githubName, r.Client)
 			if err != nil {
 				l.Error(err, "error during extending the members of the team in github membership")
 				return reconcile.Result{}, err
@@ -1194,6 +1217,7 @@ func (r *GithubTeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		For(&v1.GithubTeam{}, builder.WithPredicates(LabelSelectorPredicate(*metav1LabelSelector))).
 		Watches(&greenhousesapv1alpha1.Team{}, handler.EnqueueRequestsFromMapFunc(r.greenhouseTeamToGithubTeam)).
 		Watches(&v1.GithubAccountLink{}, handler.EnqueueRequestsFromMapFunc(r.githubAccountLinkToGithubTeam)).
@@ -1257,53 +1281,45 @@ func (r *GithubTeamReconciler) greenhouseTeamToGithubTeam(ctx context.Context, o
 func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []string, githubInstance string, k8sClient client.Client, usersProvider github.UsersProvider, requiredDomain string, teamOrg string) ([]v1.Member, error) {
 	l := log.FromContext(ctx)
 
-	// 1) List all account links
+	// Fetch all GithubAccountLink resources for this github instance once to build a lookup map
 	var linkList v1.GithubAccountLinkList
-	if err := k8sClient.List(ctx, &linkList); err != nil {
-		l.Error(err, "listing GithubAccountLink")
+	if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.github": githubInstance}); err != nil {
+		l.Error(err, "listing GithubAccountLinks for batch lookup", "github", githubInstance)
 		return nil, err
 	}
-
-	// 2) Build maps for quick lookup
-	idMap := make(map[string]string, len(linkList.Items))
-	//    and reverse map[GitHubUserID]GreenhouseID for the case when the provided
-	//    member identifier is actually a GitHub login (common in some teams).
-	revMap := make(map[string]string, len(linkList.Items))
-	//    and maps to the corresponding GithubAccountLink objects
-	byGHID := make(map[string]v1.GithubAccountLink, len(linkList.Items))
-	byGHUser := make(map[string]v1.GithubAccountLink, len(linkList.Items))
-	for _, link := range linkList.Items {
-		if link.Spec.Github != githubInstance {
-			continue
+	linksByGreenhouseID := make(map[string]*v1.GithubAccountLink)
+	linksByGithubUserID := make(map[string]*v1.GithubAccountLink)
+	for i := range linkList.Items {
+		lk := &linkList.Items[i]
+		if lk.Spec.GreenhouseUserID != "" {
+			linksByGreenhouseID[strings.ToLower(lk.Spec.GreenhouseUserID)] = lk
 		}
-		greenhouseID := strings.ToLower(link.Spec.GreenhouseUserID)
-		idMap[greenhouseID] = link.Spec.GithubUserID
-		revMap[link.Spec.GithubUserID] = link.Spec.GreenhouseUserID
-		byGHID[link.Spec.GithubUserID] = link
-		byGHUser[greenhouseID] = link
+		if lk.Spec.GithubUserID != "" {
+			linksByGithubUserID[lk.Spec.GithubUserID] = lk
+		}
 	}
 
-	// 3) For each greenhouse member, try to resolve their GitHub username
 	var out []v1.Member
 	for _, greenhouseInput := range members {
 		ghID := greenhouseInput
 		githubUsername := greenhouseInput // default fallback
 
+		var link *v1.GithubAccountLink
 		inputLower := strings.ToLower(greenhouseInput)
-		if gitID, ok := idMap[inputLower]; ok {
+
+		// 1) Try lookup by GreenhouseID
+		link = linksByGreenhouseID[inputLower]
+
+		if link != nil {
 			// Case A: input is a GreenhouseID → resolve GitHub login by mapped GitHub user ID
+			gitID := link.Spec.GithubUserID
 			fetched, found, err := usersProvider.GithubUsernameByID(gitID)
 			if err != nil {
 				l.Error(err, "fetching GitHub username by ID", "githubUserID", gitID)
 				return nil, err
 			} else if found {
 				githubUsername = fetched
-				// Use the GreenhouseID from the map to ensure correct casing if needed,
-				// but greenhouseInput is what we got from the provider.
-				// However, if we found a match, we should use the canonical GreenhouseID from the link.
-				if mappedGreenhouseID, ok := revMap[gitID]; ok {
-					ghID = mappedGreenhouseID
-				}
+				ghID = link.Spec.GreenhouseUserID
 			}
 		} else {
 			// Case B: input might actually be a GitHub login; try to resolve numeric ID
@@ -1312,8 +1328,11 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 				return nil, err
 			} else if found {
 				// If we can map that GitHub ID back to a GreenhouseID via AccountLink, prefer it
-				if mappedGreenhouseID, ok := revMap[gitID]; ok && mappedGreenhouseID != "" {
-					ghID = mappedGreenhouseID
+				if lk, found := linksByGithubUserID[gitID]; found {
+					link = lk
+					if link.Spec.GreenhouseUserID != "" {
+						ghID = link.Spec.GreenhouseUserID
+					}
 				}
 				// Also ensure we have the canonical GitHub username for status consistency
 				if fetched, ok2, err2 := usersProvider.GithubUsernameByID(gitID); err2 != nil {
@@ -1328,36 +1347,26 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		// Optional filtering by verified-domain requirement
 		include := true
 		if requiredDomain != "" {
-			// resolve link by greenhouseID or by GitHub ID
-			var link v1.GithubAccountLink
-			if v, ok := byGHUser[strings.ToLower(ghID)]; ok {
-				link = v
-			} else if v, ok := byGHID[idMap[strings.ToLower(ghID)]]; ok {
-				link = v
-			}
 			include = false
-			if requiredDomain != "" {
-				// New flow: look at results annotation for this team org
-				if link.Annotations != nil {
-					if raw, ok := link.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]; ok && raw != "" {
-						var results map[string]struct {
-							Domain    string `json:"domain"`
-							Status    string `json:"status"`
-							Verified  bool   `json:"verified"` // Legacy support
-							Timestamp string `json:"timestamp"`
-						}
-						if err := json.Unmarshal([]byte(raw), &results); err == nil {
-							if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain {
-								// include if verified OR not yet in org
-								if r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED ||
-									r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG ||
-									(r.Status == "" && r.Verified) { // fallback for legacy result format
-									include = true
-								}
+			if link != nil && link.Annotations != nil {
+				if raw, ok := link.Annotations[v1.GITHUB_ACCOUNT_LINK_EMAIL_CHECK_RESULTS]; ok && raw != "" {
+					var results map[string]struct {
+						Domain    string `json:"domain"`
+						Status    string `json:"status"`
+						Verified  bool   `json:"verified"` // Legacy support
+						Timestamp string `json:"timestamp"`
+					}
+					if err := json.Unmarshal([]byte(raw), &results); err == nil {
+						if r, ok2 := results[teamOrg]; ok2 && r.Domain == requiredDomain {
+							// include if verified OR not yet in org
+							if r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_VERIFIED ||
+								r.Status == v1.GITHUB_ACCOUNT_LINK_EMAIL_VERIFIED_DOMAIN_STATUS_NOT_PART_OF_ORG ||
+								(r.Status == "" && r.Verified) { // fallback for legacy result format
+								include = true
 							}
-						} else {
-							l.Error(err, "failed to unmarshal email check results", "member", ghID, "raw", raw)
 						}
+					} else {
+						l.Error(err, "failed to unmarshal email check results", "member", ghID, "raw", raw)
 					}
 				}
 			}
@@ -1376,21 +1385,20 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 	return out, nil
 }
 
-func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client, usersProv github.UsersProvider) ([]v1.Member, error) {
+func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client) ([]v1.Member, error) {
 	l := log.FromContext(ctx)
 
-	// 1) List all GithubAccountLink CRs
+	// Fetch all GithubAccountLink resources for this github instance once to build a lookup map
 	var linkList v1.GithubAccountLinkList
-	if err := k8sClient.List(ctx, &linkList); err != nil {
-		l.Error(err, "listing GithubAccountLink")
+	if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.github": githubInstance}); err != nil {
+		l.Error(err, "listing GithubAccountLinks for batch lookup", "github", githubInstance)
 		return nil, err
 	}
-
-	// 2) Build reverse map: GitHubUserID → GreenhouseUserID
-	revMap := make(map[string]string, len(linkList.Items))
-	for _, link := range linkList.Items {
-		if link.Spec.Github == githubInstance {
-			revMap[link.Spec.GithubUserID] = link.Spec.GreenhouseUserID
+	linksByGithubUserID := make(map[string]*v1.GithubAccountLink)
+	for i := range linkList.Items {
+		lk := &linkList.Items[i]
+		if lk.Spec.GithubUserID != "" {
+			linksByGithubUserID[lk.Spec.GithubUserID] = lk
 		}
 	}
 
@@ -1400,8 +1408,12 @@ func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.
 		// default fallback: use the login itself
 		greenhouseID := githubMember.Login
 
-		if mapped, ok := revMap[strconv.FormatInt(githubMember.UID, 10)]; ok {
-			greenhouseID = mapped
+		// 1) Try lookup by GithubUserID
+		uidStr := strconv.FormatInt(githubMember.UID, 10)
+		if lk, found := linksByGithubUserID[uidStr]; found {
+			if lk.Spec.GreenhouseUserID != "" {
+				greenhouseID = lk.Spec.GreenhouseUserID
+			}
 		}
 
 		out = append(out, v1.Member{
