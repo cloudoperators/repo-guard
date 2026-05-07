@@ -108,8 +108,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
-			// reflect new status in metrics before proceeding
-			ghmetrics.SetGithubTeamMetrics(githubTeam)
+			// (defer will also update it at the end)
 		}
 	}
 

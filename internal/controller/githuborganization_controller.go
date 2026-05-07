@@ -62,7 +62,12 @@ type GithubOrganizationReconciler struct {
 func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, err error) {
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubOrganization")
+	var githubOrganization *v1.GithubOrganization
 	defer func() {
+		// reflect final metrics for organization status/operations
+		if githubOrganization != nil {
+			ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+		}
 		result := "success"
 		if err != nil {
 			result = "error"
@@ -72,7 +77,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		done(result)
 	}()
 
-	githubOrganization := &v1.GithubOrganization{}
+	githubOrganization = &v1.GithubOrganization{}
 	err = r.Get(ctx, req.NamespacedName, githubOrganization)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -119,8 +124,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			// reflect new status in metrics before proceeding
-			ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+			// (defer will also update it at the end)
 		}
 	}
 
@@ -157,8 +161,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						if err != nil {
 							return reconcile.Result{}, err
 						}
-						// reflect new status/operations in metrics
-						ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+						// (defer will also update it at the end)
 						return reconcile.Result{}, nil
 					}
 				}
@@ -194,7 +197,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						if err != nil {
 							return reconcile.Result{}, err
 						}
-						ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+						// (defer will also update it at the end)
 						return reconcile.Result{}, nil
 					}
 				}
