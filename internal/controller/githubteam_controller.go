@@ -1279,53 +1279,49 @@ func (r *GithubTeamReconciler) greenhouseTeamToGithubTeam(ctx context.Context, o
 func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []string, githubInstance string, k8sClient client.Client, usersProvider github.UsersProvider, requiredDomain string, teamOrg string) ([]v1.Member, error) {
 	l := log.FromContext(ctx)
 
-	// 1) List all account links
-	var linkList v1.GithubAccountLinkList
-	if err := k8sClient.List(ctx, &linkList); err != nil {
-		l.Error(err, "listing GithubAccountLink")
-		return nil, err
-	}
-
-	// 2) Build maps for quick lookup
-	idMap := make(map[string]string, len(linkList.Items))
-	//    and reverse map[GitHubUserID]GreenhouseID for the case when the provided
-	//    member identifier is actually a GitHub login (common in some teams).
-	revMap := make(map[string]string, len(linkList.Items))
-	//    and maps to the corresponding GithubAccountLink objects
-	byGHID := make(map[string]v1.GithubAccountLink, len(linkList.Items))
-	byGHUser := make(map[string]v1.GithubAccountLink, len(linkList.Items))
-	for _, link := range linkList.Items {
-		if link.Spec.Github != githubInstance {
-			continue
-		}
-		greenhouseID := strings.ToLower(link.Spec.GreenhouseUserID)
-		idMap[greenhouseID] = link.Spec.GithubUserID
-		revMap[link.Spec.GithubUserID] = link.Spec.GreenhouseUserID
-		byGHID[link.Spec.GithubUserID] = link
-		byGHUser[greenhouseID] = link
-	}
-
-	// 3) For each greenhouse member, try to resolve their GitHub username
 	var out []v1.Member
 	for _, greenhouseInput := range members {
 		ghID := greenhouseInput
 		githubUsername := greenhouseInput // default fallback
 
+		var link *v1.GithubAccountLink
 		inputLower := strings.ToLower(greenhouseInput)
-		if gitID, ok := idMap[inputLower]; ok {
+
+		// 1) Try lookup by GreenhouseID (index spec.userID)
+		var linkList v1.GithubAccountLinkList
+		if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.userID": inputLower}); err != nil {
+			l.Error(err, "listing GithubAccountLink by userID", "userID", inputLower)
+			return nil, err
+		}
+
+		// Filter by githubInstance if we found any
+		for _, lk := range linkList.Items {
+			if lk.Spec.Github == githubInstance {
+				link = &lk
+				break
+			}
+		}
+
+		if link == nil {
+			// fallback: check case-insensitive match for GreenhouseUserID if index might be problematic or for extra safety
+			for _, lk := range linkList.Items {
+				if strings.EqualFold(lk.Spec.GreenhouseUserID, greenhouseInput) && lk.Spec.Github == githubInstance {
+					link = &lk
+					break
+				}
+			}
+		}
+
+		if link != nil {
 			// Case A: input is a GreenhouseID → resolve GitHub login by mapped GitHub user ID
+			gitID := link.Spec.GithubUserID
 			fetched, found, err := usersProvider.GithubUsernameByID(gitID)
 			if err != nil {
 				l.Error(err, "fetching GitHub username by ID", "githubUserID", gitID)
 				return nil, err
 			} else if found {
 				githubUsername = fetched
-				// Use the GreenhouseID from the map to ensure correct casing if needed,
-				// but greenhouseInput is what we got from the provider.
-				// However, if we found a match, we should use the canonical GreenhouseID from the link.
-				if mappedGreenhouseID, ok := revMap[gitID]; ok {
-					ghID = mappedGreenhouseID
-				}
+				ghID = link.Spec.GreenhouseUserID
 			}
 		} else {
 			// Case B: input might actually be a GitHub login; try to resolve numeric ID
