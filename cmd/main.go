@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"os"
+	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -94,7 +95,7 @@ func main() {
 		if link.Spec.GreenhouseUserID == "" {
 			return nil
 		}
-		return []string{link.Spec.GreenhouseUserID}
+		return []string{strings.ToLower(link.Spec.GreenhouseUserID)}
 	}); err != nil {
 		setupLog.Error(err, "unable to create index for GithubAccountLink userID")
 		os.Exit(1)
@@ -107,6 +108,16 @@ func main() {
 		return []string{link.Spec.GithubUserID}
 	}); err != nil {
 		setupLog.Error(err, "unable to create index for GithubAccountLink githubUserID")
+		os.Exit(1)
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.github", func(rawObj client.Object) []string {
+		link := rawObj.(*repoguardsapv1.GithubAccountLink)
+		if link.Spec.Github == "" {
+			return nil
+		}
+		return []string{link.Spec.Github}
+	}); err != nil {
+		setupLog.Error(err, "unable to create index for GithubAccountLink github")
 		os.Exit(1)
 	}
 

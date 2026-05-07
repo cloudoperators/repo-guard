@@ -1278,6 +1278,24 @@ func (r *GithubTeamReconciler) greenhouseTeamToGithubTeam(ctx context.Context, o
 func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []string, githubInstance string, k8sClient client.Client, usersProvider github.UsersProvider, requiredDomain string, teamOrg string) ([]v1.Member, error) {
 	l := log.FromContext(ctx)
 
+	// Fetch all GithubAccountLink resources for this github instance once to build a lookup map
+	var linkList v1.GithubAccountLinkList
+	if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.github": githubInstance}); err != nil {
+		l.Error(err, "listing GithubAccountLinks for batch lookup", "github", githubInstance)
+		return nil, err
+	}
+	linksByGreenhouseID := make(map[string]*v1.GithubAccountLink)
+	linksByGithubUserID := make(map[string]*v1.GithubAccountLink)
+	for i := range linkList.Items {
+		lk := &linkList.Items[i]
+		if lk.Spec.GreenhouseUserID != "" {
+			linksByGreenhouseID[strings.ToLower(lk.Spec.GreenhouseUserID)] = lk
+		}
+		if lk.Spec.GithubUserID != "" {
+			linksByGithubUserID[lk.Spec.GithubUserID] = lk
+		}
+	}
+
 	var out []v1.Member
 	for _, greenhouseInput := range members {
 		ghID := greenhouseInput
@@ -1286,30 +1304,8 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 		var link *v1.GithubAccountLink
 		inputLower := strings.ToLower(greenhouseInput)
 
-		// 1) Try lookup by GreenhouseID (index spec.userID)
-		var linkList v1.GithubAccountLinkList
-		if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.userID": inputLower}); err != nil {
-			l.Error(err, "listing GithubAccountLink by userID", "userID", inputLower)
-			return nil, err
-		}
-
-		// Filter by githubInstance if we found any
-		for _, lk := range linkList.Items {
-			if lk.Spec.Github == githubInstance {
-				link = &lk
-				break
-			}
-		}
-
-		if link == nil {
-			// fallback: check case-insensitive match for GreenhouseUserID if index might be problematic or for extra safety
-			for _, lk := range linkList.Items {
-				if strings.EqualFold(lk.Spec.GreenhouseUserID, greenhouseInput) && lk.Spec.Github == githubInstance {
-					link = &lk
-					break
-				}
-			}
-		}
+		// 1) Try lookup by GreenhouseID
+		link = linksByGreenhouseID[inputLower]
 
 		if link != nil {
 			// Case A: input is a GreenhouseID → resolve GitHub login by mapped GitHub user ID
@@ -1329,20 +1325,11 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 				return nil, err
 			} else if found {
 				// If we can map that GitHub ID back to a GreenhouseID via AccountLink, prefer it
-				var linkListByGH v1.GithubAccountLinkList
-				if err := k8sClient.List(ctx, &linkListByGH, client.MatchingFields{"spec.githubUserID": gitID}); err != nil {
-					l.Error(err, "listing GithubAccountLink by githubUserID", "githubUserID", gitID)
-					return nil, err
-				}
-				for _, lk := range linkListByGH.Items {
-					if lk.Spec.Github == githubInstance {
-						link = &lk
-						break
+				if lk, found := linksByGithubUserID[gitID]; found {
+					link = lk
+					if link.Spec.GreenhouseUserID != "" {
+						ghID = link.Spec.GreenhouseUserID
 					}
-				}
-
-				if link != nil && link.Spec.GreenhouseUserID != "" {
-					ghID = link.Spec.GreenhouseUserID
 				}
 				// Also ensure we have the canonical GitHub username for status consistency
 				if fetched, ok2, err2 := usersProvider.GithubUsernameByID(gitID); err2 != nil {
@@ -1396,21 +1383,33 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 }
 
 func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client, usersProv github.UsersProvider) ([]v1.Member, error) {
+	l := log.FromContext(ctx)
+
+	// Fetch all GithubAccountLink resources for this github instance once to build a lookup map
+	var linkList v1.GithubAccountLinkList
+	if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.github": githubInstance}); err != nil {
+		l.Error(err, "listing GithubAccountLinks for batch lookup", "github", githubInstance)
+		return nil, err
+	}
+	linksByGithubUserID := make(map[string]*v1.GithubAccountLink)
+	for i := range linkList.Items {
+		lk := &linkList.Items[i]
+		if lk.Spec.GithubUserID != "" {
+			linksByGithubUserID[lk.Spec.GithubUserID] = lk
+		}
+	}
+
 	// 3) For each GitHub login, resolve to a GreenhouseID
 	var out []v1.Member
 	for _, githubMember := range members {
 		// default fallback: use the login itself
 		greenhouseID := githubMember.Login
 
-		// 1) Try lookup by GithubUserID (index spec.githubUserID)
-		var linkList v1.GithubAccountLinkList
+		// 1) Try lookup by GithubUserID
 		uidStr := strconv.FormatInt(githubMember.UID, 10)
-		if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.githubUserID": uidStr}); err == nil {
-			for _, lk := range linkList.Items {
-				if lk.Spec.Github == githubInstance {
-					greenhouseID = lk.Spec.GreenhouseUserID
-					break
-				}
+		if lk, found := linksByGithubUserID[uidStr]; found {
+			if lk.Spec.GreenhouseUserID != "" {
+				greenhouseID = lk.Spec.GreenhouseUserID
 			}
 		}
 
