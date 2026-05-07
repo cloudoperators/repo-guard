@@ -47,10 +47,12 @@ func main() {
 	var metricsAddr string
 	var probeAddr string
 	var currentNamespace string
+	var maxConcurrentReconciles int
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8082", "The address the probe endpoint binds to.")
 	flag.StringVar(&currentNamespace, "namespace", "", "Current namespace so that manager will set as default namespace")
+	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "The maximum number of concurrent Reconciles which can be run.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -65,7 +67,7 @@ func main() {
 		controller.OperatorNamespace = currentNamespace
 	}
 
-	resyncPeriod := time.Duration(15 * time.Minute)
+	resyncPeriod := time.Duration(30 * time.Minute)
 	mgrOpts := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -87,6 +89,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := controller.SetupFieldIndexes(mgr); err != nil {
+		setupLog.Error(err, "unable to create index for GithubAccountLink")
+		os.Exit(1)
+	}
+
 	if err = (&controller.GithubReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -96,16 +103,18 @@ func main() {
 	}
 
 	if err = (&controller.GithubTeamReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GithubTeam")
 		os.Exit(1)
 	}
 
 	if err = (&controller.GithubOrganizationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:                  mgr.GetClient(),
+		Scheme:                  mgr.GetScheme(),
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GithubOrganization")
 		os.Exit(1)

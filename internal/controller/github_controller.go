@@ -151,6 +151,10 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		return r.Status().Update(ctx, latest)
 	})
 	if err != nil {
+		if errors.IsNotFound(err) {
+			l.Info("resource not found in kubernetes: reconcile is skipped")
+			return reconcile.Result{}, nil
+		}
 		l.Error(err, "error during status update")
 		return reconcile.Result{}, err
 	}

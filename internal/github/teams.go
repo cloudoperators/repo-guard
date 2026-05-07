@@ -58,29 +58,26 @@ func (t *DefaultTeamsProvider) List() ([]string, error) {
 		PerPage: 100,
 	}
 
-	var allTeams []*github.Team
+	teamList := make([]string, 0)
 	for {
 		teams, response, err := t.service.ListTeams(context.Background(), t.organization, opt)
 		if err != nil {
 			return nil, err
 		}
-		allTeams = append(allTeams, teams...)
+		for _, team := range teams {
+			if team == nil {
+				continue
+			}
+			name := team.GetName()
+			if name == "" {
+				continue
+			}
+			teamList = append(teamList, name)
+		}
 		if response.NextPage == 0 {
 			break
 		}
 		opt.Page = response.NextPage
-	}
-
-	teamList := make([]string, 0)
-	for _, team := range allTeams {
-		if team == nil {
-			continue
-		}
-		name := team.GetName()
-		if name == "" {
-			continue
-		}
-		teamList = append(teamList, name)
 	}
 
 	return teamList, nil
@@ -93,25 +90,22 @@ func (t DefaultTeamsProvider) MembersExtended(team string) ([]GithubMember, erro
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
-	var allUsers []*github.User
+	userList := make([]GithubMember, 0)
 	for {
 		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
 		if err != nil {
 			return nil, err
 		}
-		allUsers = append(allUsers, users...)
+		for _, user := range users {
+			if user == nil {
+				continue
+			}
+			userList = append(userList, GithubMember{Login: user.GetLogin(), UID: user.GetID()})
+		}
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
-	}
-
-	userList := make([]GithubMember, 0)
-	for _, user := range allUsers {
-		if user == nil {
-			continue
-		}
-		userList = append(userList, GithubMember{Login: user.GetLogin(), UID: user.GetID()})
 	}
 
 	return userList, nil
@@ -123,30 +117,26 @@ func (t DefaultTeamsProvider) Members(team string) ([]string, error) {
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
 
-	var allUsers []*github.User
+	userList := make([]string, 0)
 	for {
 		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
 		if err != nil {
 			return nil, err
 		}
-		allUsers = append(allUsers, users...)
+		for _, user := range users {
+			if user == nil {
+				continue
+			}
+			login := user.GetLogin()
+			if login == "" {
+				continue
+			}
+			userList = append(userList, login)
+		}
 		if resp.NextPage == 0 {
 			break
 		}
 		opt.Page = resp.NextPage
-	}
-
-	userList := make([]string, 0)
-
-	for _, user := range allUsers {
-		if user == nil {
-			continue
-		}
-		login := user.GetLogin()
-		if login == "" {
-			continue
-		}
-		userList = append(userList, login)
 	}
 
 	return userList, nil
