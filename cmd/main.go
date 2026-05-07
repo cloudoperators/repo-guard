@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	"github.com/cloudoperators/repo-guard/internal/controller"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -65,7 +67,7 @@ func main() {
 		controller.OperatorNamespace = currentNamespace
 	}
 
-	resyncPeriod := time.Duration(15 * time.Minute)
+	resyncPeriod := time.Duration(30 * time.Minute)
 	mgrOpts := ctrl.Options{
 		Scheme: scheme,
 		Cache: cache.Options{
@@ -84,6 +86,27 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.userID", func(rawObj client.Object) []string {
+		link := rawObj.(*repoguardsapv1.GithubAccountLink)
+		if link.Spec.GreenhouseUserID == "" {
+			return nil
+		}
+		return []string{link.Spec.GreenhouseUserID}
+	}); err != nil {
+		setupLog.Error(err, "unable to create index for GithubAccountLink userID")
+		os.Exit(1)
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.githubUserID", func(rawObj client.Object) []string {
+		link := rawObj.(*repoguardsapv1.GithubAccountLink)
+		if link.Spec.GithubUserID == "" {
+			return nil
+		}
+		return []string{link.Spec.GithubUserID}
+	}); err != nil {
+		setupLog.Error(err, "unable to create index for GithubAccountLink githubUserID")
 		os.Exit(1)
 	}
 
