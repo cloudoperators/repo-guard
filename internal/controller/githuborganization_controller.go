@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,7 +29,8 @@ import (
 // GithubOrganizationReconciler reconciles a GithubOrganization object
 type GithubOrganizationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=repo-guard.cloudoperators.dev,resources=githuborganizations,verbs=get;list;watch;create;update;patch;delete
@@ -1106,6 +1108,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubOrganizationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		For(&v1.GithubOrganization{}).
 		Watches(&v1.GithubTeam{}, handler.EnqueueRequestsFromMapFunc(r.githubTeamToGithubOrganizationAsOrganizationOwner)).
 		Watches(&v1.GithubTeamRepository{}, handler.EnqueueRequestsFromMapFunc(r.githubTeamRepositoryToGithubOrganization)).

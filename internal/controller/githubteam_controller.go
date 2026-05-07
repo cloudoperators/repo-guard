@@ -23,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -40,7 +41,8 @@ import (
 // GithubTeamReconciler reconciles a GithubTeam object
 type GithubTeamReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                  *runtime.Scheme
+	MaxConcurrentReconciles int
 }
 
 // +kubebuilder:rbac:groups=greenhouse.sap,resources=teams,verbs=get;list;watch
@@ -1215,6 +1217,7 @@ func (r *GithubTeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		For(&v1.GithubTeam{}, builder.WithPredicates(LabelSelectorPredicate(*metav1LabelSelector))).
 		Watches(&greenhousesapv1alpha1.Team{}, handler.EnqueueRequestsFromMapFunc(r.greenhouseTeamToGithubTeam)).
 		Watches(&v1.GithubAccountLink{}, handler.EnqueueRequestsFromMapFunc(r.githubAccountLinkToGithubTeam)).
