@@ -112,6 +112,8 @@ func (l LDAPClient) Users(ctx context.Context, group string) ([]string, error) {
 				usernames = append(usernames, strings.ToUpper(cn))
 			}
 		}
+		// Clear responseEntry after processing to free memory if response is large
+		responseEntry = nil
 	}
 
 	return usernames, nil
