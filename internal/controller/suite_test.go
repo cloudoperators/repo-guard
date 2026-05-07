@@ -215,6 +215,15 @@ var _ = BeforeSuite(func() {
 	}); err != nil {
 		Expect(err).ToNot(HaveOccurred())
 	}
+	if err := k8sManager.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.github", func(rawObj client.Object) []string {
+		link := rawObj.(*repoguardsapv1.GithubAccountLink)
+		if link.Spec.Github == "" {
+			return nil
+		}
+		return []string{link.Spec.Github}
+	}); err != nil {
+		Expect(err).ToNot(HaveOccurred())
+	}
 
 	Expect((&GithubReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubOrganizationReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
