@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -197,33 +196,7 @@ var _ = BeforeSuite(func() {
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 
-	if err := k8sManager.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.userID", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.GreenhouseUserID == "" {
-			return nil
-		}
-		return []string{strings.ToLower(link.Spec.GreenhouseUserID)}
-	}); err != nil {
-		Expect(err).ToNot(HaveOccurred())
-	}
-	if err := k8sManager.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.githubUserID", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.GithubUserID == "" {
-			return nil
-		}
-		return []string{link.Spec.GithubUserID}
-	}); err != nil {
-		Expect(err).ToNot(HaveOccurred())
-	}
-	if err := k8sManager.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.github", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.Github == "" {
-			return nil
-		}
-		return []string{link.Spec.Github}
-	}); err != nil {
-		Expect(err).ToNot(HaveOccurred())
-	}
+	Expect(SetupFieldIndexes(k8sManager)).To(Succeed())
 
 	Expect((&GithubReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&GithubOrganizationReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())

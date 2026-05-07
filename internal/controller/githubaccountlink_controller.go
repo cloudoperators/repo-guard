@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -264,4 +265,36 @@ func (r *GithubAccountLinkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1.GithubAccountLink{}, builder.WithPredicates(pred)).
 		Named("githubaccountlink").
 		Complete(r)
+}
+
+// SetupFieldIndexes sets up field indexes for the manager.
+func SetupFieldIndexes(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.GithubAccountLink{}, "spec.userID", func(rawObj client.Object) []string {
+		link := rawObj.(*v1.GithubAccountLink)
+		if link.Spec.GreenhouseUserID == "" {
+			return nil
+		}
+		return []string{strings.ToLower(link.Spec.GreenhouseUserID)}
+	}); err != nil {
+		return err
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.GithubAccountLink{}, "spec.githubUserID", func(rawObj client.Object) []string {
+		link := rawObj.(*v1.GithubAccountLink)
+		if link.Spec.GithubUserID == "" {
+			return nil
+		}
+		return []string{link.Spec.GithubUserID}
+	}); err != nil {
+		return err
+	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1.GithubAccountLink{}, "spec.github", func(rawObj client.Object) []string {
+		link := rawObj.(*v1.GithubAccountLink)
+		if link.Spec.Github == "" {
+			return nil
+		}
+		return []string{link.Spec.Github}
+	}); err != nil {
+		return err
+	}
+	return nil
 }

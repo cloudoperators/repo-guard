@@ -4,10 +4,8 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"os"
-	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -28,7 +26,6 @@ import (
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	"github.com/cloudoperators/repo-guard/internal/controller"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -92,34 +89,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.userID", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.GreenhouseUserID == "" {
-			return nil
-		}
-		return []string{strings.ToLower(link.Spec.GreenhouseUserID)}
-	}); err != nil {
-		setupLog.Error(err, "unable to create index for GithubAccountLink userID")
-		os.Exit(1)
-	}
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.githubUserID", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.GithubUserID == "" {
-			return nil
-		}
-		return []string{link.Spec.GithubUserID}
-	}); err != nil {
-		setupLog.Error(err, "unable to create index for GithubAccountLink githubUserID")
-		os.Exit(1)
-	}
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &repoguardsapv1.GithubAccountLink{}, "spec.github", func(rawObj client.Object) []string {
-		link := rawObj.(*repoguardsapv1.GithubAccountLink)
-		if link.Spec.Github == "" {
-			return nil
-		}
-		return []string{link.Spec.Github}
-	}); err != nil {
-		setupLog.Error(err, "unable to create index for GithubAccountLink github")
+	if err := controller.SetupFieldIndexes(mgr); err != nil {
+		setupLog.Error(err, "unable to create index for GithubAccountLink")
 		os.Exit(1)
 	}
 
