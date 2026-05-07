@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	githubAPI "github.com/google/go-github/v84/github"
+	githubAPI "github.com/google/go-github/v85/github"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
