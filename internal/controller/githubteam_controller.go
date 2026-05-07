@@ -1401,31 +1401,22 @@ func extendGreenhouseMembersWithGithubUsernames(ctx context.Context, members []s
 }
 
 func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.GithubMember, githubInstance string, k8sClient client.Client, usersProv github.UsersProvider) ([]v1.Member, error) {
-	l := log.FromContext(ctx)
-
-	// 1) List all GithubAccountLink CRs
-	var linkList v1.GithubAccountLinkList
-	if err := k8sClient.List(ctx, &linkList); err != nil {
-		l.Error(err, "listing GithubAccountLink")
-		return nil, err
-	}
-
-	// 2) Build reverse map: GitHubUserID → GreenhouseUserID
-	revMap := make(map[string]string, len(linkList.Items))
-	for _, link := range linkList.Items {
-		if link.Spec.Github == githubInstance {
-			revMap[link.Spec.GithubUserID] = link.Spec.GreenhouseUserID
-		}
-	}
-
 	// 3) For each GitHub login, resolve to a GreenhouseID
 	var out []v1.Member
 	for _, githubMember := range members {
 		// default fallback: use the login itself
 		greenhouseID := githubMember.Login
 
-		if mapped, ok := revMap[strconv.FormatInt(githubMember.UID, 10)]; ok {
-			greenhouseID = mapped
+		// 1) Try lookup by GithubUserID (index spec.githubUserID)
+		var linkList v1.GithubAccountLinkList
+		uidStr := strconv.FormatInt(githubMember.UID, 10)
+		if err := k8sClient.List(ctx, &linkList, client.MatchingFields{"spec.githubUserID": uidStr}); err == nil {
+			for _, lk := range linkList.Items {
+				if lk.Spec.Github == githubInstance {
+					greenhouseID = lk.Spec.GreenhouseUserID
+					break
+				}
+			}
 		}
 
 		out = append(out, v1.Member{
