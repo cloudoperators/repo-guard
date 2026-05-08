@@ -60,6 +60,8 @@ This document provides context and guidelines for AI agents working on the `repo
 
 ### Commit Guidelines
 - **DCO:** Ensure all commits have signed-off (`git commit -s`).
+- **Style:** Use `type(scope): short description` style (e.g., `feat(controller): add dry-run support`).
+- **Note:** Do NOT add `Co-authored-by` trailers unless explicitly requested.
 
 ## Reconciliation Design Patterns
 
