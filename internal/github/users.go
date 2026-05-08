@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -161,18 +162,9 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 		return false, err
 	}
 
-	for _, e := range q.User.Emails {
+	return slices.ContainsFunc(q.User.Emails, func(e githubv4.String) bool {
 		email := string(e)
-		if email == "" {
-			continue
-		}
 		at := strings.LastIndexByte(email, '@')
-		if at <= 0 || at == len(email)-1 {
-			continue
-		}
-		if strings.EqualFold(email[at+1:], domain) {
-			return true, nil
-		}
-	}
-	return false, nil
+		return at > 0 && at < len(email)-1 && strings.EqualFold(email[at+1:], domain)
+	}), nil
 }

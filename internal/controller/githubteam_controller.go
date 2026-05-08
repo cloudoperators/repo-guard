@@ -503,7 +503,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		l.Info("there are no pending operations, status check started")
 
 		// Check if there is a team in Github, If there is no team in Github -- create it first
-		organizationTeams, err := teamsProvider.List()
+		organizationTeams, err := teamsProvider.List(ctx)
 		if err != nil {
 			l.Error(err, "error during listing organization teams")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -532,7 +532,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		if !organizationTeamFound {
 			l.Info("team is not found in Github side, it will be created")
-			err := teamsProvider.AddTeam(githubTeamName)
+			err := teamsProvider.AddTeam(ctx, githubTeamName)
 			if err != nil {
 				l.Error(err, "error during adding team to Github")
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -557,7 +557,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		// If there is a team -- check for its members in Github
-		membersExtended, err := teamsProvider.MembersExtended(githubTeamName)
+		membersExtended, err := teamsProvider.MembersExtended(ctx, githubTeamName)
 		if err != nil {
 			l.Error(err, "error during getting the members of the team in Github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -1099,7 +1099,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.Operations[i].Timestamp = metav1.Now()
 						statusChanged = true
 					} else {
-						userFound, err := teamsProvider.AddUser(githubTeamName, userOperation.User)
+						userFound, err := teamsProvider.AddUser(ctx, githubTeamName, userOperation.User)
 						if !userFound {
 							l.Info("user not found on GitHub: marking operation as notfound", "user", userOperation.User)
 							newStatus.Operations[i].State = v1.GithubUserOperationStateNotFound
@@ -1132,7 +1132,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						newStatus.Operations[i].Timestamp = metav1.Now()
 						statusChanged = true
 					} else {
-						err := teamsProvider.RemoveUser(githubTeamName, userOperation.User)
+						err := teamsProvider.RemoveUser(ctx, githubTeamName, userOperation.User)
 						if err != nil {
 							l.Error(err, "error during removing user from the team", "user", userOperation.User, "team", githubTeamName)
 							newStatus.Operations[i].State = v1.GithubUserOperationStateFailed
@@ -1173,7 +1173,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			newStatus.TeamStatusTimestamp = metav1.Now()
 			// calculate current members
-			members, err := teamsProvider.MembersExtended(githubTeamName)
+			members, err := teamsProvider.MembersExtended(ctx, githubTeamName)
 			if err != nil {
 				l.Error(err, "error during listing the members of the team in github", "team", githubTeamName)
 				return reconcile.Result{}, err

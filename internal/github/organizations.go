@@ -14,13 +14,13 @@ import (
 )
 
 type OrganizationProvider interface {
-	Owners() ([]string, error)
-	OwnersExtended() ([]GithubMember, error)
-	Members() ([]string, error)
-	ExtendedMembers() ([]*github.User, []*github.User, error)
-	ChangeToOwner(user string) error
-	ChangeToMember(user string) error
-	RemoveFromOrg(user string) error
+	Owners(ctx context.Context) ([]string, error)
+	OwnersExtended(ctx context.Context) ([]GithubMember, error)
+	Members(ctx context.Context) ([]string, error)
+	ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error)
+	ChangeToOwner(ctx context.Context, user string) error
+	ChangeToMember(ctx context.Context, user string) error
+	RemoveFromOrg(ctx context.Context, user string) error
 }
 
 type DefaultOrganizationProvider struct {
@@ -45,7 +45,7 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 	return &DefaultOrganizationProvider{organizationService: *client.Organizations, organization: organization}, nil
 }
 
-func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
+func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) ([]string, error) {
 
 	opt := &github.ListMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -54,7 +54,7 @@ func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
 
 	memberList := make([]string, 0)
 	for {
-		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
+		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func (o *DefaultOrganizationProvider) members(role string) ([]string, error) {
 	return memberList, nil
 }
 
-func (o *DefaultOrganizationProvider) membersExtended(role string) ([]GithubMember, error) {
+func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role string) ([]GithubMember, error) {
 
 	opt := &github.ListMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -86,7 +86,7 @@ func (o *DefaultOrganizationProvider) membersExtended(role string) ([]GithubMemb
 
 	result := make([]GithubMember, 0)
 	for {
-		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, opt)
+		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -105,16 +105,16 @@ func (o *DefaultOrganizationProvider) membersExtended(role string) ([]GithubMemb
 	return result, nil
 }
 
-func (o *DefaultOrganizationProvider) Owners() ([]string, error) {
+func (o *DefaultOrganizationProvider) Owners(ctx context.Context) ([]string, error) {
 
-	return o.members("admin")
+	return o.members(ctx, "admin")
 }
 
-func (o *DefaultOrganizationProvider) OwnersExtended() ([]GithubMember, error) {
-	return o.membersExtended("admin")
+func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]GithubMember, error) {
+	return o.membersExtended(ctx, "admin")
 }
 
-func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*github.User, error) {
+func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error) {
 
 	optMfa := &github.ListMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -123,7 +123,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*gith
 	}
 	mfadisabled := make([]*github.User, 0)
 	for {
-		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optMfa)
+		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optMfa)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -140,7 +140,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*gith
 	}
 	allMembers := make([]*github.User, 0)
 	for {
-		users, resp, err := o.organizationService.ListMembers(context.Background(), o.organization, optAll)
+		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optAll)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -154,17 +154,17 @@ func (o *DefaultOrganizationProvider) ExtendedMembers() ([]*github.User, []*gith
 	return allMembers, mfadisabled, nil
 }
 
-func (o *DefaultOrganizationProvider) Members() ([]string, error) {
+func (o *DefaultOrganizationProvider) Members(ctx context.Context) ([]string, error) {
 
-	return o.members("all")
+	return o.members(ctx, "all")
 }
 
-func (o *DefaultOrganizationProvider) changeRole(user string, role string) error {
+func (o *DefaultOrganizationProvider) changeRole(ctx context.Context, user string, role string) error {
 
 	membership := &github.Membership{}
 	membership.Role = &role
 
-	_, response, err := o.organizationService.EditOrgMembership(context.Background(), user, o.organization, membership)
+	_, response, err := o.organizationService.EditOrgMembership(ctx, user, o.organization, membership)
 	if err != nil {
 		return err
 	}
@@ -175,16 +175,16 @@ func (o *DefaultOrganizationProvider) changeRole(user string, role string) error
 	return nil
 }
 
-func (o *DefaultOrganizationProvider) ChangeToOwner(user string) error {
-	return o.changeRole(user, "admin")
+func (o *DefaultOrganizationProvider) ChangeToOwner(ctx context.Context, user string) error {
+	return o.changeRole(ctx, user, "admin")
 }
 
-func (o *DefaultOrganizationProvider) ChangeToMember(user string) error {
-	return o.changeRole(user, "member")
+func (o *DefaultOrganizationProvider) ChangeToMember(ctx context.Context, user string) error {
+	return o.changeRole(ctx, user, "member")
 }
 
-func (o *DefaultOrganizationProvider) RemoveFromOrg(user string) error {
-	response, err := o.organizationService.RemoveMember(context.Background(), o.organization, user)
+func (o *DefaultOrganizationProvider) RemoveFromOrg(ctx context.Context, user string) error {
+	response, err := o.organizationService.RemoveMember(ctx, o.organization, user)
 	if err != nil {
 		return err
 	}

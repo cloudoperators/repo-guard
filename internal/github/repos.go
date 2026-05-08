@@ -15,14 +15,14 @@ import (
 )
 
 type RepositoryProvider interface {
-	List() ([]string, []string, error)
-	ExtendedList() ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
-	RepositoryTeams(repo string) ([]repoguardsapv1.GithubTeamWithPermission, error)
-	RepositoryTeamAdd(repo, team string, permission repoguardsapv1.GithubTeamPermission) error
-	RepositoryTeamRemove(repo, team string) error
-	RepositoryCollobarators(repo string) ([]string, error)
-	RepositoryCollobaratorRemove(repo string, user string) (bool, error)
-	IsPrivate(repo string) (bool, error)
+	List(ctx context.Context) ([]string, []string, error)
+	ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
+	RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error)
+	RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error
+	RepositoryTeamRemove(ctx context.Context, repo, team string) error
+	RepositoryCollobarators(ctx context.Context, repo string) ([]string, error)
+	RepositoryCollobaratorRemove(ctx context.Context, repo string, user string) (bool, error)
+	IsPrivate(ctx context.Context, repo string) (bool, error)
 }
 
 type DefaultRepositoryProvider struct {
@@ -52,18 +52,18 @@ func NewRepositoryProvider(cc githubapp.ClientCreator, organization string, inst
 	return &DefaultRepositoryProvider{repositoryService: *client.Repositories, teamsService: *client.Teams, organization: organization}, nil
 }
 
-func (t *DefaultRepositoryProvider) ExtendedList() ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
+func (t *DefaultRepositoryProvider) ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
 	publicRepos := make([]repoguardsapv1.GithubRepository, 0)
 	privateRepos := make([]repoguardsapv1.GithubRepository, 0)
 
-	publicRepoList, privateRepoList, err := t.List()
+	publicRepoList, privateRepoList, err := t.List(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	for _, repo := range publicRepoList {
 
-		teams, err := t.RepositoryTeams(repo)
+		teams, err := t.RepositoryTeams(ctx, repo)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -73,7 +73,7 @@ func (t *DefaultRepositoryProvider) ExtendedList() ([]repoguardsapv1.GithubRepos
 
 	for _, repo := range privateRepoList {
 
-		teams, err := t.RepositoryTeams(repo)
+		teams, err := t.RepositoryTeams(ctx, repo)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -85,7 +85,7 @@ func (t *DefaultRepositoryProvider) ExtendedList() ([]repoguardsapv1.GithubRepos
 
 }
 
-func (t *DefaultRepositoryProvider) List() ([]string, []string, error) {
+func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []string, error) {
 
 	opt := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -93,7 +93,7 @@ func (t *DefaultRepositoryProvider) List() ([]string, []string, error) {
 
 	var allRepos []*github.Repository
 	for {
-		repos, resp, err := t.repositoryService.ListByOrg(context.Background(), t.organization, opt)
+		repos, resp, err := t.repositoryService.ListByOrg(ctx, t.organization, opt)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -129,13 +129,13 @@ type CollobaratorWithPermission struct {
 	Permission   string
 }
 
-func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]repoguardsapv1.GithubTeamWithPermission, error) {
+func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error) {
 
 	opt := &github.ListOptions{PerPage: 100}
 
 	var allTeams []*github.Team
 	for {
-		teams, resp, err := t.repositoryService.ListTeams(context.Background(), t.organization, repo, opt)
+		teams, resp, err := t.repositoryService.ListTeams(ctx, t.organization, repo, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -164,10 +164,10 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(repo string) ([]repoguardsap
 
 	return teamWithPermissions, nil
 }
-func (t *DefaultRepositoryProvider) RepositoryTeamAdd(repo, team string, permission repoguardsapv1.GithubTeamPermission) error {
+func (t *DefaultRepositoryProvider) RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error {
 
 	opts := github.TeamAddTeamRepoOptions{Permission: string(permission)}
-	response, err := t.teamsService.AddTeamRepoBySlug(context.Background(), t.organization, team, t.organization, repo, &opts)
+	response, err := t.teamsService.AddTeamRepoBySlug(ctx, t.organization, team, t.organization, repo, &opts)
 	if err != nil {
 		return err
 	}
@@ -177,9 +177,9 @@ func (t *DefaultRepositoryProvider) RepositoryTeamAdd(repo, team string, permiss
 	return nil
 }
 
-func (t *DefaultRepositoryProvider) RepositoryCollobaratorRemove(repo string, user string) (bool, error) {
+func (t *DefaultRepositoryProvider) RepositoryCollobaratorRemove(ctx context.Context, repo string, user string) (bool, error) {
 
-	response, err := t.repositoryService.RemoveCollaborator(context.Background(), t.organization, repo, user)
+	response, err := t.repositoryService.RemoveCollaborator(ctx, t.organization, repo, user)
 	if err != nil {
 		if response != nil {
 			if response.StatusCode == 404 {
@@ -196,9 +196,9 @@ func (t *DefaultRepositoryProvider) RepositoryCollobaratorRemove(repo string, us
 
 }
 
-func (t *DefaultRepositoryProvider) RepositoryTeamRemove(repo, team string) error {
+func (t *DefaultRepositoryProvider) RepositoryTeamRemove(ctx context.Context, repo, team string) error {
 
-	response, err := t.teamsService.RemoveTeamRepoBySlug(context.Background(), t.organization, team, t.organization, repo)
+	response, err := t.teamsService.RemoveTeamRepoBySlug(ctx, t.organization, team, t.organization, repo)
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func (t *DefaultRepositoryProvider) RepositoryTeamRemove(repo, team string) erro
 	return nil
 }
 
-func (t *DefaultRepositoryProvider) RepositoryCollobarators(repo string) ([]string, error) {
+func (t *DefaultRepositoryProvider) RepositoryCollobarators(ctx context.Context, repo string) ([]string, error) {
 
 	opt := &github.ListCollaboratorsOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -216,7 +216,7 @@ func (t *DefaultRepositoryProvider) RepositoryCollobarators(repo string) ([]stri
 
 	var allUsers []*github.User
 	for {
-		users, resp, err := t.repositoryService.ListCollaborators(context.Background(), t.organization, repo, opt)
+		users, resp, err := t.repositoryService.ListCollaborators(ctx, t.organization, repo, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -243,9 +243,9 @@ func (t *DefaultRepositoryProvider) RepositoryCollobarators(repo string) ([]stri
 	return collobarators, nil
 }
 
-func (t *DefaultRepositoryProvider) IsPrivate(repo string) (bool, error) {
+func (t *DefaultRepositoryProvider) IsPrivate(ctx context.Context, repo string) (bool, error) {
 
-	r, response, err := t.repositoryService.Get(context.Background(), t.organization, repo)
+	r, response, err := t.repositoryService.Get(ctx, t.organization, repo)
 
 	if err != nil {
 		return false, err

@@ -16,13 +16,13 @@ import (
 )
 
 type TeamsProvider interface {
-	List() ([]string, error)
-	Members(team string) ([]string, error)
-	MembersExtended(team string) ([]GithubMember, error)
-	AddTeam(team string) error
-	RemoveTeam(team string) error
-	AddUser(team, user string) (bool, error)
-	RemoveUser(team, user string) error
+	List(ctx context.Context) ([]string, error)
+	Members(ctx context.Context, team string) ([]string, error)
+	MembersExtended(ctx context.Context, team string) ([]GithubMember, error)
+	AddTeam(ctx context.Context, team string) error
+	RemoveTeam(ctx context.Context, team string) error
+	AddUser(ctx context.Context, team, user string) (bool, error)
+	RemoveUser(ctx context.Context, team, user string) error
 }
 
 type GithubMember struct {
@@ -52,7 +52,7 @@ func NewTeamsProvider(cc githubapp.ClientCreator, organization string, installat
 	return &DefaultTeamsProvider{service: *client.Teams, organization: organization}, nil
 }
 
-func (t *DefaultTeamsProvider) List() ([]string, error) {
+func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 
 	opt := &github.ListOptions{
 		PerPage: 100,
@@ -60,7 +60,7 @@ func (t *DefaultTeamsProvider) List() ([]string, error) {
 
 	teamList := make([]string, 0)
 	for {
-		teams, response, err := t.service.ListTeams(context.Background(), t.organization, opt)
+		teams, response, err := t.service.ListTeams(ctx, t.organization, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +84,7 @@ func (t *DefaultTeamsProvider) List() ([]string, error) {
 
 }
 
-func (t DefaultTeamsProvider) MembersExtended(team string) ([]GithubMember, error) {
+func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) ([]GithubMember, error) {
 
 	opt := &github.TeamListTeamMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -92,7 +92,7 @@ func (t DefaultTeamsProvider) MembersExtended(team string) ([]GithubMember, erro
 
 	userList := make([]GithubMember, 0)
 	for {
-		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
+		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, slug.Make(team), opt)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func (t DefaultTeamsProvider) MembersExtended(team string) ([]GithubMember, erro
 	return userList, nil
 }
 
-func (t DefaultTeamsProvider) Members(team string) ([]string, error) {
+func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]string, error) {
 
 	opt := &github.TeamListTeamMembersOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -119,7 +119,7 @@ func (t DefaultTeamsProvider) Members(team string) ([]string, error) {
 
 	userList := make([]string, 0)
 	for {
-		users, resp, err := t.service.ListTeamMembersBySlug(context.Background(), t.organization, slug.Make(team), opt)
+		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, slug.Make(team), opt)
 		if err != nil {
 			return nil, err
 		}
@@ -142,12 +142,12 @@ func (t DefaultTeamsProvider) Members(team string) ([]string, error) {
 	return userList, nil
 }
 
-func (t DefaultTeamsProvider) AddTeam(team string) error {
+func (t DefaultTeamsProvider) AddTeam(ctx context.Context, team string) error {
 
 	privacyLevel := "closed"
 	description := "membership to this team is managed by github-guard"
 
-	_, response, err := t.service.CreateTeam(context.Background(), t.organization, github.NewTeam{Name: team, Privacy: &privacyLevel, Description: &description})
+	_, response, err := t.service.CreateTeam(ctx, t.organization, github.NewTeam{Name: team, Privacy: &privacyLevel, Description: &description})
 	if err != nil {
 		// Treat 422 "Name must be unique for this org" as success (team already exists)
 		if response != nil && response.StatusCode == 422 {
@@ -162,9 +162,9 @@ func (t DefaultTeamsProvider) AddTeam(team string) error {
 
 	return nil
 }
-func (t DefaultTeamsProvider) RemoveTeam(team string) error {
+func (t DefaultTeamsProvider) RemoveTeam(ctx context.Context, team string) error {
 
-	response, err := t.service.DeleteTeamBySlug(context.Background(), t.organization, slug.Make(team))
+	response, err := t.service.DeleteTeamBySlug(ctx, t.organization, slug.Make(team))
 	if err != nil {
 		if response != nil && response.StatusCode == 404 {
 			return nil
@@ -179,9 +179,9 @@ func (t DefaultTeamsProvider) RemoveTeam(team string) error {
 	return nil
 }
 
-func (t DefaultTeamsProvider) AddUser(team, user string) (bool, error) {
+func (t DefaultTeamsProvider) AddUser(ctx context.Context, team, user string) (bool, error) {
 
-	_, response, err := t.service.AddTeamMembershipBySlug(context.Background(), t.organization, slug.Make(team), user, nil)
+	_, response, err := t.service.AddTeamMembershipBySlug(ctx, t.organization, slug.Make(team), user, nil)
 	if err != nil {
 		if response != nil {
 			if response.StatusCode == 404 {
@@ -197,9 +197,9 @@ func (t DefaultTeamsProvider) AddUser(team, user string) (bool, error) {
 	return true, nil
 
 }
-func (t DefaultTeamsProvider) RemoveUser(team, user string) error {
+func (t DefaultTeamsProvider) RemoveUser(ctx context.Context, team, user string) error {
 
-	response, err := t.service.RemoveTeamMembershipBySlug(context.Background(), t.organization, slug.Make(team), user)
+	response, err := t.service.RemoveTeamMembershipBySlug(ctx, t.organization, slug.Make(team), user)
 	if err != nil {
 		if response != nil && response.StatusCode == 404 {
 			return nil

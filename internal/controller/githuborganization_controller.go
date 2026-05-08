@@ -325,7 +325,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		l.Info("there are no pending operations, status check started", "current-status", githubOrganization.Status.OrganizationStatus)
 
-		ownerList, err := organizationsProvider.OwnersExtended()
+		ownerList, err := organizationsProvider.OwnersExtended(ctx)
 		if err != nil {
 			l.Error(err, "error in getting organization owners from github")
 			// Check for GitHub rate limit and requeue accordingly
@@ -372,7 +372,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, nil
 		}
 
-		teamsList, err := teamsProvider.List()
+		teamsList, err := teamsProvider.List(ctx)
 		if err != nil {
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -418,7 +418,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, nil
 		}
 
-		publicRepos, privateRepos, err := reposProvider.ExtendedList()
+		publicRepos, privateRepos, err := reposProvider.ExtendedList(ctx)
 		if err != nil {
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -875,7 +875,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						failed = false
 
 					} else {
-						err := organizationsProvider.ChangeToOwner(organizationOwnerOperation.User)
+						err := organizationsProvider.ChangeToOwner(ctx, organizationOwnerOperation.User)
 						if err != nil {
 							l.Error(err, "error during adding organization owner", "organizationOwner", organizationOwnerOperation.User)
 							newStatus.Operations.OrganizationOwnerOperations[i].State = v1.GithubUserOperationStateFailed
@@ -903,7 +903,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						statusChanged = true
 						failed = false
 					} else {
-						err := organizationsProvider.ChangeToMember(organizationOwnerOperation.User)
+						err := organizationsProvider.ChangeToMember(ctx, organizationOwnerOperation.User)
 						if err != nil {
 							// Special handling: cannot demote the last admin
 							if strings.Contains(strings.ToLower(err.Error()), "last admin") ||
@@ -950,7 +950,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						failed = false
 
 					} else {
-						err := teamsProvider.AddTeam(githubTeamOperation.Team)
+						err := teamsProvider.AddTeam(ctx, githubTeamOperation.Team)
 						if err != nil {
 							l.Error(err, "error during adding team", "team", githubTeamOperation.Team)
 							newStatus.Operations.GithubTeamOperations[i].State = v1.GithubTeamStateFailed
@@ -977,7 +977,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						statusChanged = true
 						failed = false
 					} else {
-						err := teamsProvider.RemoveTeam(githubTeamOperation.Team)
+						err := teamsProvider.RemoveTeam(ctx, githubTeamOperation.Team)
 						if err != nil {
 							l.Error(err, "error during removing team", "team", githubTeamOperation.Team)
 							newStatus.Operations.GithubTeamOperations[i].State = v1.GithubTeamOperationStateFailed
@@ -1014,7 +1014,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						failed = false
 
 					} else {
-						err := reposProvider.RepositoryTeamAdd(repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
+						err := reposProvider.RepositoryTeamAdd(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
 						if err != nil {
 							l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
@@ -1041,7 +1041,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						statusChanged = true
 						failed = false
 					} else {
-						err := reposProvider.RepositoryTeamRemove(repositoryTeamOperation.Repo, repositoryTeamOperation.Team)
+						err := reposProvider.RepositoryTeamRemove(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team)
 						if err != nil {
 							l.Error(err, "error during removing repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
