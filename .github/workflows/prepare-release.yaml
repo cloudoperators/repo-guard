@@ -41,7 +41,7 @@ jobs:
           git push origin "$BRANCH_NAME"
           
           gh pr create \
-            --title "Prepare release $NEW_VERSION" \
+            --title "chore: prepare release $NEW_VERSION" \
             --body "Automated version bump to $NEW_VERSION for release." \
             --head "$BRANCH_NAME" \
             --base main
