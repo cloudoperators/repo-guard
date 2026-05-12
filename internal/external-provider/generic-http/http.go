@@ -7,11 +7,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
-	"github.com/cloudoperators/repo-guard/internal/metrics"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	externalprovider "github.com/cloudoperators/repo-guard/internal/external-provider"
+	"github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type HTTPConfig struct {
@@ -336,15 +338,21 @@ func (c *HTTPClient) getOAuthToken(ctx context.Context) (string, error) {
 		return c.accessToken, nil
 	}
 
-	data := strings.NewReader(fmt.Sprintf("grant_type=password&username=%s&password=%s&client_id=%s&client_secret=%s&scope=read",
-		c.Username, c.Password, c.ClientID, c.ClientSecret))
+	form := url.Values{}
+	form.Set("grant_type", "password")
+	form.Set("username", c.Username)
+	form.Set("password", c.Password)
+	form.Set("client_id", c.ClientID)
+	form.Set("client_secret", c.ClientSecret)
+	form.Set("scope", "read")
+
 	baseURL := c.Endpoint
 	if idx := strings.Index(baseURL, "/api/"); idx != -1 {
 		baseURL = baseURL[:idx]
 	}
 	tokenURL := baseURL + "/oauth/token"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, data)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
