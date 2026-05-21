@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gosimple/slug"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -406,11 +407,15 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 		}
 
 		// ensure that default teams are assigned
+		// configTeamSlug normalises spec team names (e.g. "GHAS admin - Foo") to the GitHub
+		// slug format (e.g. "ghas-admin-foo") so they can be compared against slugs returned
+		// by the GitHub Repositories.ListTeams API.
 		for _, configTeam := range configExtendedWithExceptions {
+			configTeamSlug := slug.Make(configTeam.Team)
 			configTeamFound := false
 
 			for _, team := range repo.Teams {
-				if team.Team == configTeam.Team {
+				if team.Team == configTeamSlug {
 					configTeamFound = true
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
@@ -438,7 +443,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						// add with the new permission
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
+							if strings.EqualFold(op.Team, configTeamSlug) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
 								repoTeamOperationAddFound = true
 								break
 							}
@@ -447,7 +452,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						if !repoTeamOperationAddFound {
 							op := GithubRepoTeamOperation{
 								Operation:  GithubRepoTeamOperationTypeAdd,
-								Team:       configTeam.Team,
+								Team:       configTeamSlug,
 								Repo:       repo.Name,
 								Permission: configTeam.Permission,
 								State:      GithubRepoTeamOperationStatePending,
@@ -464,7 +469,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 				// add with the new permission
 				repoTeamOperationAddFound := false
 				for _, op := range operations {
-					if strings.EqualFold(op.Team, configTeam.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
+					if strings.EqualFold(op.Team, configTeamSlug) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
 						repoTeamOperationAddFound = true
 						break
 					}
@@ -473,7 +478,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 				if !repoTeamOperationAddFound {
 					op := GithubRepoTeamOperation{
 						Operation:  GithubRepoTeamOperationTypeAdd,
-						Team:       configTeam.Team,
+						Team:       configTeamSlug,
 						Repo:       repo.Name,
 						Permission: configTeam.Permission,
 						State:      GithubRepoTeamOperationStatePending,
@@ -488,7 +493,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 		for _, team := range repo.Teams {
 			repoTeamFound := false
 			for _, configTeam := range configExtendedWithExceptions {
-				if team.Team == configTeam.Team {
+				if team.Team == slug.Make(configTeam.Team) {
 					repoTeamFound = true
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
@@ -525,7 +530,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						if !repoTeamOperationAddFound {
 							op := GithubRepoTeamOperation{
 								Operation:  GithubRepoTeamOperationTypeAdd,
-								Team:       configTeam.Team,
+								Team:       team.Team,
 								Repo:       repo.Name,
 								Permission: configTeam.Permission,
 								State:      GithubRepoTeamOperationStatePending,
