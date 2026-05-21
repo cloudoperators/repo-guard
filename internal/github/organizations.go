@@ -111,7 +111,49 @@ func (o *DefaultOrganizationProvider) Owners(ctx context.Context) ([]string, err
 }
 
 func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]GithubMember, error) {
-	return o.membersExtended(ctx, "admin")
+	active, err := o.membersExtended(ctx, "admin")
+	if err != nil {
+		return nil, err
+	}
+	pending, err := o.pendingAdminMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return append(active, pending...), nil
+}
+
+// pendingAdminMembers returns org members who have a pending invitation with the admin role.
+// ListMembers only returns active members, so without this, users whose invite is still pending
+// are invisible to OwnersExtended and get re-invited on every reconcile.
+func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) ([]GithubMember, error) {
+	opt := &github.ListOptions{PerPage: 100}
+
+	result := make([]GithubMember, 0)
+	for {
+		invitations, resp, err := o.organizationService.ListPendingOrgInvitations(ctx, o.organization, opt)
+		if err != nil {
+			return nil, err
+		}
+		for _, inv := range invitations {
+			if inv == nil {
+				continue
+			}
+			if inv.GetRole() != "admin" {
+				continue
+			}
+			login := inv.GetLogin()
+			if login == "" {
+				continue
+			}
+			result = append(result, GithubMember{Login: login, UID: inv.GetID()})
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+
+	return result, nil
 }
 
 func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error) {
