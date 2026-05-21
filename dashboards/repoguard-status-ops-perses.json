@@ -222,7 +222,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (operation) (repo_guard_githubteam_operations{state=\"complete\", organization=~\"$org\", team=~\"$team\"}) + sum by (operation) (repo_guard_githuborganization_operations{scope=\"owners\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
+                    "query": "sum by (operation) (increase(repo_guard_githubteam_operations{state=\"complete\", organization=~\"$org\", team=~\"$team\"}[5m])) + sum by (operation) (increase(repo_guard_githuborganization_operations{scope=\"owners\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
                     "seriesNameFormat": "Member {{operation}}"
                   }
                 }
@@ -399,7 +399,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (scope, operation) (repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"})",
+                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
                     "seriesNameFormat": "{{scope}} {{operation}}"
                   }
                 }
