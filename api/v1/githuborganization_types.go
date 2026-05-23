@@ -316,10 +316,11 @@ func (g GithubOrganization) TeamChangeCalculator(teamsFromKubernetes []string) (
 		if !kubernetesTeamFound {
 			// action: add the owner to github
 
-			// check if there is a waiting task
+			// check if there is a waiting or already-completed task
+			// A completed add operation means the team was already successfully created; do not re-queue.
 			teamOperationFound := false
 			for _, teamOpeation := range newStatus.Operations.GithubTeamOperations {
-				if strings.EqualFold(teamOpeation.Team, kubernetesTeam) && teamOpeation.Operation == GithubTeamOperationTypeAdd && teamOpeation.State != GithubTeamOperationStateComplete {
+				if strings.EqualFold(teamOpeation.Team, kubernetesTeam) && teamOpeation.Operation == GithubTeamOperationTypeAdd {
 					teamOperationFound = true
 					break
 				}
@@ -353,10 +354,11 @@ func (g GithubOrganization) TeamChangeCalculator(teamsFromKubernetes []string) (
 		if !kubernetesTeamFound {
 			// action: remove the team from github
 
-			// check if there is a waiting task
+			// check if there is a waiting or already-completed task
+			// A completed remove operation means the team was already successfully deleted; do not re-queue.
 			teamOperationFound := false
 			for _, teamOpeation := range newStatus.Operations.GithubTeamOperations {
-				if strings.EqualFold(teamOpeation.Team, githubTeam) && teamOpeation.Operation == GithubTeamOperationTypeRemove && teamOpeation.State != GithubTeamOperationStateComplete {
+				if strings.EqualFold(teamOpeation.Team, githubTeam) && teamOpeation.Operation == GithubTeamOperationTypeRemove {
 					teamOperationFound = true
 					break
 				}
@@ -415,10 +417,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
-						// check if there is a waiting task
+						// check if there is a waiting or already-completed task
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove && op.State != GithubTeamOperationStateComplete {
+							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 								repoTeamOperationRemoveFound = true
 								break
 							}
@@ -438,7 +440,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						// add with the new permission
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
+							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
@@ -464,7 +466,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 				// add with the new permission
 				repoTeamOperationAddFound := false
 				for _, op := range operations {
-					if strings.EqualFold(op.Team, configTeam.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
+					if strings.EqualFold(op.Team, configTeam.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 						repoTeamOperationAddFound = true
 						break
 					}
@@ -493,10 +495,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
-						// check if there is a waiting task
+						// check if there is a waiting or already-completed task
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove && op.State != GithubTeamOperationStateComplete {
+							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 								repoTeamOperationRemoveFound = true
 								break
 							}
@@ -516,7 +518,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						// add with the new permission
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd && op.State != GithubTeamOperationStateComplete {
+							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
@@ -539,10 +541,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 			}
 
 			if !repoTeamFound {
-				// check if there is a waiting task
+				// check if there is a waiting or already-completed task
 				repoTeamOperationRemoveFound := false
 				for _, op := range operations {
-					if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove && op.State != GithubTeamOperationStateComplete {
+					if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 						repoTeamOperationRemoveFound = true
 						break
 					}
