@@ -122,7 +122,7 @@ func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]Git
 	return append(active, pending...), nil
 }
 
-// pendingAdminMembers returns org members who have a pending invitation with the admin role.
+// pendingAdminMembers returns users with pending admin invitations to the org.
 // ListMembers only returns active members, so without this, users whose invite is still pending
 // are invisible to OwnersExtended and get re-invited on every reconcile.
 func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) ([]GithubMember, error) {

@@ -226,11 +226,11 @@ func (g GithubOrganization) OwnerChangeCalculator(ownersFromKubernetes []Member)
 		if !githubOwnerFound {
 			// action: add the owner to github
 
-			// check if there is a waiting or already-completed task
-			// A completed add operation means the user was already successfully added; do not re-queue.
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing add operation suppresses re-queuing, regardless of state.
 			ownerOperationFound := false
-			for _, ownerOpeation := range newStatus.Operations.OrganizationOwnerOperations {
-				if strings.EqualFold(ownerOpeation.User, kubernetesOwner.GithubUsername) && ownerOpeation.Operation == GithubUserOperationTypeAdd {
+			for _, ownerOperation := range newStatus.Operations.OrganizationOwnerOperations {
+				if strings.EqualFold(ownerOperation.User, kubernetesOwner.GithubUsername) && ownerOperation.Operation == GithubUserOperationTypeAdd {
 					ownerOperationFound = true
 					break
 				}
@@ -265,11 +265,11 @@ func (g GithubOrganization) OwnerChangeCalculator(ownersFromKubernetes []Member)
 		if !kubernetesOwnerFound {
 			// action: remove the owner from github
 
-			// check if there is a waiting or already-completed task
-			// A completed remove operation means the user was already successfully removed; do not re-queue.
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing remove operation suppresses re-queuing, regardless of state.
 			ownerOperationFound := false
-			for _, ownerOpeation := range newStatus.Operations.OrganizationOwnerOperations {
-				if strings.EqualFold(ownerOpeation.User, githubOwner.GithubUsername) && ownerOpeation.Operation == GithubUserOperationTypeRemove {
+			for _, ownerOperation := range newStatus.Operations.OrganizationOwnerOperations {
+				if strings.EqualFold(ownerOperation.User, githubOwner.GithubUsername) && ownerOperation.Operation == GithubUserOperationTypeRemove {
 					ownerOperationFound = true
 					break
 				}
