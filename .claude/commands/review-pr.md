@@ -26,7 +26,7 @@ Review an open pull request, assess every comment for validity, implement valid 
    - Commit with a DCO sign-off (`git commit -s`) following the `type(scope): description` style from `AGENTS.md`.
    - Push to the PR branch.
 
-5. **Reply to stale or invalid comments** — for comments that should not be acted on, compose a short, factual reply explaining why and (if the platform supports it) resolve the thread. Get user approval before posting.
+5. **Reply to every comment** — after each fix is pushed, post a reply to the original thread referencing the commit. For stale or invalid comments, post a factual explanation of why no code change was made.
 
 ## Steps in detail
 
@@ -72,15 +72,27 @@ git commit -s -m "fix(scope): <description>"
 git push origin <branch>
 ```
 
-### 5 — Reply to non-actionable comments
+### 5 — Reply to every comment
 
-Post a concise reply via the GitHub API:
+For **valid comments** (after the fix is pushed), reply referencing the commit SHA:
 
 ```bash
-gh api repos/cloudoperators/repo-guard/pulls/comments/<comment-id>/replies \
+gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
   --method POST \
-  --field body="<reply text>"
+  --field in_reply_to=<comment-id> \
+  --field body="Fixed in commit <sha>. <one-sentence summary of what changed.>"
 ```
+
+For **stale or invalid comments**, reply explaining why no code change was made:
+
+```bash
+gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
+  --method POST \
+  --field in_reply_to=<comment-id> \
+  --field body="<factual explanation of why this is not actioned>"
+```
+
+Note: use `in_reply_to` (not a `/replies` sub-resource — that endpoint does not exist for PR review comments).
 
 ## Conventions (from AGENTS.md)
 
@@ -100,8 +112,10 @@ Agent: Fetches comments from PR #113.
                  Comment 2 (Valid) — add unit tests ...
                  Comment 3 (Stale) — wrong constant reference, but the line no longer exists ...
        Asks for approval.
-User:  Implement the valid ones, reply to the stale one.
+User:  Implement the valid ones, reply to all of them.
 Agent: Edits api/v1/githuborganization_types.go, adds test file,
-       runs make controller-test, commits, pushes.
-       Posts reply to Comment 3 explaining it is stale.
+       runs make controller-test, commits (167822c), pushes.
+       Posts reply to Comment 1: "Fixed in commit 167822c. All six dedup loops now..."
+       Posts reply to Comment 2: "Fixed in commit 167822c. Added TestRepoChangeCalculator..."
+       Posts reply to Comment 3: "This line no longer exists in the diff..."
 ```
