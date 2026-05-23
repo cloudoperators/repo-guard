@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gosimple/slug"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -409,18 +410,20 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 
 		// ensure that default teams are assigned
 		for _, configTeam := range configExtendedWithExceptions {
+			configTeamSlug := slug.Make(configTeam.Team)
 			configTeamFound := false
 
 			for _, team := range repo.Teams {
-				if team.Team == configTeam.Team {
+				if team.Team == configTeamSlug {
 					configTeamFound = true
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
 						// check if there is a waiting or already-completed task
+						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
+							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 								repoTeamOperationRemoveFound = true
 								break
 							}
@@ -438,9 +441,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						}
 
 						// add with the new permission
+						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
+							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
@@ -449,7 +453,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						if !repoTeamOperationAddFound {
 							op := GithubRepoTeamOperation{
 								Operation:  GithubRepoTeamOperationTypeAdd,
-								Team:       configTeam.Team,
+								Team:       configTeamSlug,
 								Repo:       repo.Name,
 								Permission: configTeam.Permission,
 								State:      GithubRepoTeamOperationStatePending,
@@ -464,9 +468,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 
 			if !configTeamFound {
 				// add with the new permission
+				// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 				repoTeamOperationAddFound := false
 				for _, op := range operations {
-					if strings.EqualFold(op.Team, configTeam.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
+					if strings.EqualFold(slug.Make(op.Team), configTeamSlug) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 						repoTeamOperationAddFound = true
 						break
 					}
@@ -475,7 +480,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 				if !repoTeamOperationAddFound {
 					op := GithubRepoTeamOperation{
 						Operation:  GithubRepoTeamOperationTypeAdd,
-						Team:       configTeam.Team,
+						Team:       configTeamSlug,
 						Repo:       repo.Name,
 						Permission: configTeam.Permission,
 						State:      GithubRepoTeamOperationStatePending,
@@ -490,15 +495,17 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 		for _, team := range repo.Teams {
 			repoTeamFound := false
 			for _, configTeam := range configExtendedWithExceptions {
-				if team.Team == configTeam.Team {
+				configTeamSlug := slug.Make(configTeam.Team)
+				if team.Team == configTeamSlug {
 					repoTeamFound = true
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
 						// check if there is a waiting or already-completed task
+						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
+							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 								repoTeamOperationRemoveFound = true
 								break
 							}
@@ -516,9 +523,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						}
 
 						// add with the new permission
+						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
+							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
@@ -527,7 +535,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						if !repoTeamOperationAddFound {
 							op := GithubRepoTeamOperation{
 								Operation:  GithubRepoTeamOperationTypeAdd,
-								Team:       configTeam.Team,
+								Team:       configTeamSlug,
 								Repo:       repo.Name,
 								Permission: configTeam.Permission,
 								State:      GithubRepoTeamOperationStatePending,
@@ -542,9 +550,10 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 
 			if !repoTeamFound {
 				// check if there is a waiting or already-completed task
+				// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 				repoTeamOperationRemoveFound := false
 				for _, op := range operations {
-					if strings.EqualFold(op.Team, team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
+					if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeRemove {
 						repoTeamOperationRemoveFound = true
 						break
 					}
