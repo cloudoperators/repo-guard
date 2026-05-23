@@ -151,15 +151,15 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 		if t == nil {
 			continue
 		}
-		name := t.GetName()
-		if name == "" {
+		slug := t.GetSlug()
+		if slug == "" {
 			continue
 		}
 		perm := ""
 		if t.Permission != nil {
 			perm = *t.Permission
 		}
-		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: name, Permission: repoguardsapv1.GithubTeamPermission(perm)})
+		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: slug, Permission: repoguardsapv1.GithubTeamPermission(perm)})
 	}
 
 	return teamWithPermissions, nil

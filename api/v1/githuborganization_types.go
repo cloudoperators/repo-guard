@@ -409,6 +409,9 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 		}
 
 		// ensure that default teams are assigned
+		// configTeamSlug normalises spec team names (e.g. "GHAS admin - Foo") to the GitHub
+		// slug format (e.g. "ghas-admin-foo") so they can be compared against slugs returned
+		// by the GitHub Repositories.ListTeams API.
 		for _, configTeam := range configExtendedWithExceptions {
 			configTeamSlug := slug.Make(configTeam.Team)
 			configTeamFound := false
@@ -444,7 +447,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
+							if strings.EqualFold(slug.Make(op.Team), configTeamSlug) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
