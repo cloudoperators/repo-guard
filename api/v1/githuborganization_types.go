@@ -227,10 +227,11 @@ func (g GithubOrganization) OwnerChangeCalculator(ownersFromKubernetes []Member)
 		if !githubOwnerFound {
 			// action: add the owner to github
 
-			// check if there is a waiting task
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing add operation suppresses re-queuing, regardless of state.
 			ownerOperationFound := false
-			for _, ownerOpeation := range newStatus.Operations.OrganizationOwnerOperations {
-				if strings.EqualFold(ownerOpeation.User, kubernetesOwner.GithubUsername) && ownerOpeation.Operation == GithubUserOperationTypeAdd && ownerOpeation.State != GithubUserOperationStateComplete {
+			for _, ownerOperation := range newStatus.Operations.OrganizationOwnerOperations {
+				if strings.EqualFold(ownerOperation.User, kubernetesOwner.GithubUsername) && ownerOperation.Operation == GithubUserOperationTypeAdd {
 					ownerOperationFound = true
 					break
 				}
@@ -265,10 +266,11 @@ func (g GithubOrganization) OwnerChangeCalculator(ownersFromKubernetes []Member)
 		if !kubernetesOwnerFound {
 			// action: remove the owner from github
 
-			// check if there is a waiting task
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing remove operation suppresses re-queuing, regardless of state.
 			ownerOperationFound := false
-			for _, ownerOpeation := range newStatus.Operations.OrganizationOwnerOperations {
-				if strings.EqualFold(ownerOpeation.User, githubOwner.GithubUsername) && ownerOpeation.Operation == GithubUserOperationTypeRemove && ownerOpeation.State != GithubUserOperationStateComplete {
+			for _, ownerOperation := range newStatus.Operations.OrganizationOwnerOperations {
+				if strings.EqualFold(ownerOperation.User, githubOwner.GithubUsername) && ownerOperation.Operation == GithubUserOperationTypeRemove {
 					ownerOperationFound = true
 					break
 				}
@@ -409,6 +411,9 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 		}
 
 		// ensure that default teams are assigned
+		// configTeamSlug normalises spec team names (e.g. "GHAS admin - Foo") to the GitHub
+		// slug format (e.g. "ghas-admin-foo") so they can be compared against slugs returned
+		// by the GitHub Repositories.ListTeams API.
 		for _, configTeam := range configExtendedWithExceptions {
 			configTeamSlug := slug.Make(configTeam.Team)
 			configTeamFound := false
@@ -444,7 +449,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationAddFound := false
 						for _, op := range operations {
-							if strings.EqualFold(slug.Make(op.Team), team.Team) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
+							if strings.EqualFold(slug.Make(op.Team), configTeamSlug) && repo.Name == op.Repo && op.Operation == GithubRepoTeamOperationTypeAdd {
 								repoTeamOperationAddFound = true
 								break
 							}
