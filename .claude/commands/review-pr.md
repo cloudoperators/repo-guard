@@ -1,6 +1,6 @@
 # review-pr
 
-Review an open pull request, assess every comment for validity, implement valid fixes (with approval), and reply to invalid ones.
+Review an open pull request, assess every comment for validity, implement valid fixes (with approval), reply to all threads, resolve them, and — when Copilot is the reviewer — iterate until Copilot raises no further comments.
 
 ## Usage
 
@@ -9,6 +9,8 @@ Review an open pull request, assess every comment for validity, implement valid 
 ```
 
 ## What this command does
+
+This command runs as a **loop**:
 
 1. **Fetch comments** — retrieve all inline review comments and conversation comments from the PR using `gh api`.
 
@@ -26,7 +28,17 @@ Review an open pull request, assess every comment for validity, implement valid 
    - Commit with a DCO sign-off (`git commit -s`) following the `type(scope): description` style from `AGENTS.md`.
    - Push to the PR branch.
 
-5. **Reply to every comment** — after each fix is pushed, post a reply to the original thread referencing the commit. For stale or invalid comments, post a factual explanation of why no code change was made.
+5. **Reply to every comment** — after each fix is pushed, post a reply to the original thread referencing the commit SHA. For stale or invalid comments, post a factual explanation of why no code change was made.
+
+6. **Resolve every thread** — mark all comment threads as resolved via the GraphQL API.
+
+7. **Re-request review if Copilot was the reviewer** — if `copilot-pull-request-reviewer[bot]` was among the reviewers, re-request its review so it re-evaluates the updated code.
+
+8. **Wait and iterate** — poll the PR for new comments. Once Copilot posts its next review, go back to step 1. The loop exits when either:
+   - All threads are resolved and Copilot posts no new comments, **or**
+   - Copilot was not a reviewer (no loop needed).
+
+---
 
 ## Steps in detail
 
@@ -48,10 +60,12 @@ git diff main...HEAD -- <changed-files>
 
 ### 2 — Assess comments
 
-For each comment:
+For each **unresolved** comment thread:
 - Quote the comment body.
 - Show the diff hunk it points at.
 - State: **Valid** / **Stale** / **Invalid** with a one-paragraph rationale.
+
+Skip threads that are already resolved (`isResolved: true`).
 
 ### 3 — Get approval
 
@@ -94,10 +108,12 @@ gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
 
 Note: use `in_reply_to` (not a `/replies` sub-resource — that endpoint does not exist for PR review comments).
 
+### 6 — Resolve every thread
+
 After replying, resolve the thread via the GraphQL API (there is no REST endpoint for this):
 
 ```bash
-# Step 1 — get the thread node IDs
+# Step 1 — get the thread node IDs and their resolved state
 gh api graphql -f query='
 {
   repository(owner: "cloudoperators", name: "repo-guard") {
@@ -115,7 +131,7 @@ gh api graphql -f query='
   }
 }'
 
-# Step 2 — resolve each thread by its node ID
+# Step 2 — resolve each unresolved thread by its node ID
 gh api graphql -f query='
 mutation {
   resolveReviewThread(input: {threadId: "<THREAD_NODE_ID>"}) {
@@ -123,6 +139,64 @@ mutation {
   }
 }'
 ```
+
+### 7 — Re-request Copilot review (if applicable)
+
+Check whether `copilot-pull-request-reviewer[bot]` appears in the reviewer list:
+
+```bash
+gh api repos/cloudoperators/repo-guard/pulls/<PR>/requested_reviewers
+```
+
+If Copilot was a reviewer, re-request its review so it re-evaluates the updated diff:
+
+```bash
+gh api repos/cloudoperators/repo-guard/pulls/<PR>/requested_reviewers \
+  --method POST \
+  --field "reviewers[]=" \
+  --field "team_reviewers[]=copilot-pull-request-reviewer"
+```
+
+If the bot cannot be requested directly by name, trigger re-review via the GitHub UI note in the reply, or use:
+
+```bash
+gh pr review <PR> --repo cloudoperators/repo-guard --request-changes --body "" 2>/dev/null || true
+# Then re-approve to trigger Copilot
+```
+
+The reliable approach is:
+
+```bash
+gh api repos/cloudoperators/repo-guard/pulls/<PR>/reviews \
+  --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length'
+```
+
+If the count is > 0 and Copilot was the only reviewer, re-request by dismissing its last review or simply pushing a new commit (Copilot re-triggers automatically on new pushes to the PR branch in most configurations).
+
+### 8 — Wait and poll for new comments
+
+After re-requesting, poll until a new Copilot review appears:
+
+```bash
+# Poll every 30 seconds, up to 20 minutes
+for i in $(seq 1 40); do
+  NEW_COUNT=$(gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
+    --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length')
+  echo "Attempt $i: $NEW_COUNT Copilot comments found"
+  [ "$NEW_COUNT" -gt "$PREVIOUS_COUNT" ] && break
+  sleep 30
+done
+```
+
+Once new comments appear, return to **step 1** with the new unresolved threads.
+
+### Exit condition
+
+The loop terminates when:
+- All review threads are `isResolved: true`, **and**
+- The latest Copilot review contains no new inline comments (review body only, or no review at all).
+
+---
 
 ## Conventions (from AGENTS.md)
 
@@ -133,20 +207,30 @@ mutation {
 - No CRD changes needed unless `_types.go` struct fields changed — if they did, run `make manifests generate`.
 - After any fix, run `make controller-test` and confirm all specs pass.
 
+---
+
 ## Example session
 
 ```
 User:  /review-pr 113
-Agent: Fetches comments from PR #113.
-       Presents: Comment 1 (Valid) — normalize op.Team in dedup checks ...
-                 Comment 2 (Valid) — add unit tests ...
-                 Comment 3 (Stale) — wrong constant reference, but the line no longer exists ...
-       Asks for approval.
-User:  Implement the valid ones, reply to all of them.
-Agent: Edits api/v1/githuborganization_types.go, adds test file,
-       runs make controller-test, commits (167822c), pushes.
-       Posts reply to Comment 1: "Fixed in commit 167822c. All six dedup loops now..."
-       Posts reply to Comment 2: "Fixed in commit 167822c. Added TestRepoChangeCalculator..."
-       Posts reply to Comment 3: "This line no longer exists in the diff..."
-       Resolves all three threads via GraphQL resolveReviewThread mutation.
+
+--- Iteration 1 ---
+Agent: Fetches comments. Finds 3 unresolved Copilot threads.
+       Presents assessments (2 valid, 1 stale). Gets approval.
+       Implements fixes, runs make controller-test, commits 167822c, pushes.
+       Replies to all 3 threads. Resolves all 3 threads.
+       Detects Copilot was the reviewer → re-requests Copilot review.
+       Polls for new comments...
+
+--- Iteration 2 ---
+Agent: New Copilot review detected (1 new comment).
+       Presents assessment (1 valid). Gets approval.
+       Implements fix, commits a2f91cc, pushes.
+       Replies to thread. Resolves thread.
+       Re-requests Copilot review. Polls for new comments...
+
+--- Iteration 3 ---
+Agent: Copilot review posted — no inline comments (summary only).
+       All threads resolved. Loop complete.
+       Informs user: PR is clean, no further Copilot comments.
 ```
