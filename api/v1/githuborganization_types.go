@@ -317,13 +317,13 @@ func (g GithubOrganization) TeamChangeCalculator(teamsFromKubernetes []string) (
 
 		// kubernetes team is not found in github list
 		if !kubernetesTeamFound {
-			// action: add the owner to github
+			// action: add the team to github
 
-			// check if there is a waiting or already-completed task
-			// A completed add operation means the team was already successfully created; do not re-queue.
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing add operation suppresses re-queuing, regardless of state.
 			teamOperationFound := false
-			for _, teamOpeation := range newStatus.Operations.GithubTeamOperations {
-				if strings.EqualFold(teamOpeation.Team, kubernetesTeam) && teamOpeation.Operation == GithubTeamOperationTypeAdd {
+			for _, teamOperation := range newStatus.Operations.GithubTeamOperations {
+				if strings.EqualFold(teamOperation.Team, kubernetesTeam) && teamOperation.Operation == GithubTeamOperationTypeAdd {
 					teamOperationFound = true
 					break
 				}
@@ -357,11 +357,11 @@ func (g GithubOrganization) TeamChangeCalculator(teamsFromKubernetes []string) (
 		if !kubernetesTeamFound {
 			// action: remove the team from github
 
-			// check if there is a waiting or already-completed task
-			// A completed remove operation means the team was already successfully deleted; do not re-queue.
+			// check if there is any existing task (pending, complete, failed, etc.)
+			// Any existing remove operation suppresses re-queuing, regardless of state.
 			teamOperationFound := false
-			for _, teamOpeation := range newStatus.Operations.GithubTeamOperations {
-				if strings.EqualFold(teamOpeation.Team, githubTeam) && teamOpeation.Operation == GithubTeamOperationTypeRemove {
+			for _, teamOperation := range newStatus.Operations.GithubTeamOperations {
+				if strings.EqualFold(teamOperation.Team, githubTeam) && teamOperation.Operation == GithubTeamOperationTypeRemove {
 					teamOperationFound = true
 					break
 				}
@@ -424,7 +424,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
-						// check if there is a waiting or already-completed task
+						// check if there is any existing task (pending, complete, failed, etc.)
 						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
@@ -433,7 +433,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 								break
 							}
 						}
-						// if there is no waiting task, add new task
+						// if there is no existing task, add new task
 						if !repoTeamOperationRemoveFound {
 							op := GithubRepoTeamOperation{
 								Operation: GithubRepoTeamOperationTypeRemove,
@@ -506,7 +506,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 					if team.Permission != configTeam.Permission {
 						// remove the team and add it with the config permission
 
-						// check if there is a waiting or already-completed task
+						// check if there is any existing task (pending, complete, failed, etc.)
 						// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 						repoTeamOperationRemoveFound := false
 						for _, op := range operations {
@@ -515,7 +515,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 								break
 							}
 						}
-						// if there is no waiting task, add new task
+						// if there is no existing task, add new task
 						if !repoTeamOperationRemoveFound {
 							op := GithubRepoTeamOperation{
 								Operation: GithubRepoTeamOperationTypeRemove,
@@ -554,7 +554,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 			}
 
 			if !repoTeamFound {
-				// check if there is a waiting or already-completed task
+				// check if there is any existing task (pending, complete, failed, etc.)
 				// Normalize op.Team via slug.Make so persisted pre-fix display-name values still match.
 				repoTeamOperationRemoveFound := false
 				for _, op := range operations {
@@ -563,7 +563,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 						break
 					}
 				}
-				// if there is no waiting task, add new task
+				// if there is no existing task, add new task
 				if !repoTeamOperationRemoveFound {
 					op := GithubRepoTeamOperation{
 						Operation: GithubRepoTeamOperationTypeRemove,
