@@ -25,6 +25,7 @@ type OrganizationProvider interface {
 
 type DefaultOrganizationProvider struct {
 	organizationService github.OrganizationsService
+	usersService        github.UsersService
 	organization        string
 }
 
@@ -38,11 +39,14 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 	if client.Organizations == nil {
 		return nil, errors.New("empty organizations service")
 	}
+	if client.Users == nil {
+		return nil, errors.New("empty users service")
+	}
 
 	if organization == "" {
 		return nil, errors.New("organization name should not be empty")
 	}
-	return &DefaultOrganizationProvider{organizationService: *client.Organizations, organization: organization}, nil
+	return &DefaultOrganizationProvider{organizationService: *client.Organizations, usersService: *client.Users, organization: organization}, nil
 }
 
 func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) ([]string, error) {
@@ -145,7 +149,11 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 			if login == "" {
 				continue
 			}
-			result = append(result, GithubMember{Login: login, UID: inv.GetID()})
+			user, _, err := o.usersService.Get(ctx, login)
+			if err != nil {
+				return nil, fmt.Errorf("get user ID for pending invitee %q: %w", login, err)
+			}
+			result = append(result, GithubMember{Login: login, UID: user.GetID()})
 		}
 		if resp.NextPage == 0 {
 			break
