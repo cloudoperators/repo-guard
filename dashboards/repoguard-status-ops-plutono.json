@@ -168,7 +168,7 @@
       "title": "🏢 Organizations Needing Attention",
       "type": "table",
       "targets": [
-        { "expr": "sum by (organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)", "format": "table", "instant": true, "refId": "A" }
+        { "expr": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)", "format": "table", "instant": true, "refId": "A" }
       ]
     },
     {
@@ -276,7 +276,7 @@
       "title": "🚦 Rate Limit Status",
       "type": "stat",
       "targets": [
-        { "expr": "sum(repo_guard_githuborganization_status{status=\"ratelimited\"} == 1) or vector(0)", "refId": "A" }
+        { "expr": "sum(repo_guard_githuborganization_status{status=\"ratelimited\", github=~\"$github\", organization=~\"$org\"} == 1) or vector(0)", "refId": "A" }
       ]
     },
     {
@@ -299,6 +299,61 @@
       "type": "timeseries",
       "targets": [
         { "expr": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m])))", "legendFormat": "{{controller}} p95", "refId": "A" }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 500,
+      "panels": [],
+      "title": "📋 Full Status Overview",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "displayMode": "color-background-status" },
+          "mappings": [
+            { "options": { "failed": { "color": "red", "index": 0 }, "ratelimited": { "color": "yellow", "index": 1 }, "pending": { "color": "orange", "index": 2 }, "complete": { "color": "green", "index": 3 } }, "type": "value" }
+          ]
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "organization" }, "properties": [ { "id": "custom.width", "value": 200 } ] },
+          { "matcher": { "id": "byName", "options": "status" }, "properties": [ { "id": "custom.width", "value": 150 } ] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "id": 50,
+      "options": { "footer": { "show": false }, "showHeader": true },
+      "title": "🏢 Organizations Status",
+      "type": "table",
+      "targets": [
+        { "expr": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\"} == 1)", "format": "table", "instant": true, "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto", "displayMode": "color-background-status" },
+          "mappings": [
+            { "options": { "failed": { "color": "red", "index": 0 }, "ratelimited": { "color": "yellow", "index": 1 }, "pending": { "color": "orange", "index": 2 }, "complete": { "color": "green", "index": 3 } }, "type": "value" }
+          ]
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "organization" }, "properties": [ { "id": "custom.width", "value": 150 } ] },
+          { "matcher": { "id": "byName", "options": "team" }, "properties": [ { "id": "custom.width", "value": 250 } ] },
+          { "matcher": { "id": "byName", "options": "status" }, "properties": [ { "id": "custom.width", "value": 150 } ] }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 51,
+      "options": { "footer": { "show": false }, "showHeader": true },
+      "title": "👥 Teams Status",
+      "type": "table",
+      "targets": [
+        { "expr": "sum by (organization, team, status) (repo_guard_githubteam_status{organization=~\"$org\", team=~\"$team\"} == 1)", "format": "table", "instant": true, "refId": "A" }
       ]
     }
   ],
