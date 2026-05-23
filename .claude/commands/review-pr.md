@@ -94,6 +94,36 @@ gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
 
 Note: use `in_reply_to` (not a `/replies` sub-resource — that endpoint does not exist for PR review comments).
 
+After replying, resolve the thread via the GraphQL API (there is no REST endpoint for this):
+
+```bash
+# Step 1 — get the thread node IDs
+gh api graphql -f query='
+{
+  repository(owner: "cloudoperators", name: "repo-guard") {
+    pullRequest(number: <PR>) {
+      reviewThreads(first: 50) {
+        nodes {
+          id
+          isResolved
+          comments(first: 1) {
+            nodes { databaseId body }
+          }
+        }
+      }
+    }
+  }
+}'
+
+# Step 2 — resolve each thread by its node ID
+gh api graphql -f query='
+mutation {
+  resolveReviewThread(input: {threadId: "<THREAD_NODE_ID>"}) {
+    thread { id isResolved }
+  }
+}'
+```
+
 ## Conventions (from AGENTS.md)
 
 - All commits must be signed off (`-s`).
@@ -118,4 +148,5 @@ Agent: Edits api/v1/githuborganization_types.go, adds test file,
        Posts reply to Comment 1: "Fixed in commit 167822c. All six dedup loops now..."
        Posts reply to Comment 2: "Fixed in commit 167822c. Added TestRepoChangeCalculator..."
        Posts reply to Comment 3: "This line no longer exists in the diff..."
+       Resolves all three threads via GraphQL resolveReviewThread mutation.
 ```
