@@ -609,13 +609,25 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if err != nil {
 				if errors.IsNotFound(err) {
 					l.Info("Team is not found in Kubernetes. GithubTeam will be labeled as orphaned", "Team", githubTeam.Spec.GreenhouseTeam)
-					// Orpaned GithubTeam
-					if githubTeam.Labels == nil {
-						githubTeam.Labels = make(map[string]string)
+					// Orphaned GithubTeam - re-fetch to get the latest resourceVersion before updating.
+					latest := &v1.GithubTeam{}
+					if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+						if errors.IsNotFound(ferr) {
+							return reconcile.Result{}, nil
+						}
+						l.Error(ferr, "error during re-fetching GithubTeam for orphan label")
+						return reconcile.Result{}, ferr
 					}
-					githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-					err := r.Update(ctx, githubTeam)
+					if latest.Labels == nil {
+						latest.Labels = make(map[string]string)
+					}
+					latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
+					err := r.Update(ctx, latest)
 					if err != nil {
+						if errors.IsNotFound(err) || errors.IsConflict(err) {
+							// GithubTeam was concurrently deleted or updated; nothing to do.
+							return reconcile.Result{}, nil
+						}
 						l.Error(err, "error during label update")
 						return reconcile.Result{}, err
 					}
