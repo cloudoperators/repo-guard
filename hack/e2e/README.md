@@ -6,23 +6,87 @@ Prerequisites:
 - k3d, kubectl, helm
 - Docker (or Podman) to build the controller image that will be imported into k3d
 - jq and curl (required for the richer checks and GitHub API validations)
-- A populated `internal/controller/test.env` containing a GitHub PAT and App credentials for a test organization
+- A populated `internal/controller/test.env` (only required for live mode — see below)
 
-Quickstart:
+---
+
+### Mock mode vs. live mode for controller tests
+
+Controller tests (`make controller-test`) default to **mock mode** (`GITHUB_MOCK=true`).
+
+In mock mode:
+- An in-process `net/http/httptest` server handles all GitHub API requests.
+- No real GitHub credentials are needed — the tests work on forks and in CI without
+  secrets.
+- The mock server is started in `BeforeSuite`; the test RSA key embedded in
+  `internal/controller/suite_mock_test.go` is used in place of the App private key.
+  JWT signatures are sent to the mock and accepted without validation.
+
+To extend mock responses (e.g. to add new users/teams/repos), edit `MockConfig` in
+`suite_mock_test.go` and add endpoint handlers in `internal/github/mock_server.go`.
+
+To run against real GitHub (live mode):
+
+```sh
+make controller-test-live          # or: make controller-test GITHUB_MOCK=false
+```
+
+Live mode requires a valid `internal/controller/test.env` with real credentials.
+
+---
+
+### Mock mode vs. live mode for e2e tests
+
+E2E tests (`make e2e`) also default to **mock GitHub mode** (`USE_MOCK_GITHUB=true`).
+
+In mock e2e mode:
+- A standalone `hack/github-mock-server` binary is built, imported into k3d, and
+  deployed as a Kubernetes `Deployment` + `Service` inside the cluster.
+- The controller's Helm values are generated with `v3APIURL` pointing at the in-cluster
+  mock service (`http://github-mock.<ns>.svc.cluster.local:8080/api/v3`) and a
+  throwaway RSA key.  Real credentials are not required.
+- All GitHub API checks in `e2e-test` are also served through the same mock (via a
+  `kubectl port-forward` to localhost).
+- This mode is used by default in CI (`ci.yaml`) so that PRs and pushes to `main` run
+  the full e2e suite without GitHub secrets.
+
+To run e2e against real GitHub (live mode):
+
+```sh
+make e2e-live                       # or: make e2e USE_MOCK_GITHUB=false
+```
+
+Live mode requires a valid `internal/controller/test.env` with real credentials. It is
+only used by the nightly workflow (`nightly.yaml`).
+
+To extend what the mock GitHub server knows about (org members, teams, repos), update
+`deploy_incluster_mock_github()` in `hack/e2e/e2e.sh` to pass additional env vars to
+the server container. The server reads `MOCK_GITHUB_MEMBERS`, `MOCK_GITHUB_OWNERS`,
+`MOCK_GITHUB_TEAMS`, and `MOCK_GITHUB_REPOS` (comma-separated lists).
+
+---
+
+Quickstart (mock mode, no credentials needed):
 - make e2e-up       # creates a k3d cluster, builds the repo image and imports it, ensures Prometheus CRDs
-- make e2e-install  # generates Helm values from test.env, applies Greenhouse Team CRD and pre-creates Team CRs, then installs the chart using the built image
+- make e2e-install  # deploys mock GitHub server, generates Helm values, installs Helm chart
 - make e2e-test     # runs runtime checks + all scenarios (teams/providers/owners/repos); prints ✅/❌ summary at the end
 - make e2e-down     # deletes the k3d cluster
 
+Or all at once:
+
+```sh
+make e2e            # mock mode (default, no credentials needed)
+make e2e-live       # live mode (requires credentials in test.env)
+```
+
 Other useful targets:
-- make e2e          # runs up + install + test
 - make e2e-image    # build only the controller image used by e2e
 - make e2e-install-dry-run  # render Helm manifests with your generated values (no apply)
   # Note: This will auto-start the in-repo dummy Generic HTTP server to ensure values render cleanly,
   # and shut it down right after the dry-run. When dummy mode is disabled, the generator emits an
   # empty provider list to avoid template errors.
 - make e2e-install-crds     # install only repo-guard CRDs from the chart
-- make e2e-github-cleanup   # remove e2e-created GitHub teams; supports optional repo cleanup
+- make e2e-github-cleanup   # remove e2e-created GitHub teams; supports optional repo cleanup (live mode only)
 
 Cleanup flags (environment variables):
 - E2E_DRY_RUN=true|false (default: true) — print planned deletions without performing them
@@ -36,6 +100,7 @@ What the E2E does:
 - Creates a k3d cluster and installs the Greenhouse Team CRD (`config/crd/external/greenhouse.sap_teams.yaml`)
 - Installs Prometheus Operator CRDs (PodMonitor/PrometheusRule) for monitoring templates
 - Builds the repo image locally and imports it into k3d; Helm is configured to use this image
+- In mock mode: builds and deploys the in-cluster mock GitHub API server; configures Helm values to point at it
 - Generates chart values from `internal/controller/test.env` (script: `hack/e2e/gen-values.sh`):
   - Handles multi-line `GITHUB_PRIVATE_KEY` (YAML block scalar)
   - Sanitizes LDAP and HTTP credentials (removes literal backslashes by default)
@@ -66,6 +131,7 @@ What the E2E does:
 
 Key environment inputs (from `internal/controller/test.env`):
 - GitHub App and PAT: `GITHUB_TOKEN`, `GITHUB_PRIVATE_KEY`, `GITHUB_*` (integration/installation/client IDs)
+  - In mock mode these are replaced by dummy values automatically; `test.env` is only read for org/team/user names
 - Organization and teams: `ORGANIZATION`, `TEAM_1`, `TEAM_2`, `ORGANIZATION_OWNER_TEAM`
 - Owner mapping: `ORGANIZATION_OWNER_USER`, `ORGANIZATION_OWNER_GREENHOUSE_ID`, `ORGANIZATION_OWNER_GITHUB_USERID`
 - Users for Greenhouse scenario: `USER_1`, `USER_2`, and optional `USER_3_*` used in owner/repo checks
@@ -83,7 +149,10 @@ Runtime tunables:
 - `E2E_TIMEOUT` (default 180s), `E2E_INTERVAL` (default 3s)
 - `CONTAINER_TOOL` (docker|podman), `E2E_IMAGE_REPO`, `E2E_IMAGE_TAG` if you want a custom image name
 - Optional: `E2E_SKIP_TEAMS=true` to skip the teams scenario only (other scenarios still run)
+- `USE_MOCK_GITHUB=true|false` (default: true) — deploy in-cluster mock GitHub API instead of using real credentials
 
 Notes:
-- Ensure your GitHub App/installation data in `test.env` matches the test organization you control
+- In mock e2e mode, `test.env` credentials are replaced by dummy values; only org/team/user names are used
+- In live e2e mode, ensure your GitHub App/installation data in `test.env` matches the test organization you control
 - The e2e harness validates both Kubernetes-side status and GitHub-side state via REST API where applicable
+
