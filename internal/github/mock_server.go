@@ -96,6 +96,13 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	// teamMembers tracks the members of each team by slug.
 	teamMembers := make(map[string][]MockUser)
 
+	// orgAdmins is the mutable set of org admins (login -> MockUser).
+	// Seeded from cfg.Owners; updated when PUT /memberships/{user} sets role=admin.
+	orgAdmins := make(map[string]MockUser)
+	for _, u := range cfg.Owners {
+		orgAdmins[strings.ToLower(u.Login)] = u
+	}
+
 	// lookupUser finds a user by login across cfg.Members and cfg.Owners.
 	lookupUser := func(login string) (MockUser, bool) {
 		for _, u := range cfg.Members {
@@ -111,6 +118,22 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// Unknown user: synthesise a minimal entry so the PUT still succeeds.
 		return MockUser{Login: login, ID: 0}, true
 	}
+
+	// ---- org endpoint ----
+
+	// GET /api/v3/orgs/{org}
+	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s", org), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writeJSON(w, map[string]interface{}{
+			"login": org,
+			"id":    1,
+			"name":  org,
+			"type":  "Organization",
+		})
+	})
 
 	// ---- app endpoints ----
 
@@ -152,7 +175,11 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		var users []MockUser
 		switch role {
 		case "admin":
-			users = cfg.Owners
+			teamsMu.Lock()
+			for _, u := range orgAdmins {
+				users = append(users, u)
+			}
+			teamsMu.Unlock()
 		default:
 			users = cfg.Members
 		}
@@ -201,9 +228,20 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 	// /api/v3/orgs/{org}/memberships/{user} — PUT to change role, GET to get membership
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/memberships/", org), func(w http.ResponseWriter, r *http.Request) {
+		username := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/api/v3/orgs/%s/memberships/", org))
 		switch r.Method {
 		case http.MethodPut:
-			writeJSON(w, map[string]interface{}{"state": "active", "role": "admin"})
+			var body struct {
+				Role string `json:"role"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if strings.EqualFold(body.Role, "admin") {
+				u, _ := lookupUser(username)
+				teamsMu.Lock()
+				orgAdmins[strings.ToLower(username)] = u
+				teamsMu.Unlock()
+			}
+			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
 		case http.MethodGet:
 			writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 		default:
@@ -295,10 +333,26 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			writeJSON(w, result)
 
-		// PUT/DELETE /api/v3/orgs/{org}/teams/{slug}/memberships/{user}
+		// PUT/DELETE/GET /api/v3/orgs/{org}/teams/{slug}/memberships/{user}
 		case strings.HasPrefix(subPath, "memberships/"):
 			username := strings.TrimPrefix(subPath, "memberships/")
 			switch r.Method {
+			case http.MethodGet:
+				// Return membership state if user is in the team, 404 otherwise.
+				teamsMu.Lock()
+				found := false
+				for _, m := range teamMembers[teamSlug] {
+					if strings.EqualFold(m.Login, username) {
+						found = true
+						break
+					}
+				}
+				teamsMu.Unlock()
+				if found {
+					writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
+				} else {
+					http.Error(w, "not found", http.StatusNotFound)
+				}
 			case http.MethodPut:
 				if u, ok := lookupUser(username); ok {
 					teamsMu.Lock()

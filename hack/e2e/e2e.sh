@@ -2152,7 +2152,6 @@ wait_for_github_team_slugs() {
 }
 
 run_provider_scenarios() {
-  local GITHUB_API=$(read_env_var GITHUB_V3_API_URL)
   local ORG=$(read_env_var ORGANIZATION)
   local LDAP_TEAM_NAME=$(read_env_var LDAP_GROUP_PROVIDER_TEAM_NAME)
   local LDAP_USER_GH=$(read_env_var LDAP_GROUP_PROVIDER_USER_GITHUB_USERNAME)
