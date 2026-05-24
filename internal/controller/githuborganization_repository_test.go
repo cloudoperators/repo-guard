@@ -119,10 +119,12 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, nsObj)
 
-			_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
-			_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
-			for _, t := range teams {
-				_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
+			if !isMockMode() {
+				_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
+				_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
+				for _, t := range teams {
+					_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
+				}
 			}
 		})
 	})
@@ -149,14 +151,17 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			return len(cur.Status.Operations.RepositoryTeamOperations)
 		}, 3*timeout, interval).Should(BeNumerically(">", 0))
 
-		publicTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPublic, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode).To(Equal(200))
-		Expect(publicTeams).To(HaveLen(3))
+		if !isMockMode() {
+			// In live mode verify that GitHub actually received the team assignments.
+			publicTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPublic, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			Expect(publicTeams).To(HaveLen(3))
 
-		privateTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPrivate, nil)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode).To(Equal(200))
-		Expect(privateTeams).To(HaveLen(4))
+			privateTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPrivate, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode).To(Equal(200))
+			Expect(privateTeams).To(HaveLen(4))
+		}
 	})
 })

@@ -152,6 +152,14 @@ var _ = BeforeSuite(func() {
 	testRand = rand.New(rand.NewSource(seed))
 	_, _ = fmt.Fprintf(GinkgoWriter, "Ginkgo random seed: %d\n", seed)
 
+	// In mock mode, start the mock GitHub HTTP server and override TEST_ENV values
+	// (V3 API URL, private key, token) before shared resources are initialized so
+	// that all fixtures point at the mock instead of real GitHub.
+	if isMockMode() {
+		startMockGitHubServer()
+		_, _ = fmt.Fprintf(GinkgoWriter, "GITHUB_MOCK=true: using mock GitHub server at %s\n", mockGitHubServer.URL)
+	}
+
 	// Start dummy external services first, because initSharedResources() consumes
 	// values from TEST_ENV (e.g. LDAP host, EMP HTTP endpoint) to build fixtures.
 	startDummyExternalSystems()
@@ -249,6 +257,9 @@ var _ = AfterSuite(func() {
 	}
 	if ldapServer != nil {
 		ldapServer.Close()
+	}
+	if mockGitHubServer != nil {
+		mockGitHubServer.Close()
 	}
 })
 

@@ -138,7 +138,12 @@ func updateStatusWithRetry[T client.Object](ctx context.Context, c client.Client
 
 // githubEnsureTeam ensures a team exists in the org (idempotent).
 // If the team already exists, it returns nil.
+// In mock mode (GITHUB_MOCK=true) this is a no-op because the mock server
+// always reports any requested team/slug as found.
 func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSlugOrName string) error {
+	if isMockMode() {
+		return nil
+	}
 	org = strings.TrimSpace(org)
 	teamSlugOrName = strings.TrimSpace(teamSlugOrName)
 	if org == "" || teamSlugOrName == "" || client == nil {
@@ -172,7 +177,11 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 
 // githubEnsureRepoWithVisibility ensures a repo exists with the requested visibility.
 // If the repo exists already, it does not attempt to change visibility.
+// In mock mode (GITHUB_MOCK=true) this is a no-op.
 func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, private bool) error {
+	if isMockMode() {
+		return nil
+	}
 	org = strings.TrimSpace(org)
 	repo = strings.TrimSpace(repo)
 	if org == "" || repo == "" || client == nil {

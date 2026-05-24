@@ -149,9 +149,11 @@ var _ = Describe("Github Team controller", func() {
 	})
 
 	AfterEach(func() {
-		ctx := context.Background()
-		client := githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
-		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
+		if !isMockMode() {
+			ctx := context.Background()
+			client := githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
+			_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
+		}
 
 		// Keep it small: enough to let reconcile settle in CI without long sleeps
 		Eventually(func() bool { return true }, 200*time.Millisecond, 200*time.Millisecond).Should(BeTrue())
