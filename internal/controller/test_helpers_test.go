@@ -138,8 +138,8 @@ func updateStatusWithRetry[T client.Object](ctx context.Context, c client.Client
 
 // githubEnsureTeam ensures a team exists in the org (idempotent).
 // If the team already exists, it returns nil.
-// In mock mode (GITHUB_MOCK=true) this is a no-op because the mock server
-// always reports any requested team/slug as found.
+// In mock mode (GITHUB_MOCK=true) this is a no-op because teams are pre-seeded
+// in the mock server config and the controller creates any missing ones automatically.
 func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSlugOrName string) error {
 	if isMockMode() {
 		return nil

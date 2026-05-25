@@ -122,34 +122,8 @@ if [[ -n "${MOCK_GITHUB_V3_API_URL:-}" ]]; then
   GITHUB_CLIENT_SECRET="mock-client-secret"
   GITHUB_INTEGRATION_ID="1"
   GITHUB_INSTALLATION_ID="1"
-  # Provide a throwaway RSA key; the mock server ignores JWT signatures.
-  GITHUB_PRIVATE_KEY='-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEApD48diBEjGxojS67iuPAztDh8L23r1x0karLw0m/eG6jy4bL
-W8maUpiamcvTyaIWLagh24Pmm5id2GUBIr/EF0JQCZ6HL3pEX0BYq4gDV+X9HLOr
-x4ya8d2EYwlREA8a/JA4e9UHXwIIiSCkqsmWQFlkKiMhvnyajL4z6CV13fOzBF5c
-wHHJzh7xyFRqdu0l2IHH6tAEFypGTJk3DS0kwuat3NhrkX0SxdA0hLFgYtt9OXQT
-9E8BtQFLW1ugane4hZh6/TNrtSN+q+/OLm81TzcBRsFJvlyWpOA+jo7nHkSf0lGV
-qhDlI4hcVRYAMaGssqeO2ykx5aOSRmnKy+fHjQIDAQABAoIBAE3xTwYL6BvvsmoV
-nGCcFrrO+/ogPlRU/ujF8e7aR6gicU67yDPl53t8+hk0VmxgpD/Eg1TGMqDyey3f
-OPvBn5AeIxd9iM/qKRo+0hWM9XE4Lrb5OPL48esH4bSSDksdsAPdeUCi5t2afGx+
-9kYqZkhhY5xvkarxPPK/rKhlZpsOMYrfEMVim+bpXPXybilAXzLvhKC7wTPtFB7e
-K+N28a19Y2F+Pxs/54M4uP4vRaEbBURIoPM6DwjhiuVRki0r0bPPu9TGh+UJg0w8
-ealTi2yGf27qcZ6hFH0y4vS9gW2ca67JWXRRVf8kB1s9418YoGt4BZa15GE6JiTr
-QN0eA00CgYEA2m+gIrolWixMA84A2wYoPtV1ZY84+j9OALo2lkXQXiZLbU9/O4xQ
-pC9DXcGWmAxYC1aR+nslTHOwq2fdJrAKnxlpVjWYaTRlEJvfVHEcMjgr2BqJQePF
-MyX2uo10vILK/DTRnBD5sowG95O0sVf9u+zm4QaEburZnqQSudW1qasCgYEAwHzV
-o6cJBRDtWD+4iDltFFr13fsVbgUlfQJ79STQKQd44SlEiea+GBW6rU1Whsf77Czm
-QR29B1qlXglV/5Y93HknK6gmo53c13Urrj+QyiVK4zIML8h13J/d8xA4HlmcJnts
-Gk/NI3V4Elu/NHxQhVRIAiuR4N/igrvai7YTS6cCgYA5prZ8E+ch2okhg/Bj3kcm
-9k2qxVdDbQvYU01u8fQhtTe5HP82pzztaG/+QcbOUIu4Slvy4Seh+vLI+nu650GW
-Zi2QDEsykRqPfKQ/9C597qdbvP02/7efXUi2Sflie565W/NqnmxYvG5mT3ykRdX5
-EHiLMZ4obCGNpj4vAAGXSwKBgQCX5asdouG+SrZRjq9LaK3Ig2NEkjA+CvejZ8N0
-F2HhDtF4NX2tqRXXocYXnlEquUP3AxOMzS/vTrvyskFYGTKl+kFL9TzQnvG4YPFg
-Zy8WJkmrckIlrvY7bTjT57exU5uizoDnXpQOaFOhgR8pBvTv0iuk8scCgwqXijCT
-UdJ2PwKBgAnxUDZQFymrUnRKomCsSGTV3PtJVV6mvI4YvaBDNHd6QvSkkiY9nd3q
-GDylTe+GHV3lXLv+1mfAxV6IcbztzwfiMTzgiUTu6IxIORGx3HdncJoeHbe9OoqA
-YpefVRgFqssFeu6Y1ko7R4v/mXVWjlrsBmBuyyMf1IMwVn75mTYJ
------END RSA PRIVATE KEY-----'
+  # Generate a throwaway RSA key at runtime; the mock server ignores JWT signatures.
+  GITHUB_PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
 fi
 
 # Org and teams
