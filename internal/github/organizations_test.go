@@ -84,7 +84,7 @@ func TestPendingAdminMembers_PropagatesNon404Error(t *testing.T) {
 
 	mux.HandleFunc("/api/v3/orgs/test-org/invitations", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, `{"message":"Internal Server Error"}`)
+		_, _ = fmt.Fprintln(w, `{"message":"Internal Server Error"}`)
 	})
 
 	_, err := provider.pendingAdminMembers(t.Context())
