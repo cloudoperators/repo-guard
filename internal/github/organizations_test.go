@@ -40,7 +40,7 @@ func TestPendingAdminMembers_404TreatedAsEmpty(t *testing.T) {
 
 	mux.HandleFunc("/api/v3/orgs/test-org/invitations", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintln(w, `{"message":"Not Found"}`)
+		_, _ = fmt.Fprintln(w, `{"message":"Not Found"}`)
 	})
 
 	members, err := provider.pendingAdminMembers(t.Context())
@@ -57,14 +57,14 @@ func TestPendingAdminMembers_ReturnsAdminInvitees(t *testing.T) {
 
 	mux.HandleFunc("/api/v3/orgs/test-org/invitations", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintln(w, `[
+		_, _ = fmt.Fprintln(w, `[
 			{"login": "alice", "role": "admin"},
 			{"login": "bob",   "role": "member"}
 		]`)
 	})
 	mux.HandleFunc("/api/v3/users/alice", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintln(w, `{"login": "alice", "id": 42}`)
+		_, _ = fmt.Fprintln(w, `{"login": "alice", "id": 42}`)
 	})
 
 	members, err := provider.pendingAdminMembers(t.Context())
