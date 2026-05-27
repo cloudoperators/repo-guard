@@ -716,17 +716,8 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	newStatus := g.Status.DeepCopy()
 	changed := false
 
-	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 {
-		newStatus.OrganizationStatus = GithubOrganizationStateFailed
-		newStatus.OrganizationStatusError = "DefaultPrivateRepositoryTeams is empty"
-		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		return true, newStatus
-	}
-	if len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
-		newStatus.OrganizationStatus = GithubOrganizationStateFailed
-		newStatus.OrganizationStatusError = "DefaultPublicRepositoryTeams is empty"
-		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		return true, newStatus
+	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 && len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
+		return false, newStatus
 	}
 
 	skipList := make([]string, 0)

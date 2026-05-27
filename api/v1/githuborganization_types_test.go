@@ -7,6 +7,56 @@ import (
 	"testing"
 )
 
+func TestRepoChangeCalculatorMethod(t *testing.T) {
+	tests := []struct {
+		name         string
+		privateTeams []GithubTeamWithPermission
+		publicTeams  []GithubTeamWithPermission
+		wantChanged  bool
+		wantStatus   GithubOrganizationState
+	}{
+		{
+			name:         "both default team lists empty — no change, no failure",
+			privateTeams: nil,
+			publicTeams:  nil,
+			wantChanged:  false,
+			wantStatus:   "",
+		},
+		{
+			name:         "only private list empty — no change, no failure",
+			privateTeams: nil,
+			publicTeams:  []GithubTeamWithPermission{{Team: "all-read", Permission: GithubTeamPermissionPull}},
+			wantChanged:  false,
+			wantStatus:   "",
+		},
+		{
+			name:         "only public list empty — no change, no failure",
+			privateTeams: []GithubTeamWithPermission{{Team: "all-read", Permission: GithubTeamPermissionPull}},
+			publicTeams:  nil,
+			wantChanged:  false,
+			wantStatus:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org := GithubOrganization{}
+			org.Spec.DefaultPrivateRepositoryTeams = tt.privateTeams
+			org.Spec.DefaultPublicRepositoryTeams = tt.publicTeams
+			changed, newStatus := org.RepoChangeCalculator(nil)
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if tt.wantStatus != "" && newStatus.OrganizationStatus != tt.wantStatus {
+				t.Errorf("OrganizationStatus = %q, want %q", newStatus.OrganizationStatus, tt.wantStatus)
+			}
+			if newStatus.OrganizationStatus == GithubOrganizationStateFailed {
+				t.Errorf("OrganizationStatus must not be %q for empty list configuration", GithubOrganizationStateFailed)
+			}
+		})
+	}
+}
+
 // teamOp is a helper to build a GithubRepoTeamOperation for test setup.
 func teamOp(team, repo string, opType GithubRepoTeamOperationType, state GithubRepoTeamOperationState) GithubRepoTeamOperation {
 	return GithubRepoTeamOperation{
