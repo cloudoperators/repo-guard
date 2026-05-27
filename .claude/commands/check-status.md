@@ -27,7 +27,7 @@ Run in parallel:
 
 ```bash
 kubectl get pods -n greenhouse -l control-plane=controller-manager \
-  -o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,AGE:.metadata.creationTimestamp,STATUS:.status.phase'
+  -o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount,CREATED:.metadata.creationTimestamp,STATUS:.status.phase'
 
 kubectl describe pod -n greenhouse \
   $(kubectl get pods -n greenhouse -l control-plane=controller-manager -o name | head -1 | sed 's|pod/||') \
@@ -125,6 +125,9 @@ kubectl get githubaccountlink -A --no-headers 2>/dev/null | wc -l
 kubectl get ldapgroupprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
 kubectl get genericexternalmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
 kubectl get staticmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
+kubectl get clusterldapgroupprovider -o custom-columns='NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
+kubectl get clustergenericexternalmemberprovider -o custom-columns='NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
+kubectl get clusterstaticmemberprovider -o custom-columns='NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
 ```
 
 ### 7 — Summary report
@@ -139,7 +142,7 @@ Present the findings in the following structure:
 ### Pod
 - Status: <Running|CrashLoopBackOff|...>
 - Restarts: <N>
-- Age: <duration>
+- Created: <RFC3339 timestamp>
 
 ### Reconcile Metrics (since pod start)
 | Controller          | Success | Error | Requeue | Error% |
