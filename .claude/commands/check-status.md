@@ -87,11 +87,11 @@ kubectl get githuborganization -A -o json | jq -r '
     status:    (.status.orgStatus // "unknown"),
     timestamp: (.status.timestamp // "n/a"),
     failedRepoOps:  ([(.status.operations.repoOperations  // [] | .[] | select(.state=="failed")) | {repo:.repo, op:.operation}] | length),
-    failedOwnerOps: ([(.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="failed")) | {id:.id,  op:.operation}] | length),
-    failedTeamOps:  ([(.status.operations.githubTeamOperations        // [] | .[] | select(.state=="failed")) | {team:.team, op:.operation}] | length),
+    failedOwnerOps: ([(.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="failed"))] | length),
+    failedTeamOps:  ([(.status.operations.teamOperations              // [] | .[] | select(.state=="failed"))] | length),
     pendingRepoOps:  ([(.status.operations.repoOperations  // [] | .[] | select(.state=="pending")) ] | length),
     pendingOwnerOps: ([(.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="pending")) ] | length),
-    pendingTeamOps:  ([(.status.operations.githubTeamOperations        // [] | .[] | select(.state=="pending")) ] | length)
+    pendingTeamOps:  ([(.status.operations.teamOperations              // [] | .[] | select(.state=="pending")) ] | length)
   } |
   [.ns, .name, .status, (.timestamp[0:19] // "n/a"),
    "failedRepo=\(.failedRepoOps) failedOwner=\(.failedOwnerOps) failedTeam=\(.failedTeamOps)",
@@ -122,9 +122,9 @@ kubectl get githubteam -A -o json | jq -r '
 
 ```bash
 kubectl get githubaccountlink -A --no-headers 2>/dev/null | wc -l
-kubectl get ldapgroupprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.providerStatus' 2>/dev/null
-kubectl get genericexternalmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.providerStatus' 2>/dev/null
-kubectl get staticmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.providerStatus' 2>/dev/null
+kubectl get ldapgroupprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
+kubectl get genericexternalmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
+kubectl get staticmemberprovider -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,STATUS:.status.state' 2>/dev/null
 ```
 
 ### 7 — Summary report
@@ -176,4 +176,4 @@ Present the findings in the following structure:
 - All CRDs are in the `repo-guard.cloudoperators.dev` API group.
 - Controller names in metrics use PascalCase (e.g. `GithubOrganization`, `GithubTeam`).
 - The status field for orgs is `.status.orgStatus` and for teams `.status.teamStatus`.
-- Operations are nested under `.status.operations.{repoOperations,organizationOwnerOperations,githubTeamOperations}` for orgs, and `.status.operations` (flat array) for teams.
+- Operations are nested under `.status.operations.{repoOperations,organizationOwnerOperations,teamOperations}` for orgs, and `.status.operations` (flat array) for teams.
