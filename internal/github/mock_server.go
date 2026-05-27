@@ -282,7 +282,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
 		case http.MethodGet:
-			writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
+			teamsMu.Lock()
+			_, isAdmin := orgAdmins[strings.ToLower(username)]
+			teamsMu.Unlock()
+			role := "member"
+			if isAdmin {
+				role = "admin"
+			}
+			writeJSON(w, map[string]interface{}{"state": "active", "role": role})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -466,6 +473,16 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					body.Permission = "pull"
 				}
 				teamsMu.Lock()
+				// Validate the repo exists; mirror real GitHub 404 behaviour for
+				// unknown repositories.  Team existence is not validated here
+				// because seeded teams may be deleted by other concurrent
+				// reconcilers during the test suite, causing spurious 404s.
+				repoFound := lookupRepo(repoName) != nil
+				if !repoFound {
+					teamsMu.Unlock()
+					http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+					return
+				}
 				perms := teamRepoPerms[repoName]
 				found := false
 				for i, tp := range perms {
@@ -608,6 +625,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 		// GET /api/v3/repos/{org}/{repo}/teams
 		case subPath == "teams" && r.Method == http.MethodGet:
+			if repoSnapshot == nil {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 			teamsMu.Lock()
 			perms := make([]MockTeamWithPermission, len(teamRepoPerms[repoName]))
 			copy(perms, teamRepoPerms[repoName])
@@ -625,10 +646,18 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 		// GET /api/v3/repos/{org}/{repo}/collaborators
 		case subPath == "collaborators" && r.Method == http.MethodGet:
+			if repoSnapshot == nil {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 			writeJSON(w, []interface{}{})
 
 		// DELETE /api/v3/repos/{org}/{repo}/collaborators/{user}
 		case strings.HasPrefix(subPath, "collaborators/") && r.Method == http.MethodDelete:
+			if repoSnapshot == nil {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 
 		default:

@@ -6,6 +6,7 @@ Prerequisites:
 - k3d, kubectl, helm
 - Docker (or Podman) to build the controller image that will be imported into k3d
 - jq and curl (required for the richer checks and GitHub API validations)
+- openssl (used by `gen-values.sh` to generate a throwaway RSA key in mock mode)
 - A populated `internal/controller/test.env` (only required for live mode — see below)
 
 ---
