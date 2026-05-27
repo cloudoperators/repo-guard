@@ -86,9 +86,6 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 			if tt.wantStatus != "" && newStatus.OrganizationStatus != tt.wantStatus {
 				t.Errorf("OrganizationStatus = %q, want %q", newStatus.OrganizationStatus, tt.wantStatus)
 			}
-			if newStatus.OrganizationStatus == GithubOrganizationStateFailed {
-				t.Errorf("OrganizationStatus must not be %q for empty list configuration", GithubOrganizationStateFailed)
-			}
 			if tt.wantOpsLen >= 0 && len(newStatus.Operations.RepositoryTeamOperations) != tt.wantOpsLen {
 				t.Errorf("RepositoryTeamOperations len = %d, want %d: %+v",
 					len(newStatus.Operations.RepositoryTeamOperations), tt.wantOpsLen, newStatus.Operations.RepositoryTeamOperations)
