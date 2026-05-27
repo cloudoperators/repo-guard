@@ -61,8 +61,8 @@ type MockTestHelper interface {
 // responses derived from cfg.  It returns the server and its mux so individual
 // tests can override specific handlers.
 //
-// The server URL is the value that should be passed to NewFakeClientCreator so
-// that go-github points all requests at this server.
+// Pass srv.URL to controller.NewFakeClientCreator (in internal/controller) to
+// redirect all go-github requests at this server instead of real GitHub.
 func NewMockGitHubServer(t MockTestHelper, cfg MockConfig) (*httptest.Server, *http.ServeMux) {
 	mux := http.NewServeMux()
 	registerMockHandlers(mux, cfg)
