@@ -18,9 +18,10 @@ In mock mode:
 - An in-process `net/http/httptest` server handles all GitHub API requests.
 - No real GitHub credentials are needed — the tests work on forks and in CI without
   secrets.
-- The mock server is started in `BeforeSuite`; the test RSA key embedded in
-  `internal/controller/suite_mock_test.go` is used in place of the App private key.
-  JWT signatures are sent to the mock and accepted without validation.
+- The mock server is started in `BeforeSuite`; a throwaway RSA key is generated at
+  runtime by `generateMockPrivateKey()` in `internal/controller/suite_mock_test.go`
+  and used in place of the App private key. JWT signatures are sent to the mock and
+  accepted without validation.
 
 To extend mock responses (e.g. to add new users/teams/repos), edit `MockConfig` in
 `suite_mock_test.go` and add endpoint handlers in `internal/github/mock_server.go`.

@@ -96,6 +96,31 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	// teamMembers tracks the members of each team by slug.
 	teamMembers := make(map[string][]MockUser)
 
+	// teamRepoPerms tracks team-repo permission assignments: repoName -> []MockTeamWithPermission.
+	// Seeded from cfg.Repos[*].Teams; updated by PUT/DELETE on the team repos endpoint.
+	teamRepoPerms := make(map[string][]MockTeamWithPermission)
+	for _, repo := range cfg.Repos {
+		if len(repo.Teams) > 0 {
+			perms := make([]MockTeamWithPermission, len(repo.Teams))
+			copy(perms, repo.Teams)
+			teamRepoPerms[repo.Name] = perms
+		}
+	}
+
+	// repos is a mutable copy of cfg.Repos so that POST /repos can add entries.
+	repos := make([]MockRepo, len(cfg.Repos))
+	copy(repos, cfg.Repos)
+
+	// lookupRepo finds a repo by name in the mutable repos slice (must be called with teamsMu held).
+	lookupRepo := func(name string) *MockRepo {
+		for i := range repos {
+			if repos[i].Name == name {
+				return &repos[i]
+			}
+		}
+		return nil
+	}
+
 	// orgAdmins is the mutable set of org admins (login -> MockUser).
 	// Seeded from cfg.Owners; updated when PUT /memberships/{user} sets role=admin.
 	orgAdmins := make(map[string]MockUser)
@@ -387,10 +412,54 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 		// PUT/DELETE /api/v3/orgs/{org}/teams/{slug}/repos/{owner}/{repo}
 		case strings.HasPrefix(subPath, "repos/"):
+			// subPath is "repos/{owner}/{repo}" — strip the owner segment too.
+			repoPath := strings.TrimPrefix(subPath, "repos/")
+			repoParts := strings.SplitN(repoPath, "/", 2)
+			repoName := repoParts[len(repoParts)-1]
 			switch r.Method {
 			case http.MethodPut:
+				var body struct {
+					Permission string `json:"permission"`
+				}
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				if body.Permission == "" {
+					body.Permission = "pull"
+				}
+				teamsMu.Lock()
+				perms := teamRepoPerms[repoName]
+				found := false
+				for i, tp := range perms {
+					if tp.Slug == teamSlug {
+						perms[i].Permission = body.Permission
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Look up the team ID.
+					var teamID int64
+					for _, t := range teams {
+						if t.Slug == teamSlug {
+							teamID = t.ID
+							break
+						}
+					}
+					perms = append(perms, MockTeamWithPermission{Slug: teamSlug, ID: teamID, Permission: body.Permission})
+				}
+				teamRepoPerms[repoName] = perms
+				teamsMu.Unlock()
 				w.WriteHeader(http.StatusNoContent)
 			case http.MethodDelete:
+				teamsMu.Lock()
+				perms := teamRepoPerms[repoName]
+				newPerms := perms[:0]
+				for _, tp := range perms {
+					if tp.Slug != teamSlug {
+						newPerms = append(newPerms, tp)
+					}
+				}
+				teamRepoPerms[repoName] = newPerms
+				teamsMu.Unlock()
 				w.WriteHeader(http.StatusNoContent)
 			default:
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -408,8 +477,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/repos", org), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			result := make([]map[string]interface{}, 0, len(cfg.Repos))
-			for _, repo := range cfg.Repos {
+			teamsMu.Lock()
+			snapshot := make([]MockRepo, len(repos))
+			copy(snapshot, repos)
+			teamsMu.Unlock()
+			result := make([]map[string]interface{}, 0, len(snapshot))
+			for _, repo := range snapshot {
 				result = append(result, map[string]interface{}{
 					"name":      repo.Name,
 					"private":   repo.Private,
@@ -418,8 +491,25 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			writeJSON(w, result)
 		case http.MethodPost:
+			var body struct {
+				Name    string `json:"name"`
+				Private bool   `json:"private"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Name == "" {
+				body.Name = "new-repo"
+			}
+			teamsMu.Lock()
+			if lookupRepo(body.Name) == nil {
+				repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
+			}
+			teamsMu.Unlock()
 			w.WriteHeader(http.StatusCreated)
-			writeJSON(w, map[string]interface{}{"name": "new-repo"})
+			writeJSON(w, map[string]interface{}{
+				"name":      body.Name,
+				"private":   body.Private,
+				"full_name": fmt.Sprintf("%s/%s", org, body.Name),
+			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -436,41 +526,51 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			subPath = parts[1]
 		}
 
-		// find repo in config
-		var repoEntry *MockRepo
-		for i := range cfg.Repos {
-			if cfg.Repos[i].Name == repoName {
-				repoEntry = &cfg.Repos[i]
-				break
-			}
+		teamsMu.Lock()
+		repoEntry := lookupRepo(repoName)
+		var repoSnapshot *MockRepo
+		if repoEntry != nil {
+			cp := *repoEntry
+			repoSnapshot = &cp
 		}
+		teamsMu.Unlock()
 
 		switch {
 		// GET /api/v3/repos/{org}/{repo}
 		case subPath == "" && r.Method == http.MethodGet:
-			if repoEntry == nil {
+			if repoSnapshot == nil {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
 			writeJSON(w, map[string]interface{}{
-				"name":       repoEntry.Name,
-				"private":    repoEntry.Private,
-				"visibility": visibilityStr(repoEntry.Private),
-				"full_name":  fmt.Sprintf("%s/%s", org, repoEntry.Name),
+				"name":       repoSnapshot.Name,
+				"private":    repoSnapshot.Private,
+				"visibility": visibilityStr(repoSnapshot.Private),
+				"full_name":  fmt.Sprintf("%s/%s", org, repoSnapshot.Name),
 			})
 
 		// DELETE /api/v3/repos/{org}/{repo}
 		case subPath == "" && r.Method == http.MethodDelete:
+			teamsMu.Lock()
+			newRepos := repos[:0]
+			for _, rp := range repos {
+				if rp.Name != repoName {
+					newRepos = append(newRepos, rp)
+				}
+			}
+			repos = newRepos
+			delete(teamRepoPerms, repoName)
+			teamsMu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 
 		// GET /api/v3/repos/{org}/{repo}/teams
 		case subPath == "teams" && r.Method == http.MethodGet:
-			if repoEntry == nil {
-				writeJSON(w, []interface{}{})
-				return
-			}
-			result := make([]map[string]interface{}, 0, len(repoEntry.Teams))
-			for _, tp := range repoEntry.Teams {
+			teamsMu.Lock()
+			perms := make([]MockTeamWithPermission, len(teamRepoPerms[repoName]))
+			copy(perms, teamRepoPerms[repoName])
+			teamsMu.Unlock()
+			result := make([]map[string]interface{}, 0, len(perms))
+			for _, tp := range perms {
 				result = append(result, map[string]interface{}{
 					"id":         tp.ID,
 					"slug":       tp.Slug,
