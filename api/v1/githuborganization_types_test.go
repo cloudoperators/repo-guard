@@ -12,15 +12,15 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 		name         string
 		privateTeams []GithubTeamWithPermission
 		publicTeams  []GithubTeamWithPermission
+		seedStatus   GithubOrganizationState
+		seedError    string
 		wantChanged  bool
 		wantStatus   GithubOrganizationState
 	}{
 		{
-			name:         "both default team lists empty — no change, no failure",
-			privateTeams: nil,
-			publicTeams:  nil,
-			wantChanged:  false,
-			wantStatus:   "",
+			name:        "both default team lists empty — no change, no failure",
+			wantChanged: false,
+			wantStatus:  "",
 		},
 		{
 			name:         "only private list empty — no change, no failure",
@@ -36,6 +36,22 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 			wantChanged:  false,
 			wantStatus:   "",
 		},
+		{
+			// Production recovery: org stuck in failed due to old DefaultPrivateRepositoryTeams guard.
+			name:        "both lists empty, stuck in failed (private error) — clears failure",
+			seedStatus:  GithubOrganizationStateFailed,
+			seedError:   "DefaultPrivateRepositoryTeams is empty",
+			wantChanged: true,
+			wantStatus:  GithubOrganizationStateComplete,
+		},
+		{
+			// Production recovery: org stuck in failed due to old DefaultPublicRepositoryTeams guard.
+			name:        "both lists empty, stuck in failed (public error) — clears failure",
+			seedStatus:  GithubOrganizationStateFailed,
+			seedError:   "DefaultPublicRepositoryTeams is empty",
+			wantChanged: true,
+			wantStatus:  GithubOrganizationStateComplete,
+		},
 	}
 
 	for _, tt := range tests {
@@ -43,6 +59,8 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 			org := GithubOrganization{}
 			org.Spec.DefaultPrivateRepositoryTeams = tt.privateTeams
 			org.Spec.DefaultPublicRepositoryTeams = tt.publicTeams
+			org.Status.OrganizationStatus = tt.seedStatus
+			org.Status.OrganizationStatusError = tt.seedError
 			changed, newStatus := org.RepoChangeCalculator(nil)
 			if changed != tt.wantChanged {
 				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)

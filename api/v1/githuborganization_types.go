@@ -717,6 +717,17 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	changed := false
 
 	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 && len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
+		// Both lists absent is a valid no-op configuration. If the org is
+		// currently stuck in failed due to the old single-list guards, clear
+		// the failure so the controller persists the recovery.
+		if newStatus.OrganizationStatus == GithubOrganizationStateFailed &&
+			(newStatus.OrganizationStatusError == "DefaultPrivateRepositoryTeams is empty" ||
+				newStatus.OrganizationStatusError == "DefaultPublicRepositoryTeams is empty") {
+			newStatus.OrganizationStatus = GithubOrganizationStateComplete
+			newStatus.OrganizationStatusError = ""
+			newStatus.OrganizationStatusTimestamp = metav1.Now()
+			return true, newStatus
+		}
 		return false, newStatus
 	}
 
