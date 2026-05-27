@@ -136,6 +136,11 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 	for {
 		invitations, resp, err := o.organizationService.ListPendingOrgInvitations(ctx, o.organization, opt)
 		if err != nil {
+			// Some GitHub Enterprise instances do not expose the invitations endpoint; treat
+			// 404 as "no pending invitations" so reconciliation is not blocked.
+			if resp != nil && resp.StatusCode == 404 {
+				return result, nil
+			}
 			return nil, err
 		}
 		for _, inv := range invitations {
