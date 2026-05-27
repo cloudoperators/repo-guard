@@ -71,25 +71,7 @@ jobs:
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
 
-          gh pr merge "$PR_URL" --auto --squash
-
-      - name: Wait for PR to merge
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_GH_TOKEN_PR }}
-        run: |
-          PR_URL=${{ steps.pr.outputs.pr_url }}
-          echo "Waiting for PR to merge: $PR_URL"
-          for i in $(seq 1 30); do
-            STATE=$(gh pr view "$PR_URL" --json state -q '.state')
-            if [ "$STATE" = "MERGED" ]; then
-              echo "PR merged."
-              exit 0
-            fi
-            echo "State: $STATE, attempt $i/30 — waiting 20s..."
-            sleep 20
-          done
-          echo "Timed out waiting for PR to merge." >&2
-          exit 1
+          gh pr merge "$PR_URL" --squash --admin
 
       - name: Create GitHub release
         env:
