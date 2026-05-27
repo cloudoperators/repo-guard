@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+
+	"github.com/gosimple/slug"
 )
 
 // MockConfig defines the canned data served by the mock GitHub HTTP server.
@@ -300,17 +302,24 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				Name string `json:"name"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			slug := teamNameToSlug(body.Name)
-			if slug == "" {
-				slug = "new-team"
+			teamSlugNew := slug.Make(body.Name)
+			if teamSlugNew == "" {
+				teamSlugNew = "new-team"
 			}
 			teamsMu.Lock()
+			for _, t := range teams {
+				if t.Slug == teamSlugNew {
+					teamsMu.Unlock()
+					http.Error(w, `{"message":"Validation Failed","errors":[{"resource":"Team","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
+					return
+				}
+			}
 			id := nextTeamID
 			nextTeamID++
-			teams = append(teams, MockTeam{ID: id, Name: body.Name, Slug: slug})
+			teams = append(teams, MockTeam{ID: id, Name: body.Name, Slug: teamSlugNew})
 			teamsMu.Unlock()
 			w.WriteHeader(http.StatusCreated)
-			writeJSON(w, map[string]interface{}{"id": id, "name": body.Name, "slug": slug})
+			writeJSON(w, map[string]interface{}{"id": id, "name": body.Name, "slug": teamSlugNew})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -519,9 +528,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				body.Name = "new-repo"
 			}
 			teamsMu.Lock()
-			if lookupRepo(body.Name) == nil {
-				repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
+			if lookupRepo(body.Name) != nil {
+				teamsMu.Unlock()
+				http.Error(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
+				return
 			}
+			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
 			teamsMu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 			writeJSON(w, map[string]interface{}{
@@ -697,10 +709,4 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		http.Error(w, "json encode error", http.StatusInternalServerError)
 	}
-}
-
-// teamNameToSlug converts a GitHub team name to its slug representation by
-// lowercasing and replacing spaces with hyphens, matching GitHub's behaviour.
-func teamNameToSlug(name string) string {
-	return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 }

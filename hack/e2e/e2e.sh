@@ -879,7 +879,7 @@ cmd_test() {
   log_step "Checking metrics endpoint"
   POD=$(kubectl -n "${NAMESPACE}" get pods -l control-plane=controller-manager -o jsonpath='{.items[0].metadata.name}')
   kubectl -n "${NAMESPACE}" port-forward "pod/${POD}" 9443:9443 >/dev/null 2>&1 & PF_PID=$!
-  trap 'kill ${PF_PID} >/dev/null 2>&1 || true' EXIT
+  trap 'kill ${PF_PID:-} >/dev/null 2>&1 || true' EXIT
   sleep 3
   METRICS=""
   for i in 1 2 3 4 5; do
@@ -923,7 +923,7 @@ cmd_test() {
     log_step "Port-forwarding mock GitHub API server to localhost:${MOCK_LOCAL_PORT}"
     kubectl -n "${NAMESPACE}" port-forward svc/github-mock "${MOCK_LOCAL_PORT}:8080" >/dev/null 2>&1 &
     GITHUB_MOCK_PF_PID=$!
-    trap 'kill ${GITHUB_MOCK_PF_PID} >/dev/null 2>&1 || true; kill ${PF_PID} >/dev/null 2>&1 || true' EXIT
+    trap 'kill ${GITHUB_MOCK_PF_PID:-} >/dev/null 2>&1 || true; kill ${PF_PID:-} >/dev/null 2>&1 || true' EXIT
     sleep 2
     GITHUB_API="http://localhost:${MOCK_LOCAL_PORT}/api/v3"
     GITHUB_TOKEN="mock-token"
