@@ -51,6 +51,7 @@ jobs:
   e2e:
     needs: test
     runs-on: ubuntu-latest
+    environment: e2e
     steps:
       - uses: actions/checkout@v6
       - name: Setup Go
