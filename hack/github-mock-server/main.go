@@ -12,6 +12,10 @@
 //
 // Required environment variables:
 //
+//	(none — all variables have defaults or are optional)
+//
+// Optional environment variables:
+//
 //	MOCK_GITHUB_ORG            - GitHub organisation name (default: greenhouse-sandbox)
 //
 // Optional member / team / repo variables (comma-separated lists):

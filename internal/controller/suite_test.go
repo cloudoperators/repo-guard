@@ -258,9 +258,7 @@ var _ = AfterSuite(func() {
 	if ldapServer != nil {
 		ldapServer.Close()
 	}
-	if mockGitHubServer != nil {
-		mockGitHubServer.Close()
-	}
+	// mockGitHubServer is closed via t.Cleanup registered in NewMockGitHubServer.
 })
 
 func startDummyExternalSystems() {

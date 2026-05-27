@@ -330,6 +330,25 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		switch {
 		// DELETE /api/v3/orgs/{org}/teams/{slug}
 		case subPath == "" && r.Method == http.MethodDelete:
+			teamsMu.Lock()
+			newTeams := teams[:0]
+			for _, t := range teams {
+				if t.Slug != teamSlug {
+					newTeams = append(newTeams, t)
+				}
+			}
+			teams = newTeams
+			delete(teamMembers, teamSlug)
+			for repoName, perms := range teamRepoPerms {
+				newPerms := perms[:0]
+				for _, tp := range perms {
+					if tp.Slug != teamSlug {
+						newPerms = append(newPerms, tp)
+					}
+				}
+				teamRepoPerms[repoName] = newPerms
+			}
+			teamsMu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 
 		// GET /api/v3/orgs/{org}/teams/{slug}

@@ -25,10 +25,6 @@ func isMockMode() bool {
 	return v == "" || v == "true"
 }
 
-// mockTestOrg is the GitHub organisation name used in mock mode.
-// It must match TEST_ENV["ORGANIZATION"] so existing resource fixtures work.
-const mockTestOrg = "greenhouse-sandbox"
-
 // generateMockPrivateKey creates a throwaway RSA key at runtime for mock mode.
 // go-githubapp needs a valid PKCS1 key to build JWT tokens; the mock server
 // ignores the token, so the key never leaves the test process.
@@ -53,7 +49,7 @@ func startMockGitHubServer() {
 	By("starting mock GitHub HTTP server")
 
 	cfg := internalgithub.MockConfig{
-		Org: mockTestOrg,
+		Org: TEST_ENV["ORGANIZATION"],
 		Members: []internalgithub.MockUser{
 			{Login: TEST_ENV["USER_0_GITHUB_USERNAME"], ID: mustParseInt64("USER_0_GITHUB_USERID", 1)},
 			{Login: TEST_ENV["USER_1_GITHUB_USERNAME"], ID: mustParseInt64("USER_1_GITHUB_USERID", 2)},
