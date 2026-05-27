@@ -61,7 +61,9 @@ type MockTestHelper interface {
 
 // NewMockGitHubServer starts an httptest.Server wired with canned GitHub API
 // responses derived from cfg.  It returns the server and its mux so individual
-// tests can override specific handlers.
+// tests can register additional more-specific patterns (note: http.ServeMux
+// panics on duplicate pattern registration, so existing handlers cannot be
+// replaced — only extended with more-specific paths).
 //
 // Pass srv.URL to controller.NewFakeClientCreator (in internal/controller) to
 // redirect all go-github requests at this server instead of real GitHub.
@@ -93,7 +95,13 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	copy(teams, cfg.Teams)
 
 	// nextTeamID is the auto-increment counter for dynamically created teams.
-	nextTeamID := int64(100)
+	// Start at max seeded ID + 1 to avoid collisions with seeded teams.
+	nextTeamID := int64(1)
+	for _, t := range cfg.Teams {
+		if t.ID >= nextTeamID {
+			nextTeamID = t.ID + 1
+		}
+	}
 
 	// teamMembers tracks the members of each team by slug.
 	teamMembers := make(map[string][]MockUser)
@@ -179,6 +187,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 	// POST /api/v3/app/installations/{id}/access_tokens – NewInstallationClient()
 	mux.HandleFunc("/api/v3/app/installations/", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/access_tokens") {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
