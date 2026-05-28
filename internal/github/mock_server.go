@@ -220,7 +220,21 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			teamsMu.Unlock()
 		default:
-			users = cfg.Members
+			// role=all (the default when no role param is given) must return
+			// a de-duplicated union of regular members and org owners so that
+			// callers like ExtendedMembers (Role: "all") see the full set.
+			seen := make(map[string]struct{}, len(cfg.Members))
+			for _, u := range cfg.Members {
+				seen[strings.ToLower(u.Login)] = struct{}{}
+				users = append(users, u)
+			}
+			teamsMu.Lock()
+			for _, u := range orgAdmins {
+				if _, exists := seen[strings.ToLower(u.Login)]; !exists {
+					users = append(users, u)
+				}
+			}
+			teamsMu.Unlock()
 		}
 		result := make([]map[string]interface{}, 0, len(users))
 		for _, u := range users {

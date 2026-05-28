@@ -24,16 +24,10 @@ jobs:
       - name: Install dependencies
         run: go mod download
       - name: Update test.env with real GitHub credentials
-        env:
-          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
           sed -i 's/^GITHUB_TOKEN=.*/GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_ID=.*/GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_SECRET=.*/GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}/' internal/controller/test.env
-
-          echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
-          echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
-          echo "EOF" >> internal/controller/test.env
       - name: Run Controller Tests (live GitHub)
         # GITHUB_MOCK=false runs against the real greenhouse-sandbox GitHub org.
         # Requires TEST_GITHUB_TOKEN, TEST_GITHUB_CLIENT_ID, TEST_GITHUB_CLIENT_SECRET,
@@ -44,6 +38,10 @@ jobs:
           TEST_LDAP_GROUP_PROVIDER_BASE_DN: "DC=ad,DC=global"
           TEST_LDAP_GROUP_PROVIDER_BIND_DN: "CN=ldap-service,CN=Users,DC=ad,DC=global"
           TEST_LDAP_GROUP_PROVIDER_BIND_PW: randompassword
+          # Pass the private key via env so loadTestEnv picks it up via
+          # os.LookupEnv("TEST_GITHUB_PRIVATE_KEY"); the heredoc-in-file
+          # approach is not supported by godotenv.
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: make controller-test-live
 
   e2e-live:
@@ -77,21 +75,19 @@ jobs:
 
           echo "/usr/local/bin" >> $GITHUB_PATH
       - name: Update test.env with real GitHub credentials
-        env:
-          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
           sed -i 's/^GITHUB_TOKEN=.*/GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_ID=.*/GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_SECRET=.*/GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}/' internal/controller/test.env
-
-          echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
-          echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
-          echo "EOF" >> internal/controller/test.env
       - name: Run E2E Tests (live GitHub)
         # USE_MOCK_GITHUB=false connects to the real greenhouse-sandbox GitHub org.
         # Requires GitHub App secrets and a PAT with org admin permissions.
         env:
           USE_MOCK_GITHUB: "false"
+          # Pass the private key via env so loadTestEnv picks it up via
+          # os.LookupEnv("TEST_GITHUB_PRIVATE_KEY"); the heredoc-in-file
+          # approach is not supported by godotenv.
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
           make e2e-live
       - name: Cleanup E2E (GitHub teams/repos + cluster)

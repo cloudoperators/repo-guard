@@ -13,10 +13,12 @@ import (
 	gogithub "github.com/google/go-github/v85/github"
 )
 
-// TestMockResponseShapes decodes every mock JSON response body into its
-// corresponding go-github struct.  If go-github is upgraded and field names
-// change, this test will fail (or the decoded value will be silently zero),
-// alerting the maintainer to update the mock fixtures.
+// TestMockResponseShapes validates that the JSON shapes used as mock fixtures
+// decode correctly into the corresponding go-github structs.  If go-github is
+// upgraded and field names change, this test will fail (or the decoded value
+// will be silently zero), alerting the maintainer to update the fixtures.
+// Note: this test validates expected shapes via hard-coded fixtures; the
+// controller integration tests exercise the live mock server handlers.
 func TestMockResponseShapes(t *testing.T) {
 	t.Run("app", func(t *testing.T) {
 		raw := `{"id":1,"slug":"mock-app","name":"Mock GitHub App"}`
