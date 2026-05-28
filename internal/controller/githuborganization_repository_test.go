@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	githubAPI "github.com/google/go-github/v85/github"
@@ -55,6 +56,19 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 		orgName = requireEnv("ORGANIZATION")
 		client = githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
+		if isMockMode() {
+			// In mock mode point the client at the mock server so that any direct
+			// API calls (e.g. cleanup in DeferCleanup) never hit api.github.com.
+			v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
+			if v3URL != "" {
+				if !strings.HasSuffix(v3URL, "/") {
+					v3URL += "/"
+				}
+				var err error
+				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, v3URL)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		}
 
 		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNS = "ns-repo-" + uniqueID
@@ -119,12 +133,10 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, nsObj)
 
-			if !isMockMode() {
-				_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
-				_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
-				for _, t := range teams {
-					_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
-				}
+			_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
+			_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
+			for _, t := range teams {
+				_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
 			}
 		})
 	})
