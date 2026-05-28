@@ -304,7 +304,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			var body struct {
 				Role string `json:"role"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				return
+			}
 			if strings.EqualFold(body.Role, "admin") {
 				u, _ := lookupUser(username)
 				teamsMu.Lock()
@@ -359,7 +362,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			var body struct {
 				Name string `json:"name"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				return
+			}
 			teamSlugNew := slug.Make(body.Name)
 			if teamSlugNew == "" {
 				teamSlugNew = "new-team"
@@ -501,13 +507,20 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			// subPath is "repos/{owner}/{repo}" — strip the owner segment too.
 			repoPath := strings.TrimPrefix(subPath, "repos/")
 			repoParts := strings.SplitN(repoPath, "/", 2)
-			repoName := repoParts[len(repoParts)-1]
+			if len(repoParts) < 2 {
+				http.NotFound(w, r)
+				return
+			}
+			repoName := repoParts[1]
 			switch r.Method {
 			case http.MethodPut:
 				var body struct {
 					Permission string `json:"permission"`
 				}
-				_ = json.NewDecoder(r.Body).Decode(&body)
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+					return
+				}
 				if body.Permission == "" {
 					body.Permission = "pull"
 				}
@@ -591,7 +604,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				Name    string `json:"name"`
 				Private bool   `json:"private"`
 			}
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				return
+			}
 			if body.Name == "" {
 				body.Name = "new-repo"
 			}
