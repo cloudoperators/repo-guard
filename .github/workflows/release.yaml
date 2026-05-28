@@ -40,11 +40,30 @@ jobs:
           echo "/usr/local/bin" >> $GITHUB_PATH
       - name: Update test.env with real GitHub credentials
         env:
+          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          TEST_GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
+          TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
           TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
-          sed -i 's/^GITHUB_TOKEN=.*/GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}/' internal/controller/test.env
-          sed -i 's/^GITHUB_CLIENT_ID=.*/GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}/' internal/controller/test.env
-          sed -i 's/^GITHUB_CLIENT_SECRET=.*/GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}/' internal/controller/test.env
+          # Use python3 to rewrite key=value lines safely; sed metacharacters
+          # in secret values (& /) would corrupt the file with sed -i.
+          python3 - internal/controller/test.env <<'PYEOF'
+import os, sys, re
+path = sys.argv[1]
+replacements = {
+    "GITHUB_TOKEN": os.environ["TEST_GITHUB_TOKEN"],
+    "GITHUB_CLIENT_ID": os.environ["TEST_GITHUB_CLIENT_ID"],
+    "GITHUB_CLIENT_SECRET": os.environ["TEST_GITHUB_CLIENT_SECRET"],
+}
+lines = open(path).readlines()
+with open(path, "w") as f:
+    for line in lines:
+        for key, val in replacements.items():
+            if re.match(rf"^{key}=", line):
+                line = f"{key}={val}\n"
+                break
+        f.write(line)
+PYEOF
 
           echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
           echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env

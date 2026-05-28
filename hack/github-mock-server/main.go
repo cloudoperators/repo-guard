@@ -96,8 +96,13 @@ func parseUsers(s string) []internalgithub.MockUser {
 			log.Printf("WARN: skipping user %q: invalid id %q: %v", parts[0], parts[1], err)
 			continue
 		}
+		login := strings.TrimSpace(parts[0])
+		if login == "" {
+			log.Printf("WARN: skipping user entry %q: empty login", item)
+			continue
+		}
 		users = append(users, internalgithub.MockUser{
-			Login: strings.TrimSpace(parts[0]),
+			Login: login,
 			ID:    id,
 		})
 	}
@@ -120,6 +125,10 @@ func parseTeams(s string) []internalgithub.MockTeam {
 			continue
 		}
 		slug := strings.TrimSpace(parts[0])
+		if slug == "" {
+			log.Printf("WARN: skipping team entry %q: empty slug", item)
+			continue
+		}
 		teams = append(teams, internalgithub.MockTeam{
 			ID:   id,
 			Name: slug,

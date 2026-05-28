@@ -271,11 +271,19 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 	// GET /api/v3/orgs/{org}/outside_collaborators
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/outside_collaborators", org), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		writeJSON(w, []interface{}{})
 	})
 
 	// GET /api/v3/orgs/{org}/invitations  (pending org invitations)
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/invitations", org), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		writeJSON(w, []interface{}{})
 	})
 
@@ -311,6 +319,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 	// GET /api/v3/user/memberships/orgs/{org}
 	mux.HandleFunc(fmt.Sprintf("/api/v3/user/memberships/orgs/%s", org), func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 	})
 
