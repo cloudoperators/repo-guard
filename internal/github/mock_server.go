@@ -248,7 +248,9 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		username := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/api/v3/orgs/%s/members/", org))
 		switch r.Method {
 		case http.MethodGet:
-			// IsMember: return 204 if member, 404 otherwise
+			// IsMember: return 204 if member, 404 otherwise.
+			// Check both the static seed lists and orgAdmins (populated by
+			// PUT /memberships) so dynamically promoted users are recognised.
 			for _, u := range cfg.Members {
 				if strings.EqualFold(u.Login, username) {
 					w.WriteHeader(http.StatusNoContent)
@@ -260,6 +262,13 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					w.WriteHeader(http.StatusNoContent)
 					return
 				}
+			}
+			teamsMu.Lock()
+			_, promoted := orgAdmins[strings.ToLower(username)]
+			teamsMu.Unlock()
+			if promoted {
+				w.WriteHeader(http.StatusNoContent)
+				return
 			}
 			http.Error(w, "not found", http.StatusNotFound)
 		case http.MethodDelete:
@@ -300,6 +309,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				u, _ := lookupUser(username)
 				teamsMu.Lock()
 				orgAdmins[strings.ToLower(username)] = u
+				teamsMu.Unlock()
+			} else {
+				teamsMu.Lock()
+				delete(orgAdmins, strings.ToLower(username))
 				teamsMu.Unlock()
 			}
 			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
