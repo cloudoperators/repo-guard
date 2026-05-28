@@ -41,7 +41,7 @@ Note: pod name must be resolved first before describing it.
 ```bash
 POD=$(kubectl get pods -n greenhouse -l control-plane=controller-manager -o name | head -1 | sed 's|pod/||')
 kubectl logs -n greenhouse "$POD" --tail=200 2>&1 \
-  | grep -E '"level":"error"|ERROR|WARN|panic|ratelimit|rate.limit|rate_limit' \
+  | grep -E '"level":"error"|"level":"warn"|"level":"panic"|ERROR|WARN|panic|ratelimit|rate.limit|rate_limit' \
   | head -60
 ```
 
