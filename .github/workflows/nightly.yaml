@@ -79,6 +79,10 @@ jobs:
           sed -i 's/^GITHUB_TOKEN=.*/GITHUB_TOKEN=${{ secrets.TEST_GITHUB_TOKEN }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_ID=.*/GITHUB_CLIENT_ID=${{ secrets.TEST_GITHUB_CLIENT_ID }}/' internal/controller/test.env
           sed -i 's/^GITHUB_CLIENT_SECRET=.*/GITHUB_CLIENT_SECRET=${{ secrets.TEST_GITHUB_CLIENT_SECRET }}/' internal/controller/test.env
+          # Append the private key in single-quoted form so gen-values.sh (read_var_multiline)
+          # can parse it from test.env; passing it only via step env is not enough because
+          # gen-values.sh reads from the file directly and does not consult process env.
+          printf "GITHUB_PRIVATE_KEY='%s'\n" "${{ secrets.TEST_GITHUB_PRIVATE_KEY }}" >> internal/controller/test.env
       - name: Run E2E Tests (live GitHub)
         # USE_MOCK_GITHUB=false connects to the real greenhouse-sandbox GitHub org.
         # Requires GitHub App secrets and a PAT with org admin permissions.
