@@ -7,6 +7,93 @@ import (
 	"testing"
 )
 
+func TestRepoChangeCalculatorMethod(t *testing.T) {
+	repoWithTeam := GithubRepository{
+		Name: "repo1",
+		Teams: []GithubTeamWithPermission{
+			{Team: "existing-team", Permission: GithubTeamPermissionPush},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		privateTeams []GithubTeamWithPermission
+		publicTeams  []GithubTeamWithPermission
+		privateRepos []GithubRepository
+		publicRepos  []GithubRepository
+		seedStatus   GithubOrganizationState
+		seedError    string
+		wantChanged  bool
+		wantStatus   GithubOrganizationState
+		wantOpsLen   int
+	}{
+		{
+			name:        "both default team lists empty — no change, no failure",
+			wantChanged: false,
+			wantStatus:  "",
+		},
+		{
+			// Empty private list must not generate REMOVE ops for repos that
+			// have existing teams — it means "no policy for private repos".
+			name:         "only private list empty — no ops generated even with existing repo teams",
+			privateTeams: nil,
+			publicTeams:  []GithubTeamWithPermission{{Team: "all-read", Permission: GithubTeamPermissionPull}},
+			privateRepos: []GithubRepository{repoWithTeam},
+			wantChanged:  false,
+			wantOpsLen:   0,
+		},
+		{
+			// Empty public list must not generate REMOVE ops for repos that
+			// have existing teams — it means "no policy for public repos".
+			name:         "only public list empty — no ops generated even with existing repo teams",
+			privateTeams: []GithubTeamWithPermission{{Team: "all-read", Permission: GithubTeamPermissionPull}},
+			publicTeams:  nil,
+			publicRepos:  []GithubRepository{repoWithTeam},
+			wantChanged:  false,
+			wantOpsLen:   0,
+		},
+		{
+			// Production recovery: org stuck in failed due to old DefaultPrivateRepositoryTeams guard.
+			name:        "both lists empty, stuck in failed (private error) — clears failure",
+			seedStatus:  GithubOrganizationStateFailed,
+			seedError:   "DefaultPrivateRepositoryTeams is empty",
+			wantChanged: true,
+			wantStatus:  GithubOrganizationStateComplete,
+		},
+		{
+			// Production recovery: org stuck in failed due to old DefaultPublicRepositoryTeams guard.
+			name:        "both lists empty, stuck in failed (public error) — clears failure",
+			seedStatus:  GithubOrganizationStateFailed,
+			seedError:   "DefaultPublicRepositoryTeams is empty",
+			wantChanged: true,
+			wantStatus:  GithubOrganizationStateComplete,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org := GithubOrganization{}
+			org.Spec.DefaultPrivateRepositoryTeams = tt.privateTeams
+			org.Spec.DefaultPublicRepositoryTeams = tt.publicTeams
+			org.Status.PrivateRepositories = tt.privateRepos
+			org.Status.PublicRepositories = tt.publicRepos
+			org.Status.OrganizationStatus = tt.seedStatus
+			org.Status.OrganizationStatusError = tt.seedError
+			changed, newStatus := org.RepoChangeCalculator(nil)
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+			if tt.wantStatus != "" && newStatus.OrganizationStatus != tt.wantStatus {
+				t.Errorf("OrganizationStatus = %q, want %q", newStatus.OrganizationStatus, tt.wantStatus)
+			}
+			if tt.wantOpsLen >= 0 && len(newStatus.Operations.RepositoryTeamOperations) != tt.wantOpsLen {
+				t.Errorf("RepositoryTeamOperations len = %d, want %d: %+v",
+					len(newStatus.Operations.RepositoryTeamOperations), tt.wantOpsLen, newStatus.Operations.RepositoryTeamOperations)
+			}
+		})
+	}
+}
+
 // teamOp is a helper to build a GithubRepoTeamOperation for test setup.
 func teamOp(team, repo string, opType GithubRepoTeamOperationType, state GithubRepoTeamOperationState) GithubRepoTeamOperation {
 	return GithubRepoTeamOperation{

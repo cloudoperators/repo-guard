@@ -716,17 +716,29 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	newStatus := g.Status.DeepCopy()
 	changed := false
 
-	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 {
-		newStatus.OrganizationStatus = GithubOrganizationStateFailed
-		newStatus.OrganizationStatusError = "DefaultPrivateRepositoryTeams is empty"
-		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		return true, newStatus
-	}
-	if len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
-		newStatus.OrganizationStatus = GithubOrganizationStateFailed
-		newStatus.OrganizationStatusError = "DefaultPublicRepositoryTeams is empty"
-		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		return true, newStatus
+	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 && len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
+		// Both lists absent is a valid no-op configuration. If the org is
+		// currently stuck in failed due to the old single-list guards, clear
+		// the failure so the controller persists the recovery.
+		if newStatus.OrganizationStatus == GithubOrganizationStateFailed &&
+			(newStatus.OrganizationStatusError == "DefaultPrivateRepositoryTeams is empty" ||
+				newStatus.OrganizationStatusError == "DefaultPublicRepositoryTeams is empty") {
+			newStatus.OrganizationStatusError = ""
+			newStatus.OrganizationStatusTimestamp = metav1.Now()
+			// Derive top-level status from any lingering operations so we don't
+			// declare complete while pending/failed ops are still present.
+			tmp := &GithubOrganization{Status: *newStatus}
+			switch {
+			case tmp.PendingOperationsFound():
+				newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+			case tmp.FailedOperationsFound():
+				newStatus.OrganizationStatus = GithubOrganizationStateFailed
+			default:
+				newStatus.OrganizationStatus = GithubOrganizationStateComplete
+			}
+			return true, newStatus
+		}
+		return false, newStatus
 	}
 
 	skipList := make([]string, 0)
@@ -734,16 +746,23 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 		skipList = strings.Split(g.Annotations[GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY], ",")
 	}
 
-	privateRepoOperations := repoChangeCalculator(g.Spec.DefaultPrivateRepositoryTeams, g.Status.PrivateRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
-	if len(privateRepoOperations) > 0 {
-		newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, privateRepoOperations...)
-		changed = true
+	// Only call repoChangeCalculator for a visibility when its default team
+	// list is non-empty. An empty list means "no policy for this visibility"
+	// and must not generate REMOVE operations for existing repo teams.
+	if len(g.Spec.DefaultPrivateRepositoryTeams) > 0 {
+		privateRepoOperations := repoChangeCalculator(g.Spec.DefaultPrivateRepositoryTeams, g.Status.PrivateRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		if len(privateRepoOperations) > 0 {
+			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, privateRepoOperations...)
+			changed = true
+		}
 	}
 
-	publicRepoOperations := repoChangeCalculator(g.Spec.DefaultPublicRepositoryTeams, g.Status.PublicRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
-	if len(publicRepoOperations) > 0 {
-		newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, publicRepoOperations...)
-		changed = true
+	if len(g.Spec.DefaultPublicRepositoryTeams) > 0 {
+		publicRepoOperations := repoChangeCalculator(g.Spec.DefaultPublicRepositoryTeams, g.Status.PublicRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		if len(publicRepoOperations) > 0 {
+			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, publicRepoOperations...)
+			changed = true
+		}
 	}
 
 	if changed {
