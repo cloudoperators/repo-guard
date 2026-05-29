@@ -48,6 +48,7 @@ with open(path, "w") as f:
                 break
         f.write(line)
 PYEOF
+      - name: Run Controller Tests (live GitHub)
         # GITHUB_MOCK=false runs against the real greenhouse-sandbox GitHub org.
         # Requires TEST_GITHUB_TOKEN, TEST_GITHUB_CLIENT_ID, TEST_GITHUB_CLIENT_SECRET,
         # and TEST_GITHUB_PRIVATE_KEY secrets to be set in the repository.
