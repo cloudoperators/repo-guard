@@ -382,8 +382,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			nextTeamID++
 			teams = append(teams, MockTeam{ID: id, Name: body.Name, Slug: teamSlugNew})
 			teamsMu.Unlock()
-			w.WriteHeader(http.StatusCreated)
-			writeJSON(w, map[string]interface{}{"id": id, "name": body.Name, "slug": teamSlugNew})
+			writeJSONCreated(w, map[string]interface{}{"id": id, "name": body.Name, "slug": teamSlugNew})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -619,8 +618,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
 			teamsMu.Unlock()
-			w.WriteHeader(http.StatusCreated)
-			writeJSON(w, map[string]interface{}{
+			writeJSONCreated(w, map[string]interface{}{
 				"name":      body.Name,
 				"private":   body.Private,
 				"full_name": fmt.Sprintf("%s/%s", org, body.Name),
@@ -804,5 +802,16 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		http.Error(w, "json encode error", http.StatusInternalServerError)
+	}
+}
+
+// writeJSONCreated writes a 201 Created response with a JSON body.
+// Content-Type must be set before WriteHeader; this helper ensures correct ordering.
+func writeJSONCreated(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// Headers already sent; log only.
+		_ = err
 	}
 }
