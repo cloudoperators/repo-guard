@@ -311,7 +311,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				Role string `json:"role"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
 				return
 			}
 			if strings.EqualFold(body.Role, "admin") {
@@ -374,7 +374,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				Name string `json:"name"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
 				return
 			}
 			teamSlugNew := slug.Make(body.Name)
@@ -385,7 +385,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			for _, t := range teams {
 				if t.Slug == teamSlugNew {
 					teamsMu.Unlock()
-					http.Error(w, `{"message":"Validation Failed","errors":[{"resource":"Team","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
+					writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Team","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
 					return
 				}
 			}
@@ -499,7 +499,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 			case http.MethodDelete:
 				teamsMu.Lock()
-				newList := teamMembers[teamSlug][:0]
+				var newList []MockUser
 				for _, m := range teamMembers[teamSlug] {
 					if !strings.EqualFold(m.Login, username) {
 						newList = append(newList, m)
@@ -528,7 +528,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					Permission string `json:"permission"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-					http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+					writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
 					return
 				}
 				if body.Permission == "" {
@@ -542,7 +542,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				repoFound := lookupRepo(repoName) != nil
 				if !repoFound {
 					teamsMu.Unlock()
-					http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 					return
 				}
 				perms := teamRepoPerms[repoName]
@@ -615,7 +615,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				Private bool   `json:"private"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				http.Error(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
+				writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
 				return
 			}
 			if body.Name == "" {
@@ -624,7 +624,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			teamsMu.Lock()
 			if lookupRepo(body.Name) != nil {
 				teamsMu.Unlock()
-				http.Error(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
+				writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
 				return
 			}
 			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
@@ -811,9 +811,18 @@ func visibilityStr(private bool) string {
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		http.Error(w, "json encode error", http.StatusInternalServerError)
-	}
+	// Encode errors are ignored: headers are already committed and we cannot
+	// send an error response at this point without corrupting the stream.
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeJSONError writes an error response with Content-Type: application/json.
+// This mirrors the real GitHub API which returns JSON bodies on errors, allowing
+// go-github's error-response decoder to parse the message field.
+func writeJSONError(w http.ResponseWriter, body string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_, _ = w.Write([]byte(body))
 }
 
 // writeJSONCreated writes a 201 Created response with a JSON body.
