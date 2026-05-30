@@ -28,7 +28,7 @@ func (f *FakeClientCreator) newClient() (*gogithub.Client, error) {
 	httpClient := &http.Client{}
 	c, err := gogithub.NewClient(httpClient).WithEnterpriseURLs(
 		f.serverURL+"/api/v3/",
-		f.serverURL+"/api/uploads/",
+		f.serverURL+"/", // server root avoids go-github doubling the path to …/api/v3/api/uploads
 	)
 	if err != nil {
 		return nil, err
