@@ -64,8 +64,12 @@ var _ = Describe("Github Organization controller - repository team assignments",
 				if !strings.HasSuffix(v3URL, "/") {
 					v3URL += "/"
 				}
+				// uploadURL must be the server root so that go-github appends
+				// "/api/uploads" correctly; passing v3URL would produce
+				// "…/api/v3/api/uploads".
+				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
 				var err error
-				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, v3URL)
+				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
 				Expect(err).NotTo(HaveOccurred())
 			}
 		}
