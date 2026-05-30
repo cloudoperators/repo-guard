@@ -65,7 +65,9 @@ with open(path, "w") as f:
         f.write(line)
 PYEOF
 
-          echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
+          # Append the private key as a heredoc so gen-values.sh (read_var_multiline)
+          # can safely parse multi-line PEM values regardless of trailing newlines.
+          echo "GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
           echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
           echo "EOF" >> internal/controller/test.env
       - name: Run E2E Tests (live GitHub)

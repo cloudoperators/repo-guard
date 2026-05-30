@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
@@ -149,11 +150,24 @@ var _ = Describe("Github Team controller", func() {
 	})
 
 	AfterEach(func() {
-		if !isMockMode() {
-			ctx := context.Background()
-			client := githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
-			_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
+		ctx := context.Background()
+		client := githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
+		if isMockMode() {
+			// In mock mode point the client at the mock server so that cleanup
+			// calls never hit api.github.com and the in-process mock state stays
+			// clean between test runs.
+			v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
+			if v3URL != "" {
+				if !strings.HasSuffix(v3URL, "/") {
+					v3URL += "/"
+				}
+				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
+				var err error
+				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+				Expect(err).NotTo(HaveOccurred())
+			}
 		}
+		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
 
 		// Keep it small: enough to let reconcile settle in CI without long sleeps
 		Eventually(func() bool { return true }, 200*time.Millisecond, 200*time.Millisecond).Should(BeTrue())
