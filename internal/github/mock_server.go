@@ -65,8 +65,8 @@ type MockTestHelper interface {
 // panics on duplicate pattern registration, so existing handlers cannot be
 // replaced — only extended with more-specific paths).
 //
-// Pass srv.URL to controller.NewFakeClientCreator (in internal/controller) to
-// redirect all go-github requests at this server instead of real GitHub.
+// To redirect go-github requests at this server, construct the client with
+// WithEnterpriseURLs(srv.URL+"/api/v3/", srv.URL+"/").
 func NewMockGitHubServer(t MockTestHelper, cfg MockConfig) (*httptest.Server, *http.ServeMux) {
 	mux := http.NewServeMux()
 	registerMockHandlers(mux, cfg)
@@ -828,11 +828,10 @@ func writeJSON(w http.ResponseWriter, v interface{}) {
 
 // writeJSONCreated writes a 201 Created response with a JSON body.
 // Content-Type must be set before WriteHeader; this helper ensures correct ordering.
+// Encode errors are silently ignored because headers are already committed by the
+// time Encode writes the body and there is no way to signal the error to the client.
 func writeJSONCreated(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		// Headers already sent; log only.
-		_ = err
-	}
+	_ = json.NewEncoder(w).Encode(v)
 }
