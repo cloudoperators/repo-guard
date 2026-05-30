@@ -138,6 +138,19 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		orgAdmins[strings.ToLower(u.Login)] = u
 	}
 
+	// orgMembers is the mutable set of all org members (login -> MockUser).
+	// Seeded from cfg.Members ∪ cfg.Owners so that owners who are later demoted
+	// to "member" still appear in the role=all listing rather than disappearing.
+	orgMembers := make(map[string]MockUser, len(cfg.Members)+len(cfg.Owners))
+	for _, u := range cfg.Members {
+		orgMembers[strings.ToLower(u.Login)] = u
+	}
+	for _, u := range cfg.Owners {
+		if _, exists := orgMembers[strings.ToLower(u.Login)]; !exists {
+			orgMembers[strings.ToLower(u.Login)] = u
+		}
+	}
+
 	// lookupUser finds a user by login across cfg.Members and cfg.Owners.
 	lookupUser := func(login string) (MockUser, bool) {
 		for _, u := range cfg.Members {
@@ -220,15 +233,18 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			teamsMu.Unlock()
 		default:
-			// role=all (the default when no role param is given) must return
-			// a de-duplicated union of regular members and org owners so that
-			// callers like ExtendedMembers (Role: "all") see the full set.
-			seen := make(map[string]struct{}, len(cfg.Members))
-			for _, u := range cfg.Members {
-				seen[strings.ToLower(u.Login)] = struct{}{}
+			// role=all returns the full set of org members.  Use orgMembers (which
+			// is seeded from cfg.Members ∪ cfg.Owners and stays stable across
+			// promotions/demotions) then include any users who were promoted to
+			// admin but were not in the initial seed (dynamically invited members).
+			teamsMu.Lock()
+			for _, u := range orgMembers {
 				users = append(users, u)
 			}
-			teamsMu.Lock()
+			seen := make(map[string]struct{}, len(orgMembers))
+			for k := range orgMembers {
+				seen[k] = struct{}{}
+			}
 			for _, u := range orgAdmins {
 				if _, exists := seen[strings.ToLower(u.Login)]; !exists {
 					users = append(users, u)
@@ -312,10 +328,15 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				u, _ := lookupUser(username)
 				teamsMu.Lock()
 				orgAdmins[strings.ToLower(username)] = u
+				// Also ensure the user is in the members set.
+				orgMembers[strings.ToLower(username)] = u
 				teamsMu.Unlock()
 			} else {
+				u, _ := lookupUser(username)
 				teamsMu.Lock()
 				delete(orgAdmins, strings.ToLower(username))
+				// Keep the user in orgMembers — demoted admins remain org members.
+				orgMembers[strings.ToLower(username)] = u
 				teamsMu.Unlock()
 			}
 			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
