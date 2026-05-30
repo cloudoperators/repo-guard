@@ -11,6 +11,7 @@ env:
 jobs:
   e2e-live:
     runs-on: ubuntu-latest
+    environment: e2e
     steps:
       - uses: actions/checkout@v6
       - name: Setup Go
