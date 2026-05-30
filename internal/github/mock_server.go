@@ -290,8 +290,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
-			http.Error(w, "not found", http.StatusNotFound)
+			writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 		case http.MethodDelete:
+			stateMu.Lock()
+			delete(orgMembers, strings.ToLower(username))
+			delete(orgAdmins, strings.ToLower(username))
+			stateMu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -428,7 +432,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// DELETE /api/v3/orgs/{org}/teams/{slug}
 		case subPath == "" && r.Method == http.MethodDelete:
 			stateMu.Lock()
-			newTeams := teams[:0]
+			var newTeams []MockTeam
 			for _, t := range teams {
 				if t.Slug != teamSlug {
 					newTeams = append(newTeams, t)
@@ -437,7 +441,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			teams = newTeams
 			delete(teamMembers, teamSlug)
 			for repoName, perms := range teamRepoPerms {
-				newPerms := perms[:0]
+				var newPerms []MockTeamWithPermission
 				for _, tp := range perms {
 					if tp.Slug != teamSlug {
 						newPerms = append(newPerms, tp)
@@ -460,7 +464,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					return
 				}
 			}
-			http.Error(w, "not found", http.StatusNotFound)
+			writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 
 		// GET /api/v3/orgs/{org}/teams/{slug}/members
 		case subPath == "members" && r.Method == http.MethodGet:
@@ -470,7 +474,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			copy(members, teamMembers[teamSlug])
 			stateMu.Unlock()
 			if !exists {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
 			result := make([]map[string]interface{}, 0, len(members))
@@ -497,14 +501,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				if found {
 					writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 				} else {
-					http.Error(w, "not found", http.StatusNotFound)
+					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				}
 			case http.MethodPut:
 				u, _ := lookupUser(username)
 				stateMu.Lock()
 				if !teamExists(teamSlug) {
 					stateMu.Unlock()
-					http.Error(w, "not found", http.StatusNotFound)
+					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 					return
 				}
 				// Add only if not already present.
@@ -593,9 +597,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				w.WriteHeader(http.StatusNoContent)
 			case http.MethodDelete:
 				stateMu.Lock()
-				perms := teamRepoPerms[repoName]
-				newPerms := perms[:0]
-				for _, tp := range perms {
+				var newPerms []MockTeamWithPermission
+				for _, tp := range teamRepoPerms[repoName] {
 					if tp.Slug != teamSlug {
 						newPerms = append(newPerms, tp)
 					}
@@ -608,7 +611,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 
 		default:
-			http.Error(w, fmt.Sprintf("mock: unhandled team path: %s %s/%s", r.Method, teamSlug, subPath), http.StatusNotFound)
+			writeJSONError(w, fmt.Sprintf(`{"message":"mock: unhandled team path: %s %s/%s"}`, r.Method, teamSlug, subPath), http.StatusNotFound)
 		}
 	})
 
@@ -686,7 +689,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// GET /api/v3/repos/{org}/{repo}
 		case subPath == "" && r.Method == http.MethodGet:
 			if repoSnapshot == nil {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
 			writeJSON(w, map[string]interface{}{
@@ -699,7 +702,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// DELETE /api/v3/repos/{org}/{repo}
 		case subPath == "" && r.Method == http.MethodDelete:
 			stateMu.Lock()
-			newRepos := repos[:0]
+			var newRepos []MockRepo
 			for _, rp := range repos {
 				if rp.Name != repoName {
 					newRepos = append(newRepos, rp)
@@ -713,7 +716,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// GET /api/v3/repos/{org}/{repo}/teams
 		case subPath == "teams" && r.Method == http.MethodGet:
 			if repoSnapshot == nil {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
 			stateMu.Lock()
@@ -734,7 +737,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// GET /api/v3/repos/{org}/{repo}/collaborators
 		case subPath == "collaborators" && r.Method == http.MethodGet:
 			if repoSnapshot == nil {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
 			writeJSON(w, []interface{}{})
@@ -742,13 +745,13 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// DELETE /api/v3/repos/{org}/{repo}/collaborators/{user}
 		case strings.HasPrefix(subPath, "collaborators/") && r.Method == http.MethodDelete:
 			if repoSnapshot == nil {
-				http.Error(w, "not found", http.StatusNotFound)
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 
 		default:
-			http.Error(w, fmt.Sprintf("mock: unhandled repos path: %s %s/%s", r.Method, repoName, subPath), http.StatusNotFound)
+			writeJSONError(w, fmt.Sprintf(`{"message":"mock: unhandled repos path: %s %s/%s"}`, r.Method, repoName, subPath), http.StatusNotFound)
 		}
 	})
 
@@ -773,7 +776,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				return
 			}
 		}
-		http.Error(w, "not found", http.StatusNotFound)
+		writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 	})
 
 	// GET /api/v3/user/{id}  — GetByID
@@ -802,7 +805,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				return
 			}
 		}
-		http.Error(w, "not found", http.StatusNotFound)
+		writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 	})
 }
 
