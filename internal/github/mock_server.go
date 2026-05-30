@@ -611,7 +611,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 
 		default:
-			writeJSONError(w, fmt.Sprintf(`{"message":"mock: unhandled team path: %s %s/%s"}`, r.Method, teamSlug, subPath), http.StatusNotFound)
+			msg, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("mock: unhandled team path: %s %s/%s", r.Method, teamSlug, subPath)})
+			writeJSONError(w, string(msg), http.StatusNotFound)
 		}
 	})
 
@@ -751,7 +752,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			w.WriteHeader(http.StatusNoContent)
 
 		default:
-			writeJSONError(w, fmt.Sprintf(`{"message":"mock: unhandled repos path: %s %s/%s"}`, r.Method, repoName, subPath), http.StatusNotFound)
+			msg, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("mock: unhandled repos path: %s %s/%s", r.Method, repoName, subPath)})
+			writeJSONError(w, string(msg), http.StatusNotFound)
 		}
 	})
 
