@@ -99,6 +99,7 @@ PYEOF
           TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
           TEST_GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
           TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
           # Use python3 to rewrite key=value lines safely; sed metacharacters
           # in secret values (& /) would corrupt the file with sed -i.
@@ -119,10 +120,11 @@ with open(path, "w") as f:
                 break
         f.write(line)
 PYEOF
-          # Append the private key in single-quoted form so gen-values.sh (read_var_multiline)
-          # can parse it from test.env; passing it only via step env is not enough because
-          # gen-values.sh reads from the file directly and does not consult process env.
-          printf "GITHUB_PRIVATE_KEY='%s'\n" "${{ secrets.TEST_GITHUB_PRIVATE_KEY }}" >> internal/controller/test.env
+          # Append the private key as a heredoc so gen-values.sh (read_var_multiline)
+          # can safely parse multi-line PEM values regardless of trailing newlines.
+          echo "GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
+          echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
+          echo "EOF" >> internal/controller/test.env
       - name: Run E2E Tests (live GitHub)
         # USE_MOCK_GITHUB=false connects to the real greenhouse-sandbox GitHub org.
         # Requires GitHub App secrets and a PAT with org admin permissions.

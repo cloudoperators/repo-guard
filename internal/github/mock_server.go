@@ -89,8 +89,11 @@ func NewMockGitHubMux(cfg MockConfig) *http.ServeMux {
 func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	org := cfg.Org
 
+	// stateMu guards all mutable mock state: teams, teamMembers, repos,
+	// teamRepoPerms, orgAdmins, and orgMembers.
+	var stateMu sync.Mutex
+
 	// teams is a mutable copy of cfg.Teams so that POST /teams can add entries.
-	var teamsMu sync.Mutex
 	teams := make([]MockTeam, len(cfg.Teams))
 	copy(teams, cfg.Teams)
 
@@ -121,7 +124,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	repos := make([]MockRepo, len(cfg.Repos))
 	copy(repos, cfg.Repos)
 
-	// lookupRepo finds a repo by name in the mutable repos slice (must be called with teamsMu held).
+	// lookupRepo finds a repo by name in the mutable repos slice (must be called with stateMu held).
 	lookupRepo := func(name string) *MockRepo {
 		for i := range repos {
 			if repos[i].Name == name {
@@ -227,17 +230,17 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		var users []MockUser
 		switch role {
 		case "admin":
-			teamsMu.Lock()
+			stateMu.Lock()
 			for _, u := range orgAdmins {
 				users = append(users, u)
 			}
-			teamsMu.Unlock()
+			stateMu.Unlock()
 		default:
 			// role=all returns the full set of org members.  Use orgMembers (which
 			// is seeded from cfg.Members ∪ cfg.Owners and stays stable across
 			// promotions/demotions) then include any users who were promoted to
 			// admin but were not in the initial seed (dynamically invited members).
-			teamsMu.Lock()
+			stateMu.Lock()
 			for _, u := range orgMembers {
 				users = append(users, u)
 			}
@@ -250,7 +253,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					users = append(users, u)
 				}
 			}
-			teamsMu.Unlock()
+			stateMu.Unlock()
 		}
 		result := make([]map[string]interface{}, 0, len(users))
 		for _, u := range users {
@@ -268,10 +271,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			// Check orgMembers (the mutable set seeded from cfg.Members ∪ cfg.Owners
 			// and updated by PUT /memberships) and orgAdmins (for dynamically
 			// promoted users not in the initial seed).
-			teamsMu.Lock()
+			stateMu.Lock()
 			_, isMember := orgMembers[strings.ToLower(username)]
 			_, isAdmin := orgAdmins[strings.ToLower(username)]
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			if isMember || isAdmin {
 				w.WriteHeader(http.StatusNoContent)
 				return
@@ -316,24 +319,24 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			if strings.EqualFold(body.Role, "admin") {
 				u, _ := lookupUser(username)
-				teamsMu.Lock()
+				stateMu.Lock()
 				orgAdmins[strings.ToLower(username)] = u
 				// Also ensure the user is in the members set.
 				orgMembers[strings.ToLower(username)] = u
-				teamsMu.Unlock()
+				stateMu.Unlock()
 			} else {
 				u, _ := lookupUser(username)
-				teamsMu.Lock()
+				stateMu.Lock()
 				delete(orgAdmins, strings.ToLower(username))
 				// Keep the user in orgMembers — demoted admins remain org members.
 				orgMembers[strings.ToLower(username)] = u
-				teamsMu.Unlock()
+				stateMu.Unlock()
 			}
 			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
 		case http.MethodGet:
-			teamsMu.Lock()
+			stateMu.Lock()
 			_, isAdmin := orgAdmins[strings.ToLower(username)]
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			role := "member"
 			if isAdmin {
 				role = "admin"
@@ -360,10 +363,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/teams", org), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			teamsMu.Lock()
+			stateMu.Lock()
 			snapshot := make([]MockTeam, len(teams))
 			copy(snapshot, teams)
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			result := make([]map[string]interface{}, 0, len(snapshot))
 			for _, team := range snapshot {
 				result = append(result, teamToMap(team))
@@ -381,10 +384,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			if teamSlugNew == "" {
 				teamSlugNew = "new-team"
 			}
-			teamsMu.Lock()
+			stateMu.Lock()
 			for _, t := range teams {
 				if t.Slug == teamSlugNew {
-					teamsMu.Unlock()
+					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Team","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
 					return
 				}
@@ -392,7 +395,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			id := nextTeamID
 			nextTeamID++
 			teams = append(teams, MockTeam{ID: id, Name: body.Name, Slug: teamSlugNew})
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			writeJSONCreated(w, map[string]interface{}{"id": id, "name": body.Name, "slug": teamSlugNew})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -413,7 +416,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		switch {
 		// DELETE /api/v3/orgs/{org}/teams/{slug}
 		case subPath == "" && r.Method == http.MethodDelete:
-			teamsMu.Lock()
+			stateMu.Lock()
 			newTeams := teams[:0]
 			for _, t := range teams {
 				if t.Slug != teamSlug {
@@ -431,15 +434,15 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				}
 				teamRepoPerms[repoName] = newPerms
 			}
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 
 		// GET /api/v3/orgs/{org}/teams/{slug}
 		case subPath == "" && r.Method == http.MethodGet:
-			teamsMu.Lock()
+			stateMu.Lock()
 			snapshot := make([]MockTeam, len(teams))
 			copy(snapshot, teams)
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			for _, team := range snapshot {
 				if team.Slug == teamSlug {
 					writeJSON(w, teamToMap(team))
@@ -450,10 +453,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 		// GET /api/v3/orgs/{org}/teams/{slug}/members
 		case subPath == "members" && r.Method == http.MethodGet:
-			teamsMu.Lock()
+			stateMu.Lock()
 			members := make([]MockUser, len(teamMembers[teamSlug]))
 			copy(members, teamMembers[teamSlug])
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			result := make([]map[string]interface{}, 0, len(members))
 			for _, u := range members {
 				result = append(result, userToMap(u))
@@ -466,7 +469,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			switch r.Method {
 			case http.MethodGet:
 				// Return membership state if user is in the team, 404 otherwise.
-				teamsMu.Lock()
+				stateMu.Lock()
 				found := false
 				for _, m := range teamMembers[teamSlug] {
 					if strings.EqualFold(m.Login, username) {
@@ -474,7 +477,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 						break
 					}
 				}
-				teamsMu.Unlock()
+				stateMu.Unlock()
 				if found {
 					writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 				} else {
@@ -482,7 +485,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				}
 			case http.MethodPut:
 				if u, ok := lookupUser(username); ok {
-					teamsMu.Lock()
+					stateMu.Lock()
 					// Add only if not already present.
 					found := false
 					for _, m := range teamMembers[teamSlug] {
@@ -494,11 +497,11 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					if !found {
 						teamMembers[teamSlug] = append(teamMembers[teamSlug], u)
 					}
-					teamsMu.Unlock()
+					stateMu.Unlock()
 				}
 				writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 			case http.MethodDelete:
-				teamsMu.Lock()
+				stateMu.Lock()
 				var newList []MockUser
 				for _, m := range teamMembers[teamSlug] {
 					if !strings.EqualFold(m.Login, username) {
@@ -506,7 +509,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					}
 				}
 				teamMembers[teamSlug] = newList
-				teamsMu.Unlock()
+				stateMu.Unlock()
 				w.WriteHeader(http.StatusNoContent)
 			default:
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -534,14 +537,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				if body.Permission == "" {
 					body.Permission = "pull"
 				}
-				teamsMu.Lock()
+				stateMu.Lock()
 				// Validate the repo exists; mirror real GitHub 404 behaviour for
 				// unknown repositories.  Team existence is not validated here
 				// because seeded teams may be deleted by other concurrent
 				// reconcilers during the test suite, causing spurious 404s.
 				repoFound := lookupRepo(repoName) != nil
 				if !repoFound {
-					teamsMu.Unlock()
+					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 					return
 				}
@@ -566,10 +569,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					perms = append(perms, MockTeamWithPermission{Slug: teamSlug, ID: teamID, Permission: body.Permission})
 				}
 				teamRepoPerms[repoName] = perms
-				teamsMu.Unlock()
+				stateMu.Unlock()
 				w.WriteHeader(http.StatusNoContent)
 			case http.MethodDelete:
-				teamsMu.Lock()
+				stateMu.Lock()
 				perms := teamRepoPerms[repoName]
 				newPerms := perms[:0]
 				for _, tp := range perms {
@@ -578,7 +581,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					}
 				}
 				teamRepoPerms[repoName] = newPerms
-				teamsMu.Unlock()
+				stateMu.Unlock()
 				w.WriteHeader(http.StatusNoContent)
 			default:
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -596,10 +599,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/repos", org), func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			teamsMu.Lock()
+			stateMu.Lock()
 			snapshot := make([]MockRepo, len(repos))
 			copy(snapshot, repos)
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			result := make([]map[string]interface{}, 0, len(snapshot))
 			for _, repo := range snapshot {
 				result = append(result, map[string]interface{}{
@@ -621,14 +624,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			if body.Name == "" {
 				body.Name = "new-repo"
 			}
-			teamsMu.Lock()
+			stateMu.Lock()
 			if lookupRepo(body.Name) != nil {
-				teamsMu.Unlock()
+				stateMu.Unlock()
 				writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
 				return
 			}
 			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			writeJSONCreated(w, map[string]interface{}{
 				"name":      body.Name,
 				"private":   body.Private,
@@ -650,14 +653,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			subPath = parts[1]
 		}
 
-		teamsMu.Lock()
+		stateMu.Lock()
 		repoEntry := lookupRepo(repoName)
 		var repoSnapshot *MockRepo
 		if repoEntry != nil {
 			cp := *repoEntry
 			repoSnapshot = &cp
 		}
-		teamsMu.Unlock()
+		stateMu.Unlock()
 
 		switch {
 		// GET /api/v3/repos/{org}/{repo}
@@ -675,7 +678,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 		// DELETE /api/v3/repos/{org}/{repo}
 		case subPath == "" && r.Method == http.MethodDelete:
-			teamsMu.Lock()
+			stateMu.Lock()
 			newRepos := repos[:0]
 			for _, rp := range repos {
 				if rp.Name != repoName {
@@ -684,7 +687,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			repos = newRepos
 			delete(teamRepoPerms, repoName)
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 
 		// GET /api/v3/repos/{org}/{repo}/teams
@@ -693,10 +696,10 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
-			teamsMu.Lock()
+			stateMu.Lock()
 			perms := make([]MockTeamWithPermission, len(teamRepoPerms[repoName]))
 			copy(perms, teamRepoPerms[repoName])
-			teamsMu.Unlock()
+			stateMu.Unlock()
 			result := make([]map[string]interface{}, 0, len(perms))
 			for _, tp := range perms {
 				result = append(result, map[string]interface{}{
