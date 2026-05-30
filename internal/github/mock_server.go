@@ -265,24 +265,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		switch r.Method {
 		case http.MethodGet:
 			// IsMember: return 204 if member, 404 otherwise.
-			// Check both the static seed lists and orgAdmins (populated by
-			// PUT /memberships) so dynamically promoted users are recognised.
-			for _, u := range cfg.Members {
-				if strings.EqualFold(u.Login, username) {
-					w.WriteHeader(http.StatusNoContent)
-					return
-				}
-			}
-			for _, u := range cfg.Owners {
-				if strings.EqualFold(u.Login, username) {
-					w.WriteHeader(http.StatusNoContent)
-					return
-				}
-			}
+			// Check orgMembers (the mutable set seeded from cfg.Members ∪ cfg.Owners
+			// and updated by PUT /memberships) and orgAdmins (for dynamically
+			// promoted users not in the initial seed).
 			teamsMu.Lock()
-			_, promoted := orgAdmins[strings.ToLower(username)]
+			_, isMember := orgMembers[strings.ToLower(username)]
+			_, isAdmin := orgAdmins[strings.ToLower(username)]
 			teamsMu.Unlock()
-			if promoted {
+			if isMember || isAdmin {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
