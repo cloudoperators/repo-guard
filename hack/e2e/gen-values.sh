@@ -116,7 +116,8 @@ GITHUB_INSTALLATION_ID=$(read_var GITHUB_INSTALLATION_ID)
 # so the controller can authenticate against the mock (which ignores JWTs).
 if [[ -n "${MOCK_GITHUB_V3_API_URL:-}" ]]; then
   GITHUB_V3_API_URL="${MOCK_GITHUB_V3_API_URL}"
-  GITHUB_WEB_URL="http://mock-github"
+  # Derive the mock server web URL from the V3 API URL by stripping the /api/v3/ suffix.
+  GITHUB_WEB_URL="${MOCK_GITHUB_V3_API_URL%/api/v3/}"
   GITHUB_TOKEN="mock-token"
   GITHUB_CLIENT_ID="mock-client-id"
   GITHUB_CLIENT_SECRET="mock-client-secret"

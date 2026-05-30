@@ -274,7 +274,7 @@ cmd_gen_values() {
     extra_env+=(LDAP_HOST_OVERRIDE="${DUMMY_LDAP_BASE}")
   fi
   if [[ -n "${MOCK_GITHUB_BASE}" ]]; then
-    extra_env+=(MOCK_GITHUB_V3_API_URL="${MOCK_GITHUB_BASE}/api/v3")
+    extra_env+=(MOCK_GITHUB_V3_API_URL="${MOCK_GITHUB_BASE}/api/v3/")
   fi
   # With 'set -u' enabled, expanding an empty array triggers an error. Avoid that.
   if ((${#extra_env[@]})); then
