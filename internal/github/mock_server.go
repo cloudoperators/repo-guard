@@ -332,6 +332,9 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
 				return
 			}
+			if body.Role == "" {
+				body.Role = "member"
+			}
 			if strings.EqualFold(body.Role, "admin") {
 				u, _ := lookupUser(username)
 				stateMu.Lock()
