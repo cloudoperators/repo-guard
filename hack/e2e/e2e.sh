@@ -291,7 +291,6 @@ build_import_dummy_emp_image() {
   log_step "Building dummy EMP HTTP image: ${img}"
   local tmpdir
   tmpdir=$(mktemp -d)
-  trap 'rm -rf "${tmpdir}"' RETURN
   cat >"${tmpdir}/Dockerfile" <<'EOF'
 FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
@@ -306,6 +305,7 @@ USER nonroot
 ENTRYPOINT ["/app/emp-http-server"]
 EOF
   (${CONTAINER_TOOL} build -f "${tmpdir}/Dockerfile" -t "${img}" "${ROOT_DIR}" >/dev/null)
+  rm -rf "${tmpdir}"
   log_step "Importing image into k3d: ${img}"
   k3d image import --cluster "${K3D_CLUSTER}" "${img}" --mode direct >/dev/null
 }
@@ -316,7 +316,6 @@ build_import_dummy_ldap_image() {
   log_step "Building dummy LDAP image: ${img}"
   local tmpdir
   tmpdir=$(mktemp -d)
-  trap 'rm -rf "${tmpdir}"' RETURN
   cat >"${tmpdir}/Dockerfile" <<'EOF'
 FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
@@ -331,6 +330,7 @@ USER nonroot
 ENTRYPOINT ["/app/ldap-testserver"]
 EOF
   (${CONTAINER_TOOL} build -f "${tmpdir}/Dockerfile" -t "${img}" "${ROOT_DIR}" >/dev/null)
+  rm -rf "${tmpdir}"
   log_step "Importing image into k3d: ${img}"
   k3d image import --cluster "${K3D_CLUSTER}" "${img}" --mode direct >/dev/null
 }
@@ -458,7 +458,6 @@ build_import_mock_github_image() {
   log_step "Building mock GitHub API server image: ${img}"
   local tmpdir
   tmpdir=$(mktemp -d)
-  trap 'rm -rf "${tmpdir}"' RETURN
   cat >"${tmpdir}/Dockerfile" <<'EOF'
 FROM --platform=$BUILDPLATFORM golang:1.26 as build
 WORKDIR /src
@@ -473,6 +472,7 @@ USER nonroot
 ENTRYPOINT ["/app/github-mock-server"]
 EOF
   (${CONTAINER_TOOL} build -f "${tmpdir}/Dockerfile" -t "${img}" "${ROOT_DIR}" >/dev/null)
+  rm -rf "${tmpdir}"
   log_step "Importing image into k3d: ${img}"
   k3d image import --cluster "${K3D_CLUSTER}" "${img}" --mode direct >/dev/null
 }
