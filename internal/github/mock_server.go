@@ -195,7 +195,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, map[string]interface{}{
+		writeJSONCreated(w, map[string]interface{}{
 			"token":      "mock-installation-token",
 			"expires_at": "2099-01-01T00:00:00Z",
 		})
