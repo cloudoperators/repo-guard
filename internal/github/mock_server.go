@@ -134,6 +134,17 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		return nil
 	}
 
+	// teamExists reports whether a team with the given slug is present in the
+	// mutable teams slice (must be called with stateMu held).
+	teamExists := func(slug string) bool {
+		for _, t := range teams {
+			if t.Slug == slug {
+				return true
+			}
+		}
+		return false
+	}
+
 	// orgAdmins is the mutable set of org admins (login -> MockUser).
 	// Seeded from cfg.Owners; updated when PUT /memberships/{user} sets role=admin.
 	orgAdmins := make(map[string]MockUser)
@@ -454,9 +465,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// GET /api/v3/orgs/{org}/teams/{slug}/members
 		case subPath == "members" && r.Method == http.MethodGet:
 			stateMu.Lock()
+			exists := teamExists(teamSlug)
 			members := make([]MockUser, len(teamMembers[teamSlug]))
 			copy(members, teamMembers[teamSlug])
 			stateMu.Unlock()
+			if !exists {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 			result := make([]map[string]interface{}, 0, len(members))
 			for _, u := range members {
 				result = append(result, userToMap(u))
@@ -484,21 +500,25 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					http.Error(w, "not found", http.StatusNotFound)
 				}
 			case http.MethodPut:
-				if u, ok := lookupUser(username); ok {
-					stateMu.Lock()
-					// Add only if not already present.
-					found := false
-					for _, m := range teamMembers[teamSlug] {
-						if strings.EqualFold(m.Login, username) {
-							found = true
-							break
-						}
-					}
-					if !found {
-						teamMembers[teamSlug] = append(teamMembers[teamSlug], u)
-					}
+				u, _ := lookupUser(username)
+				stateMu.Lock()
+				if !teamExists(teamSlug) {
 					stateMu.Unlock()
+					http.Error(w, "not found", http.StatusNotFound)
+					return
 				}
+				// Add only if not already present.
+				found := false
+				for _, m := range teamMembers[teamSlug] {
+					if strings.EqualFold(m.Login, username) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					teamMembers[teamSlug] = append(teamMembers[teamSlug], u)
+				}
+				stateMu.Unlock()
 				writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
 			case http.MethodDelete:
 				stateMu.Lock()
