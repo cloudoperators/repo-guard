@@ -61,6 +61,15 @@ DUMMY_LDAP_BASE=""
 EMP_DUMMY_IMAGE=${EMP_DUMMY_IMAGE:-repo-guard-emp-http-dummy:e2e}
 LDAP_DUMMY_IMAGE=${LDAP_DUMMY_IMAGE:-repo-guard-ldap-dummy:e2e}
 
+# Use in-cluster mock GitHub API server instead of real GitHub.
+# When true (the default), a lightweight mock server is deployed inside the
+# k3d cluster and all GitHub API calls from the controller are served by it.
+# Set USE_MOCK_GITHUB=false to run against real GitHub (nightly/live mode).
+USE_MOCK_GITHUB=${USE_MOCK_GITHUB:-true}
+
+MOCK_GITHUB_IMAGE=${MOCK_GITHUB_IMAGE:-repo-guard-github-mock:e2e}
+MOCK_GITHUB_BASE=""
+
 # --- Minimal logging helpers (early) ---
 # Some functions below use these before their full definitions appear later.
 # Define lightweight versions if they are not already defined; later, richer
@@ -264,6 +273,9 @@ cmd_gen_values() {
   if [[ -n "${DUMMY_LDAP_BASE}" ]]; then
     extra_env+=(LDAP_HOST_OVERRIDE="${DUMMY_LDAP_BASE}")
   fi
+  if [[ -n "${MOCK_GITHUB_BASE}" ]]; then
+    extra_env+=(MOCK_GITHUB_V3_API_URL="${MOCK_GITHUB_BASE}/api/v3/")
+  fi
   # With 'set -u' enabled, expanding an empty array triggers an error. Avoid that.
   if ((${#extra_env[@]})); then
     ( env "${extra_env[@]}" bash "${SCRIPT_DIR}/gen-values.sh" "${ROOT_DIR}/internal/controller/test.env" >"${VALUES_OUT}" )
@@ -440,6 +452,112 @@ EOF
   kubectl -n "${NAMESPACE}" rollout status deploy/ldap-dummy --timeout=2m >/dev/null
 }
 
+# Build and import mock GitHub API server image into k3d
+build_import_mock_github_image() {
+  local img="${MOCK_GITHUB_IMAGE}"
+  log_step "Building mock GitHub API server image: ${img}"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  cat >"${tmpdir}/Dockerfile" <<'EOF'
+FROM --platform=$BUILDPLATFORM golang:1.26 as build
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/github-mock-server ./hack/github-mock-server
+
+FROM gcr.io/distroless/base-debian12:nonroot
+WORKDIR /app
+COPY --from=build /out/github-mock-server /app/github-mock-server
+EXPOSE 8080
+USER nonroot
+ENTRYPOINT ["/app/github-mock-server"]
+EOF
+  (${CONTAINER_TOOL} build -f "${tmpdir}/Dockerfile" -t "${img}" "${ROOT_DIR}" >/dev/null)
+  rm -rf "${tmpdir}"
+  log_step "Importing image into k3d: ${img}"
+  k3d image import --cluster "${K3D_CLUSTER}" "${img}" --mode direct >/dev/null
+}
+
+# Deploy in-cluster mock GitHub API server as Deployment+Service.
+# Reads org/user/team info from test.env to configure the mock's canned data.
+deploy_incluster_mock_github() {
+  local org members owners teams repos
+  org=$(read_env_var ORGANIZATION)
+
+  # Build MOCK_GITHUB_MEMBERS: "login:id" pairs from test.env
+  local u0_login u0_id u1_login u1_id u2_login u2_id ldap_login ldap_id
+  u0_login=$(read_env_var USER_0_GITHUB_USERNAME)
+  u0_id=$(read_env_var USER_0_GITHUB_USERID)
+  u1_login=$(read_env_var USER_1_GITHUB_USERNAME)
+  u1_id=$(read_env_var USER_1_GITHUB_USERID)
+  u2_login=$(read_env_var USER_2_GITHUB_USERNAME)
+  u2_id=$(read_env_var USER_2_GITHUB_USERID)
+  ldap_login=$(read_env_var LDAP_GROUP_PROVIDER_USER_GITHUB_USERNAME)
+  ldap_id=$(read_env_var LDAP_GROUP_PROVIDER_USER_GITHUB_USERID)
+  members="${u0_login}:${u0_id},${u1_login}:${u1_id},${u2_login}:${u2_id},${ldap_login}:${ldap_id}"
+  owners="${u0_login}:${u0_id}"
+
+  # Build MOCK_GITHUB_TEAMS: "slug:id" pairs
+  local t1 t2 owner_team ldap_team emp_team static_team
+  t1=$(read_env_var TEAM_1)
+  t2=$(read_env_var TEAM_2)
+  owner_team=$(read_env_var ORGANIZATION_OWNER_TEAM)
+  ldap_team=$(read_env_var LDAP_GROUP_PROVIDER_TEAM_NAME)
+  emp_team=$(read_env_var EMP_HTTP_TEAM_NAME)
+  static_team=$(read_env_var EMP_STATIC_TEAM_NAME)
+  teams="${t1}:1,${t2}:2,${owner_team}:3,${ldap_team}:4,${emp_team}:5,${static_team}:6"
+
+  # Repos: two canned repos for the repository scenario tests
+  repos="e2e-pub:public,e2e-priv:private"
+
+  log_step "Deploying in-cluster mock GitHub API server (namespace ${NAMESPACE})"
+  cat <<EOF | kubectl apply -n "${NAMESPACE}" -f - >/dev/null
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-mock
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: github-mock}
+  template:
+    metadata:
+      labels: {app: github-mock}
+    spec:
+      containers:
+        - name: github-mock
+          image: ${MOCK_GITHUB_IMAGE}
+          args: ["-listen", ":8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: MOCK_GITHUB_ORG
+              value: "${org}"
+            - name: MOCK_GITHUB_MEMBERS
+              value: "${members}"
+            - name: MOCK_GITHUB_OWNERS
+              value: "${owners}"
+            - name: MOCK_GITHUB_TEAMS
+              value: "${teams}"
+            - name: MOCK_GITHUB_REPOS
+              value: "${repos}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: github-mock
+spec:
+  selector:
+    app: github-mock
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+EOF
+  kubectl -n "${NAMESPACE}" rollout status deploy/github-mock --timeout=2m >/dev/null
+}
+
 start_dummy_emp_http() {
   if [[ "${USE_DUMMY_EMP_HTTP}" != "true" ]]; then
     return 0
@@ -574,6 +692,12 @@ cmd_install() {
       # LDAP must include scheme to avoid ldaps:// default
       DUMMY_LDAP_BASE="ldap://ldap-dummy.${NAMESPACE}.svc.cluster.local:1389"
       log_info "Using in-cluster LDAP dummy at ${DUMMY_LDAP_BASE}"
+    fi
+    if [[ "${USE_MOCK_GITHUB}" == "true" ]]; then
+      build_import_mock_github_image
+      deploy_incluster_mock_github
+      MOCK_GITHUB_BASE="http://github-mock.${NAMESPACE}.svc.cluster.local:8080"
+      log_info "Using in-cluster mock GitHub API at ${MOCK_GITHUB_BASE}"
     fi
   fi
 
@@ -755,7 +879,7 @@ cmd_test() {
   log_step "Checking metrics endpoint"
   POD=$(kubectl -n "${NAMESPACE}" get pods -l control-plane=controller-manager -o jsonpath='{.items[0].metadata.name}')
   kubectl -n "${NAMESPACE}" port-forward "pod/${POD}" 9443:9443 >/dev/null 2>&1 & PF_PID=$!
-  trap 'kill ${PF_PID} >/dev/null 2>&1 || true' EXIT
+  trap 'kill ${PF_PID:-} >/dev/null 2>&1 || true' EXIT
   sleep 3
   METRICS=""
   for i in 1 2 3 4 5; do
@@ -789,6 +913,22 @@ cmd_test() {
   LDAP_TEAM=$(read_env_var LDAP_GROUP_PROVIDER_TEAM_NAME)
   STATIC_TEAM=$(read_env_var EMP_STATIC_TEAM_NAME)
   HTTP_TEAM=$(read_env_var EMP_HTTP_TEAM_NAME)
+
+  # In mock mode, point API checks at the in-cluster mock server (via port-forward
+  # from localhost) and use a dummy token.  The mock server responds to the same
+  # API paths as the real GitHub, so all checks below work unchanged.
+  if [[ "${USE_MOCK_GITHUB}" == "true" ]]; then
+    GITHUB_MOCK_PF_PID=""
+    MOCK_LOCAL_PORT=19080
+    log_step "Port-forwarding mock GitHub API server to localhost:${MOCK_LOCAL_PORT}"
+    kubectl -n "${NAMESPACE}" port-forward svc/github-mock "${MOCK_LOCAL_PORT}:8080" >/dev/null 2>&1 &
+    GITHUB_MOCK_PF_PID=$!
+    trap 'kill ${GITHUB_MOCK_PF_PID:-} >/dev/null 2>&1 || true; kill ${PF_PID:-} >/dev/null 2>&1 || true' EXIT
+    sleep 2
+    GITHUB_API="http://localhost:${MOCK_LOCAL_PORT}/api/v3"
+    GITHUB_TOKEN="mock-token"
+    log_info "Mock GitHub API available at ${GITHUB_API}"
+  fi
 
   if [[ -z "$GITHUB_TOKEN" ]]; then
     echo "GITHUB_TOKEN missing in ${ENV_FILE_DEFAULT}; skipping GitHub API checks" >&2
@@ -874,9 +1014,10 @@ cmd_test() {
 # Create a repository via GitHub API. Args: <name> <private:true|false>
 github_create_repo() {
   local name=$1 priv=$2
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  # Prefer module-level GITHUB_API/GITHUB_TOKEN (set to mock in mock mode), else read from test.env
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   local body
   body=$(jq -nc --arg n "$name" --argjson p $( [[ "$priv" == "true" ]] && echo true || echo false ) '{name:$n, private:$p}')
   curl -sS -o /tmp/repo-create.json -w "%{http_code}" -X POST \
@@ -888,9 +1029,9 @@ github_create_repo() {
 # Fetch repo teams JSON into /tmp/repo-<name>-teams.json; echo HTTP code
 github_get_repo_teams_json() {
   local repo=$1
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o "/tmp/repo-${repo}-teams.json" -w "%{http_code}" \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/repos/${org}/${repo}/teams?per_page=100"
@@ -982,7 +1123,8 @@ wait_for_org_repo_ops() {
 run_repository_scenarios() {
   ensure_jq
   local ORG=$(read_env_var ORGANIZATION)
-  local TOKEN=$(read_env_var GITHUB_TOKEN)
+  # In mock mode GITHUB_TOKEN is set to "mock-token" by cmd_test; in live mode read from test.env
+  local TOKEN="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   if [[ -z "$TOKEN" ]]; then
     log_info "Skipping repository scenarios: GITHUB_TOKEN not set"
     return 0
@@ -1216,18 +1358,18 @@ cmd_install_crds() {
 github_delete_team() {
   local team_slug=$1
   local api org token
-  api=$(read_env_var GITHUB_V3_API_URL)
+  api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   org=$(read_env_var ORGANIZATION)
-  token=$(read_env_var GITHUB_TOKEN)
+  token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/delteam.json -w "%{http_code}" -X DELETE \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/orgs/${org}/teams/${team_slug}"
 }
 
 github_list_repos_json() {
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/repos.json -w "%{http_code}" \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/orgs/${org}/repos?per_page=100"
@@ -1235,9 +1377,9 @@ github_list_repos_json() {
 
 github_delete_repo() {
   local repo_name=$1
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/delrepo.json -w "%{http_code}" -X DELETE \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/repos/${org}/${repo_name}"
@@ -1608,9 +1750,9 @@ wait_for_controller_readiness() {
 }
 
 github_fetch_teams_json() {
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/teams.json -w "%{http_code}" \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/orgs/${org}/teams?per_page=100"
@@ -1624,18 +1766,18 @@ github_find_team() {
 github_check_team_member() {
   local team_slug=$1
   local username=$2
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/tm.json -w "%{http_code}" \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/orgs/${org}/teams/${team_slug}/memberships/${username}"
 }
 
 github_list_org_admins() {
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
   curl -sS -o /tmp/admins.json -w "%{http_code}" \
     -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
     "${api}/orgs/${org}/members?role=admin&per_page=100"
@@ -1659,9 +1801,9 @@ github_set_org_membership_role() {
     return 1
   fi
 
-  local api=$(read_env_var GITHUB_V3_API_URL)
+  local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
-  local token=$(read_env_var GITHUB_TOKEN)
+  local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
 
   curl -sS -o "/tmp/membership_${username}.json" -w "%{http_code}" \
     -X PUT \
@@ -2010,7 +2152,6 @@ wait_for_github_team_slugs() {
 }
 
 run_provider_scenarios() {
-  local GITHUB_API=$(read_env_var GITHUB_V3_API_URL)
   local ORG=$(read_env_var ORGANIZATION)
   local LDAP_TEAM_NAME=$(read_env_var LDAP_GROUP_PROVIDER_TEAM_NAME)
   local LDAP_USER_GH=$(read_env_var LDAP_GROUP_PROVIDER_USER_GITHUB_USERNAME)
