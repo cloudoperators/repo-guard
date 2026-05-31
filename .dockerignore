@@ -5,3 +5,7 @@
 # Ignore build and test binaries.
 bin/
 testbin/
+
+# Exclude credential files that must never be sent to the Docker build daemon.
+internal/controller/test.env
+hack/*/checker.env

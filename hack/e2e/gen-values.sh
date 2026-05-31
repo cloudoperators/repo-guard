@@ -111,6 +111,22 @@ GITHUB_CLIENT_SECRET=$(read_var GITHUB_CLIENT_SECRET)
 GITHUB_PRIVATE_KEY=$(read_var_multiline GITHUB_PRIVATE_KEY)
 GITHUB_INSTALLATION_ID=$(read_var GITHUB_INSTALLATION_ID)
 
+# Allow overriding GitHub API URL with a mock server (used by e2e mock mode).
+# When MOCK_GITHUB_V3_API_URL is set, replace real credentials with dummy values
+# so the controller can authenticate against the mock (which ignores JWTs).
+if [[ -n "${MOCK_GITHUB_V3_API_URL:-}" ]]; then
+  GITHUB_V3_API_URL="${MOCK_GITHUB_V3_API_URL}"
+  # Derive the mock server web URL from the V3 API URL by stripping the /api/v3/ suffix.
+  GITHUB_WEB_URL="${MOCK_GITHUB_V3_API_URL%/api/v3/}"
+  GITHUB_TOKEN="mock-token"
+  GITHUB_CLIENT_ID="mock-client-id"
+  GITHUB_CLIENT_SECRET="mock-client-secret"
+  GITHUB_INTEGRATION_ID="1"
+  GITHUB_INSTALLATION_ID="1"
+  # Generate a throwaway RSA key at runtime; the mock server ignores JWT signatures.
+  GITHUB_PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+fi
+
 # Org and teams
 ORGANIZATION=$(read_var ORGANIZATION)
 TEAM_1=$(read_var TEAM_1)

@@ -68,9 +68,19 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
+# GITHUB_MOCK controls whether controller-test uses a local HTTP mock instead
+# of real GitHub credentials.  Default is true so `make controller-test` works
+# without any secrets.  Override with `make controller-test GITHUB_MOCK=false`
+# (or use the controller-test-live target) to run against real GitHub.
+GITHUB_MOCK ?= true
+
 .PHONY: controller-test
-controller-test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
+controller-test: manifests generate fmt vet setup-envtest ## Run controller tests with mock GitHub (no credentials needed).
+	GITHUB_MOCK=$(GITHUB_MOCK) KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
+
+.PHONY: controller-test-live
+controller-test-live: manifests generate fmt vet setup-envtest ## Run controller tests against real GitHub (requires credentials in test.env).
+	GITHUB_MOCK=false KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -103,6 +113,12 @@ cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 
 ##@ E2E (k3d + Helm)
 
+# USE_MOCK_GITHUB controls whether e2e deploys an in-cluster GitHub API mock
+# (true, the default) or connects to the real GitHub API (false).
+# Override with: make e2e USE_MOCK_GITHUB=false
+# or use the dedicated live target: make e2e-live
+USE_MOCK_GITHUB ?= true
+
 .PHONY: e2e-image
 e2e-image: ## Build the repo-guard image locally (used by e2e). Override with E2E_IMAGE_REPO, E2E_IMAGE_TAG, CONTAINER_TOOL
 	bash hack/e2e/e2e.sh image-build
@@ -113,7 +129,7 @@ e2e-up: ## Create local k3d cluster for e2e
 
 .PHONY: e2e-install
 e2e-install: ## Generate values from internal/controller/test.env and install Helm chart
-	bash hack/e2e/e2e.sh install
+	USE_MOCK_GITHUB=$(USE_MOCK_GITHUB) bash hack/e2e/e2e.sh install
 
 .PHONY: e2e-install-crds
 e2e-install-crds: ## Install only repo-guard CRDs into the cluster
@@ -121,22 +137,26 @@ e2e-install-crds: ## Install only repo-guard CRDs into the cluster
 
 .PHONY: e2e-install-dry-run
 e2e-install-dry-run: ## Render Helm manifests with --dry-run --debug using generated values
-	bash hack/e2e/e2e.sh install-dry-run
+	USE_MOCK_GITHUB=$(USE_MOCK_GITHUB) bash hack/e2e/e2e.sh install-dry-run
 
 .PHONY: e2e-test
 e2e-test: ## Run e2e runtime checks against running cluster
-	bash hack/e2e/e2e.sh test
+	USE_MOCK_GITHUB=$(USE_MOCK_GITHUB) bash hack/e2e/e2e.sh test
 
 .PHONY: e2e-teams
 e2e-teams: ## Run Greenhouse Team membership scenario (status-driven)
-	bash hack/e2e/e2e.sh teams
+	USE_MOCK_GITHUB=$(USE_MOCK_GITHUB) bash hack/e2e/e2e.sh teams
 
 .PHONY: e2e-down
 e2e-down: ## Delete k3d cluster
 	bash hack/e2e/e2e.sh down
 
 .PHONY: e2e
-e2e: e2e-up e2e-install e2e-test ## Full e2e flow: up + install + test
+e2e: e2e-up e2e-install e2e-test ## Full e2e flow: up + install + test (mock GitHub by default)
+
+.PHONY: e2e-live
+e2e-live: ## Full e2e flow against real GitHub (requires credentials in test.env)
+	USE_MOCK_GITHUB=false $(MAKE) e2e
 
 .PHONY: e2e-github-cleanup
 e2e-github-cleanup: ## Delete e2e-created GitHub teams (and optionally repos) using PAT from test.env. Env: E2E_DRY_RUN=true|false, E2E_CLEANUP_REPOS=true|false, E2E_REPO_PREFIX=<prefix>

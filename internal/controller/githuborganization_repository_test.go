@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	githubAPI "github.com/google/go-github/v85/github"
@@ -55,6 +56,23 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 		orgName = requireEnv("ORGANIZATION")
 		client = githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
+		if isMockMode() {
+			// In mock mode point the client at the mock server so that any direct
+			// API calls (e.g. cleanup in DeferCleanup) never hit api.github.com.
+			v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
+			if v3URL != "" {
+				if !strings.HasSuffix(v3URL, "/") {
+					v3URL += "/"
+				}
+				// uploadURL must be the server root so that go-github appends
+				// "/api/uploads" correctly; passing v3URL would produce
+				// "…/api/v3/api/uploads".
+				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
+				var err error
+				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+				Expect(err).NotTo(HaveOccurred())
+			}
+		}
 
 		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNS = "ns-repo-" + uniqueID
@@ -149,6 +167,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			return len(cur.Status.Operations.RepositoryTeamOperations)
 		}, 3*timeout, interval).Should(BeNumerically(">", 0))
 
+		// Verify that GitHub (or the mock) actually received the team assignments.
 		publicTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPublic, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))

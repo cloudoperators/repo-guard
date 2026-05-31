@@ -9,7 +9,85 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  e2e-live:
+    runs-on: ubuntu-latest
+    environment: e2e
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Install dependencies
+        run: go mod download
+      - name: Setup E2E Prerequisites (k3d, kubectl, helm, jq)
+        run: |
+          # Install k3d
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+          # Install Helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+          # Install kubectl
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+          kubectl version --client
+          helm version
+          jq --version
+
+          echo "/usr/local/bin" >> $GITHUB_PATH
+      - name: Update test.env with real GitHub credentials
+        env:
+          TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
+          TEST_GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
+          TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
+        run: |
+          # Use python3 to rewrite key=value lines safely; sed metacharacters
+          # in secret values (& /) would corrupt the file with sed -i.
+          python3 - internal/controller/test.env <<'PYEOF'
+import os, sys, re
+path = sys.argv[1]
+replacements = {
+    "GITHUB_TOKEN": os.environ["TEST_GITHUB_TOKEN"],
+    "GITHUB_CLIENT_ID": os.environ["TEST_GITHUB_CLIENT_ID"],
+    "GITHUB_CLIENT_SECRET": os.environ["TEST_GITHUB_CLIENT_SECRET"],
+}
+lines = open(path).readlines()
+with open(path, "w") as f:
+    for line in lines:
+        for key, val in replacements.items():
+            if re.match(rf"^{key}=", line):
+                line = f"{key}={val}\n"
+                break
+        f.write(line)
+PYEOF
+
+          # Append the private key using the TEST_ prefix so gen-values.sh
+          # (read_var_multiline) finds it first, without conflicting with the
+          # existing GITHUB_PRIVATE_KEY= placeholder already in test.env.
+          echo "TEST_GITHUB_PRIVATE_KEY<<EOF" >> internal/controller/test.env
+          echo "$TEST_GITHUB_PRIVATE_KEY" >> internal/controller/test.env
+          echo "EOF" >> internal/controller/test.env
+      - name: Run E2E Tests (live GitHub)
+        # Run the full e2e suite against real GitHub before publishing any artifacts.
+        # USE_MOCK_GITHUB=false connects to the real greenhouse-sandbox GitHub org.
+        env:
+          USE_MOCK_GITHUB: "false"
+        run: make e2e-live
+      - name: Cleanup E2E (GitHub teams/repos + cluster)
+        if: always()
+        env:
+          E2E_DRY_RUN: "false"
+          E2E_CLEANUP_REPOS: "true"
+          E2E_REPO_PREFIX: "e2e-"
+        run: make e2e-down e2e-github-cleanup
+
   docker:
+    needs: e2e-live
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,6 +123,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   helm:
+    needs: e2e-live
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -61,12 +140,12 @@ jobs:
         run: |
           CHART_NAME=$(grep '^name:' charts/repo-guard/Chart.yaml | awk '{print $2}')
           CHART_VERSION=$(grep '^version:' charts/repo-guard/Chart.yaml | awk '{print $2}')
-          
+
           echo "Packaging chart $CHART_NAME version $CHART_VERSION"
           helm package charts/repo-guard
-          
+
           echo "Logging in to GHCR"
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
-          
+
           echo "Pushing chart to GHCR"
           helm push "${CHART_NAME}-${CHART_VERSION}.tgz" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts

@@ -138,7 +138,12 @@ func updateStatusWithRetry[T client.Object](ctx context.Context, c client.Client
 
 // githubEnsureTeam ensures a team exists in the org (idempotent).
 // If the team already exists, it returns nil.
+// In mock mode (GITHUB_MOCK=true) this is a no-op because teams are pre-seeded
+// in the mock server config and the controller creates any missing ones automatically.
 func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSlugOrName string) error {
+	if isMockMode() {
+		return nil
+	}
 	org = strings.TrimSpace(org)
 	teamSlugOrName = strings.TrimSpace(teamSlugOrName)
 	if org == "" || teamSlugOrName == "" || client == nil {
@@ -172,10 +177,38 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 
 // githubEnsureRepoWithVisibility ensures a repo exists with the requested visibility.
 // If the repo exists already, it does not attempt to change visibility.
+// In mock mode the repo is created directly against the mock server so that
+// the controller's PUT /teams/{slug}/repos/… calls succeed (the mock validates
+// repo existence since the previous review fix).
 func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, private bool) error {
 	org = strings.TrimSpace(org)
 	repo = strings.TrimSpace(repo)
-	if org == "" || repo == "" || client == nil {
+	if org == "" || repo == "" {
+		return nil
+	}
+
+	// In mock mode construct a client pointed at the mock server.
+	if isMockMode() {
+		v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
+		if v3URL == "" {
+			return nil
+		}
+		// WithEnterpriseURLs expects trailing slashes.
+		if !strings.HasSuffix(v3URL, "/") {
+			v3URL += "/"
+		}
+		// uploadURL must be the server root so that go-github appends
+		// "/api/uploads" correctly; passing v3URL would produce
+		// "…/api/v3/api/uploads".
+		uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
+		var err error
+		client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	if client == nil {
 		return nil
 	}
 
