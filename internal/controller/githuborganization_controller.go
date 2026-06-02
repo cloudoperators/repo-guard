@@ -145,19 +145,20 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if ttlStr == "" {
 				return
 			}
-			if _, err := time.ParseDuration(ttlStr); err != nil {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
 				l.Info("invalid TTL duration label; skipping cleanup", "label", label, "value", ttlStr, "error", err)
 				return
 			}
-			if updated, changed := applyUserOpsTTL(l, newStatus.Operations.OrganizationOwnerOperations, ttlStr, userState, label, now); changed {
+			if updated, changed := applyUserOpsTTL(newStatus.Operations.OrganizationOwnerOperations, ttl, userState, now); changed {
 				newStatus.Operations.OrganizationOwnerOperations = updated
 				anyChanged = true
 			}
-			if updated, changed := applyRepoOpsTTL(l, newStatus.Operations.RepositoryTeamOperations, ttlStr, repoState, label, now); changed {
+			if updated, changed := applyRepoOpsTTL(newStatus.Operations.RepositoryTeamOperations, ttl, repoState, now); changed {
 				newStatus.Operations.RepositoryTeamOperations = updated
 				anyChanged = true
 			}
-			if updated, changed := applyTeamOpsTTL(l, newStatus.Operations.GithubTeamOperations, ttlStr, userState, label, now); changed {
+			if updated, changed := applyTeamOpsTTL(newStatus.Operations.GithubTeamOperations, ttl, userState, now); changed {
 				newStatus.Operations.GithubTeamOperations = updated
 				anyChanged = true
 			}

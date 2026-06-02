@@ -7,13 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
 )
 
-// makeUserOp builds a GithubUserOperation with the given state and timestamp offset from base.
+// makeUserOp builds a GithubUserOperation with the given state and timestamp.
 func makeUserOp(user string, state v1.GithubUserOperationState, ts time.Time) v1.GithubUserOperation {
 	return v1.GithubUserOperation{
 		Operation: v1.GithubUserOperationTypeAdd,
@@ -23,6 +22,7 @@ func makeUserOp(user string, state v1.GithubUserOperationState, ts time.Time) v1
 	}
 }
 
+// makeRepoOp builds a GithubRepoTeamOperation with the given state and timestamp.
 func makeRepoOp(repo, team string, state v1.GithubRepoTeamOperationState, ts time.Time) v1.GithubRepoTeamOperation {
 	return v1.GithubRepoTeamOperation{
 		Operation: v1.GithubRepoTeamOperationTypeAdd,
@@ -33,6 +33,7 @@ func makeRepoOp(repo, team string, state v1.GithubRepoTeamOperationState, ts tim
 	}
 }
 
+// makeTeamOp builds a GithubTeamOperation with the given state and timestamp.
 func makeTeamOp(team string, state v1.GithubUserOperationState, ts time.Time) v1.GithubTeamOperation {
 	return v1.GithubTeamOperation{
 		Operation: v1.GithubTeamOperationTypeAdd,
@@ -50,38 +51,17 @@ func TestApplyUserOpsTTL(t *testing.T) {
 	tests := []struct {
 		name        string
 		ops         []v1.GithubUserOperation
-		ttl         string
+		ttl         time.Duration
 		state       v1.GithubUserOperationState
 		wantOps     []string // user names that survive
 		wantChanged bool
 	}{
 		{
-			name: "empty TTL returns input unchanged",
-			ops: []v1.GithubUserOperation{
-				makeUserOp("alice", v1.GithubUserOperationStateFailed, old),
-			},
-			ttl:         "",
-			state:       v1.GithubUserOperationStateFailed,
-			wantOps:     []string{"alice"},
-			wantChanged: false,
-		},
-		{
-			name: "invalid duration string preserves matching op",
-			ops: []v1.GithubUserOperation{
-				makeUserOp("alice", v1.GithubUserOperationStateFailed, old),
-				makeUserOp("bob", v1.GithubUserOperationStateComplete, old),
-			},
-			ttl:         "garbage",
-			state:       v1.GithubUserOperationStateFailed,
-			wantOps:     []string{"alice", "bob"},
-			wantChanged: false,
-		},
-		{
 			name: "non-matching state is preserved even when aged",
 			ops: []v1.GithubUserOperation{
 				makeUserOp("alice", v1.GithubUserOperationStateComplete, old),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{"alice"},
 			wantChanged: false,
@@ -91,7 +71,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 			ops: []v1.GithubUserOperation{
 				{Operation: v1.GithubUserOperationTypeAdd, User: "alice", State: v1.GithubUserOperationStateFailed},
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{"alice"},
 			wantChanged: false,
@@ -101,7 +81,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 			ops: []v1.GithubUserOperation{
 				makeUserOp("alice", v1.GithubUserOperationStateFailed, old),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{},
 			wantChanged: true,
@@ -111,7 +91,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 			ops: []v1.GithubUserOperation{
 				makeUserOp("alice", v1.GithubUserOperationStateFailed, fresh),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{"alice"},
 			wantChanged: false,
@@ -124,7 +104,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 				makeUserOp("carol", v1.GithubUserOperationStateComplete, old),
 				makeUserOp("dave", v1.GithubUserOperationStateFailed, old),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{"bob", "carol"},
 			wantChanged: true,
@@ -132,7 +112,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 		{
 			name:        "empty input slice",
 			ops:         []v1.GithubUserOperation{},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantOps:     []string{},
 			wantChanged: false,
@@ -141,7 +121,7 @@ func TestApplyUserOpsTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, changed := applyUserOpsTTL(logr.Discard(), tt.ops, tt.ttl, tt.state, "test-label", now)
+			got, changed := applyUserOpsTTL(tt.ops, tt.ttl, tt.state, now)
 			if changed != tt.wantChanged {
 				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
 			}
@@ -165,31 +145,15 @@ func TestApplyRepoOpsTTL(t *testing.T) {
 	tests := []struct {
 		name        string
 		ops         []v1.GithubRepoTeamOperation
-		ttl         string
+		ttl         time.Duration
 		state       v1.GithubRepoTeamOperationState
 		wantRepos   []string
 		wantChanged bool
 	}{
 		{
-			name:        "empty TTL no-op",
-			ops:         []v1.GithubRepoTeamOperation{makeRepoOp("r1", "t1", v1.GithubRepoTeamOperationStateFailed, old)},
-			ttl:         "",
-			state:       v1.GithubRepoTeamOperationStateFailed,
-			wantRepos:   []string{"r1"},
-			wantChanged: false,
-		},
-		{
-			name:        "invalid duration preserves all",
-			ops:         []v1.GithubRepoTeamOperation{makeRepoOp("r1", "t1", v1.GithubRepoTeamOperationStateFailed, old)},
-			ttl:         "not-a-duration",
-			state:       v1.GithubRepoTeamOperationStateFailed,
-			wantRepos:   []string{"r1"},
-			wantChanged: false,
-		},
-		{
 			name:        "non-matching state preserved",
 			ops:         []v1.GithubRepoTeamOperation{makeRepoOp("r1", "t1", v1.GithubRepoTeamOperationStateComplete, old)},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubRepoTeamOperationStateFailed,
 			wantRepos:   []string{"r1"},
 			wantChanged: false,
@@ -199,7 +163,7 @@ func TestApplyRepoOpsTTL(t *testing.T) {
 			ops: []v1.GithubRepoTeamOperation{
 				{Operation: v1.GithubRepoTeamOperationTypeAdd, Repo: "r1", Team: "t1", State: v1.GithubRepoTeamOperationStateFailed},
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubRepoTeamOperationStateFailed,
 			wantRepos:   []string{"r1"},
 			wantChanged: false,
@@ -211,7 +175,7 @@ func TestApplyRepoOpsTTL(t *testing.T) {
 				makeRepoOp("r-fresh", "t1", v1.GithubRepoTeamOperationStateFailed, fresh),
 				makeRepoOp("r-other-state", "t1", v1.GithubRepoTeamOperationStateComplete, old),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubRepoTeamOperationStateFailed,
 			wantRepos:   []string{"r-fresh", "r-other-state"},
 			wantChanged: true,
@@ -219,7 +183,7 @@ func TestApplyRepoOpsTTL(t *testing.T) {
 		{
 			name:        "empty input slice",
 			ops:         []v1.GithubRepoTeamOperation{},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubRepoTeamOperationStateFailed,
 			wantRepos:   []string{},
 			wantChanged: false,
@@ -228,7 +192,7 @@ func TestApplyRepoOpsTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, changed := applyRepoOpsTTL(logr.Discard(), tt.ops, tt.ttl, tt.state, "test-label", now)
+			got, changed := applyRepoOpsTTL(tt.ops, tt.ttl, tt.state, now)
 			if changed != tt.wantChanged {
 				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
 			}
@@ -252,31 +216,15 @@ func TestApplyTeamOpsTTL(t *testing.T) {
 	tests := []struct {
 		name        string
 		ops         []v1.GithubTeamOperation
-		ttl         string
+		ttl         time.Duration
 		state       v1.GithubUserOperationState
 		wantTeams   []string
 		wantChanged bool
 	}{
 		{
-			name:        "empty TTL no-op",
-			ops:         []v1.GithubTeamOperation{makeTeamOp("t1", v1.GithubUserOperationStateFailed, old)},
-			ttl:         "",
-			state:       v1.GithubUserOperationStateFailed,
-			wantTeams:   []string{"t1"},
-			wantChanged: false,
-		},
-		{
-			name:        "invalid duration preserves all",
-			ops:         []v1.GithubTeamOperation{makeTeamOp("t1", v1.GithubUserOperationStateFailed, old)},
-			ttl:         "bogus",
-			state:       v1.GithubUserOperationStateFailed,
-			wantTeams:   []string{"t1"},
-			wantChanged: false,
-		},
-		{
 			name:        "non-matching state preserved",
 			ops:         []v1.GithubTeamOperation{makeTeamOp("t1", v1.GithubUserOperationStateComplete, old)},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantTeams:   []string{"t1"},
 			wantChanged: false,
@@ -286,7 +234,7 @@ func TestApplyTeamOpsTTL(t *testing.T) {
 			ops: []v1.GithubTeamOperation{
 				{Operation: v1.GithubTeamOperationTypeAdd, Team: "t1", State: v1.GithubUserOperationStateFailed},
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantTeams:   []string{"t1"},
 			wantChanged: false,
@@ -298,7 +246,7 @@ func TestApplyTeamOpsTTL(t *testing.T) {
 				makeTeamOp("t-fresh", v1.GithubUserOperationStateFailed, fresh),
 				makeTeamOp("t-other-state", v1.GithubUserOperationStateComplete, old),
 			},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantTeams:   []string{"t-fresh", "t-other-state"},
 			wantChanged: true,
@@ -306,7 +254,7 @@ func TestApplyTeamOpsTTL(t *testing.T) {
 		{
 			name:        "empty input slice",
 			ops:         []v1.GithubTeamOperation{},
-			ttl:         "24h",
+			ttl:         24 * time.Hour,
 			state:       v1.GithubUserOperationStateFailed,
 			wantTeams:   []string{},
 			wantChanged: false,
@@ -315,7 +263,7 @@ func TestApplyTeamOpsTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, changed := applyTeamOpsTTL(logr.Discard(), tt.ops, tt.ttl, tt.state, "test-label", now)
+			got, changed := applyTeamOpsTTL(tt.ops, tt.ttl, tt.state, now)
 			if changed != tt.wantChanged {
 				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
 			}

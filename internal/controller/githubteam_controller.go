@@ -137,32 +137,40 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		anyChanged := false
 
 		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL]; ttlStr != "" {
-			updated, changed := applyUserOpsTTL(l, newOps, ttlStr, v1.GithubUserOperationStateFailed, GITHUB_TEAM_LABEL_FAILED_TTL, now)
-			if changed {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_FAILED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateFailed, now); changed {
 				l.Info("failed TTL expired: cleaning failed operations")
 				newOps = updated
 				anyChanged = true
 			}
 		}
 		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_COMPLETED_TTL]; ttlStr != "" {
-			updated, changed := applyUserOpsTTL(l, newOps, ttlStr, v1.GithubUserOperationStateComplete, GITHUB_TEAM_LABEL_COMPLETED_TTL, now)
-			if changed {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_COMPLETED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateComplete, now); changed {
 				l.Info("completed TTL expired: cleaning completed operations")
 				newOps = updated
 				anyChanged = true
 			}
 		}
 		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_NOTFOUND_TTL]; ttlStr != "" {
-			updated, changed := applyUserOpsTTL(l, newOps, ttlStr, v1.GithubUserOperationStateNotFound, GITHUB_TEAM_LABEL_NOTFOUND_TTL, now)
-			if changed {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_NOTFOUND_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateNotFound, now); changed {
 				l.Info("notfound TTL expired: cleaning notfound operations")
 				newOps = updated
 				anyChanged = true
 			}
 		}
 		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_SKIPPED_TTL]; ttlStr != "" {
-			updated, changed := applyUserOpsTTL(l, newOps, ttlStr, v1.GithubUserOperationStateSkipped, GITHUB_TEAM_LABEL_SKIPPED_TTL, now)
-			if changed {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_SKIPPED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateSkipped, now); changed {
 				l.Info("skipped TTL expired: cleaning skipped operations")
 				newOps = updated
 				anyChanged = true
