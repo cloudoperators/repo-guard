@@ -209,6 +209,104 @@ var _ = Describe("GithubTeam TTL labels maintenance", Ordered, func() {
 		}, 3*timeout, interval).Should(Equal(0))
 	})
 
+	It("preserves operations when failedTTL label has an invalid duration value", func() {
+		ctx := context.Background()
+
+		teamName := "team-invalid-ttl"
+		name := fmt.Sprintf("%s--%s--%s", github.Name, TEST_ENV["ORGANIZATION"], teamName)
+
+		t := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: TEST_ENV["NAMESPACE"],
+				Labels: map[string]string{
+					GITHUB_TEAM_LABEL_FAILED_TTL:               "not-a-duration",
+					"repo-guard.cloudoperators.dev/addUser":    "false",
+					"repo-guard.cloudoperators.dev/removeUser": "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       github.Name,
+				Organization: TEST_ENV["ORGANIZATION"],
+				Team:         teamName,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, t)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, t) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: TEST_ENV["NAMESPACE"]},
+		}, func(cur *repoguardsapv1.GithubTeam) {
+			cur.Status = repoguardsapv1.GithubTeamStatus{
+				TeamStatus:      repoguardsapv1.GithubTeamStateFailed,
+				TeamStatusError: "some failure",
+				Operations: []repoguardsapv1.GithubUserOperation{{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      "user1",
+					State:     repoguardsapv1.GithubUserOperationStateFailed,
+					Timestamp: metav1.NewTime(time.Now().Add(-48 * time.Hour)),
+				}},
+			}
+		})).To(Succeed())
+
+		Consistently(func() int {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations)
+		}, 5*time.Second, interval).Should(Equal(1))
+	})
+
+	It("preserves operations when failedTTL label is empty", func() {
+		ctx := context.Background()
+
+		teamName := "team-empty-ttl"
+		name := fmt.Sprintf("%s--%s--%s", github.Name, TEST_ENV["ORGANIZATION"], teamName)
+
+		t := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: TEST_ENV["NAMESPACE"],
+				Labels: map[string]string{
+					GITHUB_TEAM_LABEL_FAILED_TTL:               "",
+					"repo-guard.cloudoperators.dev/addUser":    "false",
+					"repo-guard.cloudoperators.dev/removeUser": "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       github.Name,
+				Organization: TEST_ENV["ORGANIZATION"],
+				Team:         teamName,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, t)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, t) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: TEST_ENV["NAMESPACE"]},
+		}, func(cur *repoguardsapv1.GithubTeam) {
+			cur.Status = repoguardsapv1.GithubTeamStatus{
+				TeamStatus:      repoguardsapv1.GithubTeamStateFailed,
+				TeamStatusError: "some failure",
+				Operations: []repoguardsapv1.GithubUserOperation{{
+					Operation: repoguardsapv1.GithubUserOperationTypeAdd,
+					User:      "user1",
+					State:     repoguardsapv1.GithubUserOperationStateFailed,
+					Timestamp: metav1.NewTime(time.Now().Add(-48 * time.Hour)),
+				}},
+			}
+		})).To(Succeed())
+
+		Consistently(func() int {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations)
+		}, 5*time.Second, interval).Should(Equal(1))
+	})
+
 	It("clears skipped operations after skippedTTL", func() {
 		ctx := context.Background()
 
@@ -254,4 +352,5 @@ var _ = Describe("GithubTeam TTL labels maintenance", Ordered, func() {
 			return len(cur.Status.Operations)
 		}, 3*timeout, interval).Should(Equal(0))
 	})
+
 })

@@ -114,162 +114,113 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	// TTL-based maintenance for GithubTeam status/operations
+	// TTL-based maintenance for GithubTeam status/operations.
+	// TTLs are evaluated per-operation against each op's own Timestamp so that
+	// later activity on the team does not indefinitely shield aged ops from cleanup.
 	if githubTeam.Labels != nil {
-		// Clear failed operations and failed status after TTL
-		if ttlStr, ok := githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL]; ok && ttlStr != "" {
-			if githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed && !githubTeam.Status.TeamStatusTimestamp.IsZero() {
-				if expired, _ := ttlExpired(ttlStr, githubTeam.Status.TeamStatusTimestamp.Time, time.Now()); expired {
-					l.Info("failed TTL expired: cleaning failed operations and status error")
-					// filter out failed operations
-					newOps := make([]v1.GithubUserOperation, 0, len(githubTeam.Status.Operations))
-					for _, op := range githubTeam.Status.Operations {
-						if op.State != v1.GithubUserOperationStateFailed {
-							newOps = append(newOps, op)
-						}
+		now := time.Now()
+		recomputeStatus := func(newStatus *v1.GithubTeamStatus) {
+			temp := &v1.GithubTeam{Status: *newStatus}
+			switch {
+			case temp.PendingOperationsFound():
+				newStatus.TeamStatus = v1.GithubTeamStatePendingOperations
+			case temp.FailedOperationsFound():
+				newStatus.TeamStatus = v1.GithubTeamStateFailed
+			default:
+				newStatus.TeamStatus = v1.GithubTeamStateComplete
+			}
+		}
+
+		// Stage cleanup over all four TTL buckets in a single status write
+		// to avoid extra reconcile churn.
+		newOps := githubTeam.Status.Operations
+		anyChanged := false
+
+		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL]; ttlStr != "" {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_FAILED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateFailed, now); changed {
+				l.Info("failed TTL expired: cleaning failed operations")
+				newOps = updated
+				anyChanged = true
+			}
+		}
+		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_COMPLETED_TTL]; ttlStr != "" {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_COMPLETED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateComplete, now); changed {
+				l.Info("completed TTL expired: cleaning completed operations")
+				newOps = updated
+				anyChanged = true
+			}
+		}
+		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_NOTFOUND_TTL]; ttlStr != "" {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_NOTFOUND_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateNotFound, now); changed {
+				l.Info("notfound TTL expired: cleaning notfound operations")
+				newOps = updated
+				anyChanged = true
+			}
+		}
+		if ttlStr := githubTeam.Labels[GITHUB_TEAM_LABEL_SKIPPED_TTL]; ttlStr != "" {
+			ttl, err := time.ParseDuration(ttlStr)
+			if err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", GITHUB_TEAM_LABEL_SKIPPED_TTL, "value", ttlStr, "error", err)
+			} else if updated, changed := applyUserOpsTTL(newOps, ttl, v1.GithubUserOperationStateSkipped, now); changed {
+				l.Info("skipped TTL expired: cleaning skipped operations")
+				newOps = updated
+				anyChanged = true
+			}
+		}
+
+		// failedTTL: also clear the team-level error once failed ops have been
+		// cleaned up by TTL. Only clear when failed ops were present in the
+		// original status (so spec/config errors unrelated to ops are not wiped).
+		clearTeamError := false
+		if githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL] != "" && githubTeam.Status.TeamStatusError != "" {
+			hadFailed := false
+			for _, op := range githubTeam.Status.Operations {
+				if op.State == v1.GithubUserOperationStateFailed {
+					hadFailed = true
+					break
+				}
+			}
+			if hadFailed {
+				stillFailed := false
+				for _, op := range newOps {
+					if op.State == v1.GithubUserOperationStateFailed {
+						stillFailed = true
+						break
 					}
-					changed := len(newOps) != len(githubTeam.Status.Operations) || githubTeam.Status.TeamStatusError != ""
-					if changed {
-						newStatus := githubTeam.Status
-						newStatus.Operations = newOps
-						newStatus.TeamStatusError = ""
-						// recompute top-level team status
-						temp := &v1.GithubTeam{Status: newStatus}
-						if temp.PendingOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStatePendingOperations
-						} else if temp.FailedOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStateFailed
-						} else {
-							newStatus.TeamStatus = v1.GithubTeamStateComplete
-						}
-						newStatus.TeamStatusTimestamp = metav1.Now()
-						githubTeam.Status = newStatus
-						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
-							if errors.IsNotFound(err) {
-								l.Info("resource not found in kubernetes: reconcile is skipped")
-								return reconcile.Result{}, nil
-							}
-							l.Error(err, "error during status update")
-							return reconcile.Result{}, err
-						}
-						return reconcile.Result{}, nil
-					}
+				}
+				if !stillFailed {
+					clearTeamError = true
 				}
 			}
 		}
-		// Clear completed operations after TTL
-		if ttlStr, ok := githubTeam.Labels[GITHUB_TEAM_LABEL_COMPLETED_TTL]; ok && ttlStr != "" {
-			if !githubTeam.Status.TeamStatusTimestamp.IsZero() {
-				if expired, _ := ttlExpired(ttlStr, githubTeam.Status.TeamStatusTimestamp.Time, time.Now()); expired {
-					l.Info("completed TTL expired: cleaning completed operations")
-					newOps := make([]v1.GithubUserOperation, 0, len(githubTeam.Status.Operations))
-					for _, op := range githubTeam.Status.Operations {
-						if op.State != v1.GithubUserOperationStateComplete {
-							newOps = append(newOps, op)
-						}
-					}
-					if len(newOps) != len(githubTeam.Status.Operations) {
-						newStatus := githubTeam.Status
-						newStatus.Operations = newOps
-						// recompute top-level team status
-						temp := &v1.GithubTeam{Status: newStatus}
-						if temp.PendingOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStatePendingOperations
-						} else if temp.FailedOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStateFailed
-						} else {
-							newStatus.TeamStatus = v1.GithubTeamStateComplete
-						}
-						newStatus.TeamStatusTimestamp = metav1.Now()
-						githubTeam.Status = newStatus
-						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
-							if errors.IsNotFound(err) {
-								l.Info("resource not found in kubernetes: reconcile is skipped")
-								return reconcile.Result{}, nil
-							}
-							l.Error(err, "error during status update")
-							return reconcile.Result{}, err
-						}
-						return reconcile.Result{}, nil
-					}
-				}
+
+		if anyChanged || clearTeamError {
+			newStatus := githubTeam.Status
+			newStatus.Operations = newOps
+			if clearTeamError {
+				newStatus.TeamStatusError = ""
 			}
-		}
-		// Clear notfound operations after TTL
-		if ttlStr, ok := githubTeam.Labels[GITHUB_TEAM_LABEL_NOTFOUND_TTL]; ok && ttlStr != "" {
-			if !githubTeam.Status.TeamStatusTimestamp.IsZero() {
-				if expired, _ := ttlExpired(ttlStr, githubTeam.Status.TeamStatusTimestamp.Time, time.Now()); expired {
-					l.Info("notfound TTL expired: cleaning notfound operations")
-					newOps := make([]v1.GithubUserOperation, 0, len(githubTeam.Status.Operations))
-					for _, op := range githubTeam.Status.Operations {
-						if op.State != v1.GithubUserOperationStateNotFound {
-							newOps = append(newOps, op)
-						}
-					}
-					if len(newOps) != len(githubTeam.Status.Operations) {
-						newStatus := githubTeam.Status
-						newStatus.Operations = newOps
-						// recompute top-level team status
-						temp := &v1.GithubTeam{Status: newStatus}
-						if temp.PendingOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStatePendingOperations
-						} else if temp.FailedOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStateFailed
-						} else {
-							newStatus.TeamStatus = v1.GithubTeamStateComplete
-						}
-						newStatus.TeamStatusTimestamp = metav1.Now()
-						githubTeam.Status = newStatus
-						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
-							if errors.IsNotFound(err) {
-								l.Info("resource not found in kubernetes: reconcile is skipped")
-								return reconcile.Result{}, nil
-							}
-							l.Error(err, "error during status update")
-							return reconcile.Result{}, err
-						}
-						return reconcile.Result{}, nil
-					}
+			recomputeStatus(&newStatus)
+			newStatus.TeamStatusTimestamp = metav1.Now()
+			githubTeam.Status = newStatus
+			if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
+				if errors.IsNotFound(err) {
+					l.Info("resource not found in kubernetes: reconcile is skipped")
+					return reconcile.Result{}, nil
 				}
+				l.Error(err, "error during status update")
+				return reconcile.Result{}, err
 			}
-		}
-		// Clear skipped operations after TTL
-		if ttlStr, ok := githubTeam.Labels[GITHUB_TEAM_LABEL_SKIPPED_TTL]; ok && ttlStr != "" {
-			if !githubTeam.Status.TeamStatusTimestamp.IsZero() {
-				if expired, _ := ttlExpired(ttlStr, githubTeam.Status.TeamStatusTimestamp.Time, time.Now()); expired {
-					l.Info("skipped TTL expired: cleaning skipped operations")
-					newOps := make([]v1.GithubUserOperation, 0, len(githubTeam.Status.Operations))
-					for _, op := range githubTeam.Status.Operations {
-						if op.State != v1.GithubUserOperationStateSkipped {
-							newOps = append(newOps, op)
-						}
-					}
-					if len(newOps) != len(githubTeam.Status.Operations) {
-						newStatus := githubTeam.Status
-						newStatus.Operations = newOps
-						// recompute top-level team status
-						temp := &v1.GithubTeam{Status: newStatus}
-						if temp.PendingOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStatePendingOperations
-						} else if temp.FailedOperationsFound() {
-							newStatus.TeamStatus = v1.GithubTeamStateFailed
-						} else {
-							newStatus.TeamStatus = v1.GithubTeamStateComplete
-						}
-						newStatus.TeamStatusTimestamp = metav1.Now()
-						githubTeam.Status = newStatus
-						if err := r.Client.Status().Update(ctx, githubTeam); err != nil {
-							if errors.IsNotFound(err) {
-								l.Info("resource not found in kubernetes: reconcile is skipped")
-								return reconcile.Result{}, nil
-							}
-							l.Error(err, "error during status update")
-							return reconcile.Result{}, err
-						}
-						return reconcile.Result{}, nil
-					}
-				}
-			}
+			return reconcile.Result{}, nil
 		}
 	}
 

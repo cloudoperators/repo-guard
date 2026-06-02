@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -120,4 +121,89 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 				len(cur.Status.Operations.OrganizationOwnerOperations)
 		}, 3*timeout, interval).Should(Equal(0))
 	})
+
+	It("preserves operations when failedTTL label has an invalid duration value", func() {
+		ctx := context.Background()
+
+		org := githubOrganizationGreenhouseSandboxForTTLTests.DeepCopy()
+		org.Name = generateUniqueName("ttl-invalid")
+		org.Spec.Github = github.Name
+		if org.Labels == nil {
+			org.Labels = map[string]string{}
+		}
+		org.Labels[GITHUB_ORG_LABEL_FAILED_TTL] = "not-a-duration"
+
+		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, org) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubOrganization{
+			ObjectMeta: metav1.ObjectMeta{Name: org.Name, Namespace: org.Namespace},
+		}, func(cur *repoguardsapv1.GithubOrganization) {
+			cur.Status = repoguardsapv1.GithubOrganizationStatus{
+				OrganizationStatus:      repoguardsapv1.GithubOrganizationStateFailed,
+				OrganizationStatusError: "some failure",
+				Operations: repoguardsapv1.GithubOrganizationStatusOperations{
+					OrganizationOwnerOperations: []repoguardsapv1.GithubUserOperation{{
+						User:      "u1",
+						State:     repoguardsapv1.GithubUserOperationStateFailed,
+						Timestamp: metav1.NewTime(time.Now().Add(-48 * time.Hour)),
+					}},
+				},
+			}
+		})).To(Succeed())
+
+		totalOps := func() int {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: org.Namespace, Name: org.Name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations.OrganizationOwnerOperations) +
+				len(cur.Status.Operations.RepositoryTeamOperations) +
+				len(cur.Status.Operations.GithubTeamOperations)
+		}
+		Consistently(totalOps, 5*time.Second, interval).Should(Equal(1))
+	})
+
+	It("preserves operations when failedTTL label is empty", func() {
+		ctx := context.Background()
+
+		org := githubOrganizationGreenhouseSandboxForTTLTests.DeepCopy()
+		org.Name = generateUniqueName("ttl-empty")
+		org.Spec.Github = github.Name
+		if org.Labels == nil {
+			org.Labels = map[string]string{}
+		}
+		org.Labels[GITHUB_ORG_LABEL_FAILED_TTL] = ""
+
+		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, org) })
+
+		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubOrganization{
+			ObjectMeta: metav1.ObjectMeta{Name: org.Name, Namespace: org.Namespace},
+		}, func(cur *repoguardsapv1.GithubOrganization) {
+			cur.Status = repoguardsapv1.GithubOrganizationStatus{
+				OrganizationStatus:      repoguardsapv1.GithubOrganizationStateFailed,
+				OrganizationStatusError: "some failure",
+				Operations: repoguardsapv1.GithubOrganizationStatusOperations{
+					OrganizationOwnerOperations: []repoguardsapv1.GithubUserOperation{{
+						User:      "u1",
+						State:     repoguardsapv1.GithubUserOperationStateFailed,
+						Timestamp: metav1.NewTime(time.Now().Add(-48 * time.Hour)),
+					}},
+				},
+			}
+		})).To(Succeed())
+
+		totalOps := func() int {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: org.Namespace, Name: org.Name}, cur); err != nil {
+				return -1
+			}
+			return len(cur.Status.Operations.OrganizationOwnerOperations) +
+				len(cur.Status.Operations.RepositoryTeamOperations) +
+				len(cur.Status.Operations.GithubTeamOperations)
+		}
+		Consistently(totalOps, 5*time.Second, interval).Should(Equal(1))
+	})
+
 })
