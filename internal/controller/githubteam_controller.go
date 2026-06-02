@@ -171,7 +171,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		// failedTTL: also clear the team-level error once no failed ops remain.
 		clearTeamError := false
-		if _, ok := githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL]; ok {
+		if githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL] != "" {
 			if githubTeam.Status.TeamStatusError != "" {
 				stillFailed := false
 				for _, op := range newOps {

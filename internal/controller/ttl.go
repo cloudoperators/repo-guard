@@ -13,7 +13,7 @@ import (
 // applyUserOpsTTL filters out GithubUserOperations whose State equals the given
 // state and whose own Timestamp is older than ttlStr. Operations with a zero
 // Timestamp are preserved. If ttlStr is empty, the input is returned unchanged.
-// On invalid TTL string, a log entry is emitted and the matching op is kept.
+// On invalid TTL string, a log entry is emitted and the input is returned unchanged.
 // Returns (newOps, changed) where changed is true iff any op was dropped.
 func applyUserOpsTTL(
 	l logr.Logger,
@@ -26,21 +26,17 @@ func applyUserOpsTTL(
 	if ttlStr == "" {
 		return ops, false
 	}
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		l.Info("invalid TTL duration label; skipping cleanup", "label", label, "value", ttlStr, "error", err.Error())
+		return ops, false
+	}
 	out := make([]v1.GithubUserOperation, 0, len(ops))
 	changed := false
 	for _, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() {
-			expired, err := ttlExpired(ttlStr, op.Timestamp.Time, now)
-			if err != nil {
-				l.Info("invalid TTL duration label; skipping cleanup for op",
-					"label", label, "value", ttlStr, "error", err.Error(), "user", op.User)
-				out = append(out, op)
-				continue
-			}
-			if expired {
-				changed = true
-				continue
-			}
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+			changed = true
+			continue
 		}
 		out = append(out, op)
 	}
@@ -61,21 +57,17 @@ func applyRepoOpsTTL(
 	if ttlStr == "" {
 		return ops, false
 	}
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		l.Info("invalid TTL duration label; skipping cleanup", "label", label, "value", ttlStr, "error", err.Error())
+		return ops, false
+	}
 	out := make([]v1.GithubRepoTeamOperation, 0, len(ops))
 	changed := false
 	for _, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() {
-			expired, err := ttlExpired(ttlStr, op.Timestamp.Time, now)
-			if err != nil {
-				l.Info("invalid TTL duration label; skipping cleanup for op",
-					"label", label, "value", ttlStr, "error", err.Error(), "repo", op.Repo, "team", op.Team)
-				out = append(out, op)
-				continue
-			}
-			if expired {
-				changed = true
-				continue
-			}
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+			changed = true
+			continue
 		}
 		out = append(out, op)
 	}
@@ -96,21 +88,17 @@ func applyTeamOpsTTL(
 	if ttlStr == "" {
 		return ops, false
 	}
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		l.Info("invalid TTL duration label; skipping cleanup", "label", label, "value", ttlStr, "error", err.Error())
+		return ops, false
+	}
 	out := make([]v1.GithubTeamOperation, 0, len(ops))
 	changed := false
 	for _, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() {
-			expired, err := ttlExpired(ttlStr, op.Timestamp.Time, now)
-			if err != nil {
-				l.Info("invalid TTL duration label; skipping cleanup for op",
-					"label", label, "value", ttlStr, "error", err.Error(), "team", op.Team)
-				out = append(out, op)
-				continue
-			}
-			if expired {
-				changed = true
-				continue
-			}
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+			changed = true
+			continue
 		}
 		out = append(out, op)
 	}
