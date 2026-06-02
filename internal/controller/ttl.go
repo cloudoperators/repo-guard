@@ -33,7 +33,7 @@ func applyUserOpsTTL(
 	}
 	var out []v1.GithubUserOperation
 	for i, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Add(ttl)) {
 			if out == nil {
 				out = make([]v1.GithubUserOperation, i, len(ops))
 				copy(out, ops[:i])
@@ -71,7 +71,7 @@ func applyRepoOpsTTL(
 	}
 	var out []v1.GithubRepoTeamOperation
 	for i, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Add(ttl)) {
 			if out == nil {
 				out = make([]v1.GithubRepoTeamOperation, i, len(ops))
 				copy(out, ops[:i])
@@ -109,7 +109,7 @@ func applyTeamOpsTTL(
 	}
 	var out []v1.GithubTeamOperation
 	for i, op := range ops {
-		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Time.Add(ttl)) {
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Add(ttl)) {
 			if out == nil {
 				out = make([]v1.GithubTeamOperation, i, len(ops))
 				copy(out, ops[:i])
