@@ -145,6 +145,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if ttlStr == "" {
 				return
 			}
+			if _, err := time.ParseDuration(ttlStr); err != nil {
+				l.Info("invalid TTL duration label; skipping cleanup", "label", label, "value", ttlStr, "error", err)
+				return
+			}
 			if updated, changed := applyUserOpsTTL(l, newStatus.Operations.OrganizationOwnerOperations, ttlStr, userState, label, now); changed {
 				newStatus.Operations.OrganizationOwnerOperations = updated
 				anyChanged = true
@@ -168,12 +172,17 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			applyBucket(completedTTL, GITHUB_ORG_LABEL_COMPLETED_TTL, v1.GithubUserOperationStateComplete, v1.GithubRepoTeamOperationStateComplete)
 		}
 
-		// failedTTL: also clear org-level error if no failed ops remain.
+		// failedTTL: also clear org-level error once failed ops have been cleaned
+		// up by TTL. Only clear when failed ops were present in the original status
+		// (so spec/config/API errors unrelated to ops are not wiped).
 		clearOrgError := false
 		if failedTTL != "" && githubOrganization.Status.OrganizationStatusError != "" {
-			stillFailed := (&v1.GithubOrganization{Status: newStatus}).FailedOperationsFound()
-			if !stillFailed {
-				clearOrgError = true
+			hadFailed := (&v1.GithubOrganization{Status: githubOrganization.Status}).FailedOperationsFound()
+			if hadFailed {
+				stillFailed := (&v1.GithubOrganization{Status: newStatus}).FailedOperationsFound()
+				if !stillFailed {
+					clearOrgError = true
+				}
 			}
 		}
 

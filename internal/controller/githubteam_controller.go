@@ -169,10 +169,19 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 		}
 
-		// failedTTL: also clear the team-level error once no failed ops remain.
+		// failedTTL: also clear the team-level error once failed ops have been
+		// cleaned up by TTL. Only clear when failed ops were present in the
+		// original status (so spec/config errors unrelated to ops are not wiped).
 		clearTeamError := false
-		if githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL] != "" {
-			if githubTeam.Status.TeamStatusError != "" {
+		if githubTeam.Labels[GITHUB_TEAM_LABEL_FAILED_TTL] != "" && githubTeam.Status.TeamStatusError != "" {
+			hadFailed := false
+			for _, op := range githubTeam.Status.Operations {
+				if op.State == v1.GithubUserOperationStateFailed {
+					hadFailed = true
+					break
+				}
+			}
+			if hadFailed {
 				stillFailed := false
 				for _, op := range newOps {
 					if op.State == v1.GithubUserOperationStateFailed {
