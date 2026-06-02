@@ -28,26 +28,7 @@ jobs:
           TEST_GITHUB_TOKEN: ${{ secrets.TEST_GITHUB_TOKEN }}
           TEST_GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
           TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
-        run: |
-          # Use python3 to rewrite key=value lines safely; sed metacharacters
-          # in secret values (& /) would corrupt the file with sed -i.
-          python3 - internal/controller/test.env <<'PYEOF'
-import os, sys, re
-path = sys.argv[1]
-replacements = {
-    "GITHUB_TOKEN": os.environ["TEST_GITHUB_TOKEN"],
-    "GITHUB_CLIENT_ID": os.environ["TEST_GITHUB_CLIENT_ID"],
-    "GITHUB_CLIENT_SECRET": os.environ["TEST_GITHUB_CLIENT_SECRET"],
-}
-lines = open(path).readlines()
-with open(path, "w") as f:
-    for line in lines:
-        for key, val in replacements.items():
-            if re.match(rf"^{key}=", line):
-                line = f"{key}={val}\n"
-                break
-        f.write(line)
-PYEOF
+        run: python3 .github/scripts/update-test-env.py internal/controller/test.env
       - name: Run Controller Tests (live GitHub)
         # GITHUB_MOCK=false runs against the real greenhouse-sandbox GitHub org.
         # Requires TEST_GITHUB_TOKEN, TEST_GITHUB_CLIENT_ID, TEST_GITHUB_CLIENT_SECRET,
@@ -101,25 +82,7 @@ PYEOF
           TEST_GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
           TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: |
-          # Use python3 to rewrite key=value lines safely; sed metacharacters
-          # in secret values (& /) would corrupt the file with sed -i.
-          python3 - internal/controller/test.env <<'PYEOF'
-import os, sys, re
-path = sys.argv[1]
-replacements = {
-    "GITHUB_TOKEN": os.environ["TEST_GITHUB_TOKEN"],
-    "GITHUB_CLIENT_ID": os.environ["TEST_GITHUB_CLIENT_ID"],
-    "GITHUB_CLIENT_SECRET": os.environ["TEST_GITHUB_CLIENT_SECRET"],
-}
-lines = open(path).readlines()
-with open(path, "w") as f:
-    for line in lines:
-        for key, val in replacements.items():
-            if re.match(rf"^{key}=", line):
-                line = f"{key}={val}\n"
-                break
-        f.write(line)
-PYEOF
+          python3 .github/scripts/update-test-env.py internal/controller/test.env
           # Append the private key using the TEST_ prefix so gen-values.sh
           # (read_var_multiline) finds it first, without conflicting with the
           # existing GITHUB_PRIVATE_KEY= placeholder already in test.env.
