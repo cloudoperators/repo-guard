@@ -130,80 +130,83 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 	}
 
-	// TTL-based maintenance to keep status small and healthy
+	// TTL-based maintenance to keep status small and healthy.
+	// TTLs are evaluated per-operation against each op's own Timestamp so that
+	// later activity on the organization does not indefinitely shield aged ops
+	// from cleanup.
 	if githubOrganization.Labels != nil {
-		// Clear failed operations and failed status after TTL
-		if ttlStr, ok := githubOrganization.Labels[GITHUB_ORG_LABEL_FAILED_TTL]; ok && ttlStr != "" {
-			if githubOrganization.Status.OrganizationStatus == v1.GithubOrganizationStateFailed && !githubOrganization.Status.OrganizationStatusTimestamp.IsZero() {
-				if expired, err := ttlExpired(ttlStr, githubOrganization.Status.OrganizationStatusTimestamp.Time, time.Now()); err != nil {
-					l.Info("invalid failedTTL duration label; skipping cleanup", "label", GITHUB_ORG_LABEL_FAILED_TTL, "value", ttlStr, "error", err.Error())
-				} else if expired {
-					l.Info("failed TTL expired: cleaning failed operations and status error")
-					newStatus, changed := githubOrganization.CleanFailedOperations()
-					if changed || githubOrganization.Status.OrganizationStatusError != "" {
-						// reset error and recompute top-level state
-						newStatus.OrganizationStatusError = ""
-						if (&v1.GithubOrganization{Status: newStatus}).PendingOperationsFound() {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
-						} else if (&v1.GithubOrganization{Status: newStatus}).FailedOperationsFound() {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
-						} else {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
-						}
-						newStatus.OrganizationStatusTimestamp = metav1.Now()
-						githubOrganization.Status = newStatus
-						err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							latest := &v1.GithubOrganization{}
-							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-								return err
-							}
-							latest.Status = newStatus
-							return r.Client.Status().Update(ctx, latest)
-						})
-						if err != nil {
-							return reconcile.Result{}, err
-						}
-						// (defer will also update it at the end)
-						return reconcile.Result{}, nil
-					}
-				}
+		now := time.Now()
+
+		// Stage cleanup over both TTL buckets in a single status write.
+		newStatus := *githubOrganization.Status.DeepCopy()
+		anyChanged := false
+
+		applyBucket := func(ttlStr, label string, userState v1.GithubUserOperationState, repoState v1.GithubRepoTeamOperationState) {
+			if ttlStr == "" {
+				return
+			}
+			if updated, changed := applyUserOpsTTL(l, newStatus.Operations.OrganizationOwnerOperations, ttlStr, userState, label, now); changed {
+				newStatus.Operations.OrganizationOwnerOperations = updated
+				anyChanged = true
+			}
+			if updated, changed := applyRepoOpsTTL(l, newStatus.Operations.RepositoryTeamOperations, ttlStr, repoState, label, now); changed {
+				newStatus.Operations.RepositoryTeamOperations = updated
+				anyChanged = true
+			}
+			if updated, changed := applyTeamOpsTTL(l, newStatus.Operations.GithubTeamOperations, ttlStr, userState, label, now); changed {
+				newStatus.Operations.GithubTeamOperations = updated
+				anyChanged = true
 			}
 		}
-		// Clear completed operations after TTL
-		if ttlStr, ok := githubOrganization.Labels[GITHUB_ORG_LABEL_COMPLETED_TTL]; ok && ttlStr != "" {
-			if !githubOrganization.Status.OrganizationStatusTimestamp.IsZero() {
-				if expired, err := ttlExpired(ttlStr, githubOrganization.Status.OrganizationStatusTimestamp.Time, time.Now()); err != nil {
-					l.Info("invalid completedTTL duration label; skipping cleanup", "label", GITHUB_ORG_LABEL_COMPLETED_TTL, "value", ttlStr, "error", err.Error())
-				} else if expired {
-					l.Info("completed TTL expired: cleaning completed operations")
-					newStatus, changed := githubOrganization.CleanCompletedOperations()
-					if changed {
-						// keep current orgStatus if still pending/failed, otherwise mark complete
-						if (&v1.GithubOrganization{Status: newStatus}).PendingOperationsFound() {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
-						} else if (&v1.GithubOrganization{Status: newStatus}).FailedOperationsFound() {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
-						} else {
-							newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
-						}
-						newStatus.OrganizationStatusTimestamp = metav1.Now()
-						githubOrganization.Status = newStatus
-						err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							latest := &v1.GithubOrganization{}
-							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-								return err
-							}
-							latest.Status = newStatus
-							return r.Client.Status().Update(ctx, latest)
-						})
-						if err != nil {
-							return reconcile.Result{}, err
-						}
-						// (defer will also update it at the end)
-						return reconcile.Result{}, nil
-					}
-				}
+
+		failedTTL := githubOrganization.Labels[GITHUB_ORG_LABEL_FAILED_TTL]
+		completedTTL := githubOrganization.Labels[GITHUB_ORG_LABEL_COMPLETED_TTL]
+		if failedTTL != "" {
+			applyBucket(failedTTL, GITHUB_ORG_LABEL_FAILED_TTL, v1.GithubUserOperationStateFailed, v1.GithubRepoTeamOperationStateFailed)
+		}
+		if completedTTL != "" {
+			applyBucket(completedTTL, GITHUB_ORG_LABEL_COMPLETED_TTL, v1.GithubUserOperationStateComplete, v1.GithubRepoTeamOperationStateComplete)
+		}
+
+		// failedTTL: also clear org-level error if no failed ops remain.
+		clearOrgError := false
+		if failedTTL != "" && githubOrganization.Status.OrganizationStatusError != "" {
+			stillFailed := (&v1.GithubOrganization{Status: newStatus}).FailedOperationsFound()
+			if !stillFailed {
+				clearOrgError = true
 			}
+		}
+
+		if anyChanged || clearOrgError {
+			if anyChanged {
+				l.Info("TTL expired: cleaned aged operations", "failedTTL", failedTTL, "completedTTL", completedTTL)
+			}
+			if clearOrgError {
+				newStatus.OrganizationStatusError = ""
+			}
+			temp := &v1.GithubOrganization{Status: newStatus}
+			switch {
+			case temp.PendingOperationsFound():
+				newStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
+			case temp.FailedOperationsFound():
+				newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
+			default:
+				newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
+			}
+			newStatus.OrganizationStatusTimestamp = metav1.Now()
+			githubOrganization.Status = newStatus
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubOrganization{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				latest.Status = newStatus
+				return r.Client.Status().Update(ctx, latest)
+			})
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
 		}
 	}
 

@@ -254,4 +254,5 @@ var _ = Describe("GithubTeam TTL labels maintenance", Ordered, func() {
 			return len(cur.Status.Operations)
 		}, 3*timeout, interval).Should(Equal(0))
 	})
+
 })

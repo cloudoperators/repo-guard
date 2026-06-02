@@ -120,4 +120,5 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 				len(cur.Status.Operations.OrganizationOwnerOperations)
 		}, 3*timeout, interval).Should(Equal(0))
 	})
+
 })
