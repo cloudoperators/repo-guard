@@ -14,6 +14,7 @@ concurrency:
 jobs:
   controller-test-live:
     runs-on: ubuntu-latest
+    environment: e2e
     steps:
       - uses: actions/checkout@v6
       - name: Setup Go
@@ -48,6 +49,7 @@ jobs:
   e2e-live:
     needs: controller-test-live
     runs-on: ubuntu-latest
+    environment: e2e
     steps:
       - uses: actions/checkout@v6
       - name: Setup Go
