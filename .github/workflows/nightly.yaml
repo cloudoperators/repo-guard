@@ -46,6 +46,7 @@ jobs:
         run: make controller-test-live
 
   e2e-live:
+    needs: controller-test-live
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
