@@ -125,8 +125,10 @@ func loadTestEnv() map[string]string {
 	}
 
 	for k, v := range env {
-		// Some CI environments escape multi-line secrets; keep behavior but don't be too clever.
+		// GitHub Actions escapes multiline secrets as literal \n when injected via env:.
+		// Replace \\n → newline first, then strip any remaining lone backslashes.
 		if strings.Contains(v, "\\") {
+			v = strings.ReplaceAll(v, "\\n", "\n")
 			env[k] = strings.ReplaceAll(v, "\\", "")
 		}
 	}
