@@ -91,7 +91,7 @@ kubectl get githuborganization -A -o json | jq -r '
     failedRepoOps:  ([(.status.operations.repoOperations  // [] | .[] | select(.state=="failed"))] | length),
     failedOwnerOps: ([(.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="failed"))] | length),
     failedTeamOps:  ([(.status.operations.teamOperations              // [] | .[] | select(.state=="failed"))] | length),
-    pendingRepoOps:  ([(.status.operations.repoOperations  // [] | .[] | select(.state=="pending"))] | length),
+    pendingRepoOps:  ([(.status.operations.repoOperations             // [] | .[] | select(.state=="pending"))] | length),
     pendingOwnerOps: ([(.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="pending"))] | length),
     pendingTeamOps:  ([(.status.operations.teamOperations              // [] | .[] | select(.state=="pending"))] | length)
   } |
@@ -260,6 +260,69 @@ kubectl get githubteam -A -o json | jq -r '
 '
 ```
 
+#### 6d — TTL age audit (overdue operations)
+
+For each resource with operations, check whether any operations are overdue relative to the configured TTL. An operation is **overdue** if its `timestamp` is older than `now - TTL` but the operation still exists (meaning the controller has not yet cleaned it up or the TTL is not configured).
+
+Also flag the **org `skipped` gap**: `GithubOrganization` resources have no `skippedTTL` label — `skipped` operations in orgs accumulate indefinitely and can only be cleared manually via `cleanOperations=complete`.
+
+```bash
+NOW=$(date -u +%s)
+
+echo "=== GithubTeams: operations overdue relative to configured TTL ==="
+kubectl get githubteam -A -o json | jq --argjson now "$NOW" -r '
+  .items[] |
+  . as $team |
+  (($team.metadata.labels["repo-guard.cloudoperators.dev/failedTTL"]    // "") | if . != "" then . else null end) as $failedTTL |
+  (($team.metadata.labels["repo-guard.cloudoperators.dev/completedTTL"] // "") | if . != "" then . else null end) as $completedTTL |
+  (($team.metadata.labels["repo-guard.cloudoperators.dev/notfoundTTL"]  // "") | if . != "" then . else null end) as $notfoundTTL |
+  (($team.metadata.labels["repo-guard.cloudoperators.dev/skippedTTL"]   // "") | if . != "" then . else null end) as $skippedTTL |
+  ($team.status.operations // []) |
+  .[] |
+  . as $op |
+  (if $op.timestamp != null then ($op.timestamp | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) else null end) as $ts |
+  if $ts == null then empty
+  elif ($op.state == "failed"   and $failedTTL    != null) then
+    "\($team.metadata.namespace)/\($team.metadata.name) — OVERDUE failed op user=\($op.user) age=\(($now - $ts) / 3600 | floor)h TTL=\($failedTTL)"
+  elif ($op.state == "complete" and $completedTTL != null) then
+    "\($team.metadata.namespace)/\($team.metadata.name) — OVERDUE complete op user=\($op.user) age=\(($now - $ts) / 3600 | floor)h TTL=\($completedTTL)"
+  elif ($op.state == "notfound" and $notfoundTTL  != null) then
+    "\($team.metadata.namespace)/\($team.metadata.name) — OVERDUE notfound op user=\($op.user) age=\(($now - $ts) / 3600 | floor)h TTL=\($notfoundTTL)"
+  elif ($op.state == "skipped"  and $skippedTTL   != null) then
+    "\($team.metadata.namespace)/\($team.metadata.name) — OVERDUE skipped op user=\($op.user) age=\(($now - $ts) / 3600 | floor)h TTL=\($skippedTTL)"
+  else empty
+  end
+' | head -40
+
+echo ""
+echo "=== GithubOrganizations: skipped ops (no skippedTTL label exists for orgs — ops persist until manual cleanOperations) ==="
+kubectl get githuborganization -A -o json | jq --argjson now "$NOW" -r '
+  .items[] |
+  . as $org |
+  ([$org.status.operations.organizationOwnerOperations // [] | .[] | select(.state=="skipped"),
+    $org.status.operations.teamOperations              // [] | .[] | select(.state=="skipped"),
+    $org.status.operations.repoOperations              // [] | .[] | select(.state=="skipped")] | length) as $total |
+  select($total > 0) |
+  "\($org.metadata.namespace)/\($org.metadata.name) — \($total) skipped ops (no skippedTTL for orgs; use cleanOperations=complete to clear)"
+'
+
+echo ""
+echo "=== GithubTeams with teamStatus=failed but no failed operations (provider-level errors — NOT cleared by failedTTL) ==="
+kubectl get githubteam -A -o json | jq -r '
+  .items[] |
+  select(
+    .status.teamStatus == "failed" and
+    (.status.operations // [] | map(select(.state=="failed")) | length) == 0
+  ) |
+  "\(.metadata.namespace)/\(.metadata.name) — teamStatus=failed, no failed ops, error=\(.status.teamStatusError // .status.error // "n/a") (failedTTL will NOT auto-clear this)"
+'
+```
+
+Key interpretation notes for this step:
+- An operation appearing in the output of the first query means the controller hasn't cleaned it yet — either because the TTL window hasn't elapsed yet, or because the controller is not reconciling that resource.
+- The second query surfaces a **known gap**: org-level `skipped` operations have no automatic cleanup label. The workaround is to set `cleanOperations=complete` on the org (one-shot label that clears all completed/skipped ops and then removes itself).
+- The third query surfaces teams stuck in `failed` state due to **provider-level errors** (e.g., HTTP 404 from an external member provider). The `failedTTL` label only clears *operation-level* failures — it does not clear a team's top-level `teamStatus=failed` unless there were failed operations that were cleaned up. These teams require fixing the underlying provider or manually patching the status.
+
 ### 7 — GithubAccountLink & provider statuses
 
 ```bash
@@ -333,7 +396,9 @@ Present the findings in the following structure:
   - Team status: `.status.teamStatus`
   - Team error: `.status.error`
   - Team operations: `.status.operations` (flat `[]GithubUserOperation`)
-- Operation states: `pending`, `complete`, `failed`, `skipped`, `notfound` (note: `notfound` and `skipped` only appear in team ops)
+- Operation states: `pending`, `complete`, `failed`, `skipped`, `notfound`
+  - Team ops (`status.operations[]`): all 5 states; `notfound` = GitHub user not found, `skipped` = mutation label disabled
+  - Org ops (`status.operations.{organizationOwnerOperations, teamOperations, repoOperations}`): `complete`, `failed`, `skipped` observed; `skipped` ops in orgs accumulate indefinitely (no `skippedTTL` label for orgs)
 - TTL labels take a Go duration string (e.g. `1h`, `24h`, `7d`). An empty or invalid value disables cleanup.
 - `dryRun=true` suppresses all GitHub API mutations for that resource — add/remove operations are logged but not executed.
 - `orphaned=true` on a GithubTeam disables membership management entirely for that team.
