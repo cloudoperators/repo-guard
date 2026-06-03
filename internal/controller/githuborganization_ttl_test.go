@@ -123,6 +123,9 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 	})
 
 	It("preserves operations when failedTTL label has an invalid duration value", func() {
+		if !isMockMode() {
+			Skip("Consistently assertions race against the live reconciler rewriting status; only valid in mock mode")
+		}
 		ctx := context.Background()
 
 		org := githubOrganizationGreenhouseSandboxForTTLTests.DeepCopy()
@@ -165,6 +168,9 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 	})
 
 	It("preserves operations when failedTTL label is empty", func() {
+		if !isMockMode() {
+			Skip("Consistently assertions race against the live reconciler rewriting status; only valid in mock mode")
+		}
 		ctx := context.Background()
 
 		org := githubOrganizationGreenhouseSandboxForTTLTests.DeepCopy()
