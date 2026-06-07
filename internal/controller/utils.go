@@ -21,15 +21,24 @@ func elementsMatch(listA, listB interface{}) bool {
 	return assert.ElementsMatch(dummyAssert{}, listA, listB)
 }
 
-// parseGitHubRateLimitReset tries to extract a reset timestamp from a GitHub rate-limit error string.
-// Expected substrings look like:
-// "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
-// Returns the parsed time in UTC and true if found; otherwise zero time and false.
+// parseGitHubRateLimitReset tries to extract a retry-after time from a GitHub rate-limit error string.
+// Handles three cases emitted by the GitHub API:
+//
+//   - Future reset:  "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
+//     → returns the parsed future reset time so callers can requeue with RequeueAfter.
+//
+//   - Already reset: "... [rate limit was reset 1s ago]"
+//     → returns time.Now() so callers requeue immediately.
+//
+//   - Invitation rate limit (no timestamp): "exceeded the organization invitation rate limit …"
+//     → returns a synthetic backoff of now+1h (the API does not provide a reset time for this case).
+//
+// Returns the retry-after time in UTC and true if the error is a recognisable rate-limit error;
+// otherwise returns zero time and false.
 func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	if errStr == "" {
 		return time.Time{}, false
 	}
-	// quick guard
 	lowered := strings.ToLower(errStr)
 	// Special-case: GitHub organization invitation rate limit errors don't include a reset timestamp.
 	// Example: "You have exceeded the organization invitation rate limit of 500 per 24 hours."
@@ -39,18 +48,27 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 		strings.Contains(lowered, "exceeded the organization invitation rate limit") {
 		return time.Now().UTC().Add(time.Hour), true
 	}
-	if !strings.Contains(lowered, "rate limit") || !strings.Contains(lowered, "until ") {
+	if !strings.Contains(lowered, "rate limit") {
 		return time.Time{}, false
 	}
-	// Regex to capture the timestamp after "until " up to the next comma
+	// Format 2: "[rate limit was reset N ago]" — the limit has already cleared.
+	// Return now so callers requeue immediately rather than skipping the resource.
+	if strings.Contains(lowered, "was reset") && strings.Contains(lowered, "ago") {
+		return time.Now().UTC(), true
+	}
+	if !strings.Contains(lowered, "until ") {
+		return time.Time{}, false
+	}
+	// Format 1: extract the future reset timestamp after "until ".
 	// Example captured: 2025-12-05 02:02:13 +0000 UTC
-	re := regexp.MustCompile(`until\s+([^,\]]+)`)
+	// Use case-insensitive flag so the regex matches the original errStr consistently
+	// with the lowercased guard above (avoiding a mismatch if GitHub ever varies casing).
+	re := regexp.MustCompile(`(?i)until\s+([^,\]]+)`)
 	m := re.FindStringSubmatch(errStr)
 	if len(m) < 2 {
 		return time.Time{}, false
 	}
 	ts := strings.TrimSpace(m[1])
-	// try common layout observed in error message
 	layouts := []string{
 		"2006-01-02 15:04:05 -0700 MST",
 		time.RFC3339,
