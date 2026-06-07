@@ -459,10 +459,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during listing organization teams")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
-				requeue := time.Duration(0)
-				if t.After(now) {
-					requeue = t.Sub(now)
-				}
 				githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 				githubTeam.Status.TeamStatusError = "error during listing organization teams: " + err.Error()
 				githubTeam.Status.TeamStatusTimestamp = metav1.Now()
@@ -470,7 +466,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
 				}
-				return reconcile.Result{RequeueAfter: requeue}, nil
+				if t.After(now) {
+					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+				}
+				return reconcile.Result{Requeue: true}, nil
 			}
 			return reconcile.Result{}, err
 		}
@@ -488,10 +487,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				l.Error(err, "error during adding team to Github")
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 					now := time.Now().UTC()
-					requeue := time.Duration(0)
-					if t.After(now) {
-						requeue = t.Sub(now)
-					}
 					githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 					githubTeam.Status.TeamStatusError = "error during adding team to Github: " + err.Error()
 					githubTeam.Status.TeamStatusTimestamp = metav1.Now()
@@ -499,7 +494,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 						l.Error(uerr, "error during status update")
 						return reconcile.Result{}, uerr
 					}
-					return reconcile.Result{RequeueAfter: requeue}, nil
+					if t.After(now) {
+						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+					}
+					return reconcile.Result{Requeue: true}, nil
 				}
 				return reconcile.Result{}, err
 			}
@@ -513,10 +511,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during getting the members of the team in Github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
-				requeue := time.Duration(0)
-				if t.After(now) {
-					requeue = t.Sub(now)
-				}
 				githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 				githubTeam.Status.TeamStatusError = "error during getting the members of the team in Github: " + err.Error()
 				githubTeam.Status.TeamStatusTimestamp = metav1.Now()
@@ -524,7 +518,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
 				}
-				return reconcile.Result{RequeueAfter: requeue}, nil
+				if t.After(now) {
+					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+				}
+				return reconcile.Result{Requeue: true}, nil
 			}
 			return reconcile.Result{}, err
 		}

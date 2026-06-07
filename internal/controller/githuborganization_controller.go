@@ -344,10 +344,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Check for GitHub rate limit and requeue accordingly
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
-				requeue := time.Duration(0)
-				if t.After(now) {
-					requeue = t.Sub(now)
-				}
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
@@ -364,7 +360,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
 				}
-				return reconcile.Result{RequeueAfter: requeue}, nil
+				if t.After(now) {
+					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+				}
+				return reconcile.Result{Requeue: true}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
@@ -390,10 +389,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
-				requeue := time.Duration(0)
-				if t.After(now) {
-					requeue = t.Sub(now)
-				}
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
@@ -410,7 +405,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
 				}
-				return reconcile.Result{RequeueAfter: requeue}, nil
+				if t.After(now) {
+					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+				}
+				return reconcile.Result{Requeue: true}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
@@ -436,10 +434,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
-				requeue := time.Duration(0)
-				if t.After(now) {
-					requeue = t.Sub(now)
-				}
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
@@ -456,7 +450,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
 				}
-				return reconcile.Result{RequeueAfter: requeue}, nil
+				if t.After(now) {
+					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+				}
+				return reconcile.Result{Requeue: true}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
