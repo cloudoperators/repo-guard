@@ -58,7 +58,9 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	}
 	// Format 1: extract the future reset timestamp after "until ".
 	// Example captured: 2025-12-05 02:02:13 +0000 UTC
-	re := regexp.MustCompile(`until\s+([^,\]]+)`)
+	// Use case-insensitive flag so the regex matches the original errStr consistently
+	// with the lowercased guard above (avoiding a mismatch if GitHub ever varies casing).
+	re := regexp.MustCompile(`(?i)until\s+([^,\]]+)`)
 	m := re.FindStringSubmatch(errStr)
 	if len(m) < 2 {
 		return time.Time{}, false

@@ -31,14 +31,11 @@ func TestParseGitHubRateLimitReset(t *testing.T) {
 		if !ok {
 			t.Fatal("expected ok=true for 'was reset N ago' format, got false")
 		}
+		// The returned time must be approximately now and must not be in the future.
+		// Callers use t.After(now) to decide between RequeueAfter and Requeue: true;
+		// for the already-reset case t.After(now) must be false so we get Requeue: true.
 		if got.Before(before.Add(-time.Second)) || got.After(after.Add(time.Second)) {
 			t.Fatalf("expected returned time to be approximately now (%v..%v), got %v", before, after, got)
-		}
-		// The returned time must not be in the future (it should be ~now, not future).
-		// Callers use t.After(now) to decide between RequeueAfter and Requeue: true.
-		// For the already-reset case t.After(now) should be false so we get Requeue: true.
-		if got.After(after.Add(time.Second)) {
-			t.Fatalf("expected already-reset time to be <= now, got %v", got)
 		}
 	})
 
