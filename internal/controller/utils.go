@@ -21,16 +21,19 @@ func elementsMatch(listA, listB interface{}) bool {
 	return assert.ElementsMatch(dummyAssert{}, listA, listB)
 }
 
-// parseGitHubRateLimitReset tries to extract a reset timestamp from a GitHub rate-limit error string.
-// Handles two formats emitted by the GitHub API:
+// parseGitHubRateLimitReset tries to extract a retry-after time from a GitHub rate-limit error string.
+// Handles three cases emitted by the GitHub API:
 //
 //   - Future reset:  "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
-//     → returns the parsed future time so callers can requeue with RequeueAfter.
+//     → returns the parsed future reset time so callers can requeue with RequeueAfter.
 //
 //   - Already reset: "... [rate limit was reset 1s ago]"
 //     → returns time.Now() so callers requeue immediately.
 //
-// Returns the reset time in UTC and true if the error is a recognisable rate-limit error;
+//   - Invitation rate limit (no timestamp): "exceeded the organization invitation rate limit …"
+//     → returns a synthetic backoff of now+1h (the API does not provide a reset time for this case).
+//
+// Returns the retry-after time in UTC and true if the error is a recognisable rate-limit error;
 // otherwise returns zero time and false.
 func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	if errStr == "" {
