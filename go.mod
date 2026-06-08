@@ -3,7 +3,7 @@ module github.com/cloudoperators/repo-guard
 go 1.26.0
 
 require (
-	github.com/cloudoperators/greenhouse v0.12.0
+	github.com/cloudoperators/greenhouse v0.13.1
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/go-github/v85 v85.0.0
 	github.com/gosimple/slug v1.15.0
@@ -15,6 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/shurcooL/githubv4 v0.0.0-20260209031235-2402fdf4a9ed
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/oauth2 v0.36.0
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
@@ -103,7 +104,6 @@ require (
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
