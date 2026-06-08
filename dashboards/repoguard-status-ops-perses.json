@@ -161,7 +161,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Organizations Needing Attention"
+            "name": "🏢 Organizations • Current Status"
           },
           "plugin": {
             "kind": "Table",
@@ -193,7 +193,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "last_over_time((sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1))[$__range:])"
+                    "query": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)"
                   }
                 }
               }
@@ -412,7 +412,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "👥 Teams Needing Attention"
+            "name": "👥 Teams • Current Status"
           },
           "plugin": {
             "kind": "Table",
@@ -444,7 +444,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "last_over_time((sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1))[$__range:])"
+                    "query": "sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1)"
                   }
                 }
               }
