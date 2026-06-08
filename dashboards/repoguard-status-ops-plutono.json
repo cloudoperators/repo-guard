@@ -145,7 +145,7 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 200,
       "panels": [],
-      "title": "⚠️ Current Failing & Pending Resources",
+      "title": "⚠️ Current Status",
       "type": "row"
     },
     {
@@ -165,7 +165,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 10,
       "options": { "footer": { "show": false }, "showHeader": true },
-      "title": "🏢 Organizations Needing Attention",
+      "title": "🏢 Organizations • Current Status",
       "type": "table",
       "targets": [
         { "expr": "sum by (github, organization, status) (repo_guard_githuborganization_status{github=~\"$github\", organization=~\"$org\", status=~\"failed|ratelimited|pending\"} == 1)", "format": "table", "instant": true, "refId": "A" }
@@ -176,7 +176,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 11,
       "options": { "footer": { "show": false }, "showHeader": true },
-      "title": "👥 Teams Needing Attention",
+      "title": "👥 Teams • Current Status",
       "type": "table",
       "targets": [
         { "expr": "sum by (organization, team, status) (repo_guard_githubteam_status{status=~\"failed|ratelimited|pending\", organization=~\"$org\", team=~\"$team\"} == 1)", "format": "table", "instant": true, "refId": "A" }
