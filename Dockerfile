@@ -24,7 +24,7 @@ COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
 ## get SAP certificates
-FROM alpine:3.23 AS certificate
+FROM alpine:3.24 AS certificate
 
 RUN apk upgrade --no-cache --no-progress \
   && apk add --no-cache --no-progress ca-certificates
