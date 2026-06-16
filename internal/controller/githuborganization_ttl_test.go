@@ -139,6 +139,17 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, org) })
 
+		// Wait for the controller to settle to a stable state before seeding ops,
+		// so the initial reconcile (which writes `complete` for empty status) has
+		// already fired and won't race with our seeded status.
+		Eventually(func() repoguardsapv1.GithubOrganizationState {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: org.Namespace, Name: org.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.OrganizationStatus
+		}, 3*timeout, interval).Should(BeEquivalentTo(repoguardsapv1.GithubOrganizationStateComplete))
+
 		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubOrganization{
 			ObjectMeta: metav1.ObjectMeta{Name: org.Name, Namespace: org.Namespace},
 		}, func(cur *repoguardsapv1.GithubOrganization) {
@@ -183,6 +194,17 @@ var _ = Describe("GithubOrganization TTL labels maintenance", Ordered, func() {
 
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, org) })
+
+		// Wait for the controller to settle to a stable state before seeding ops,
+		// so the initial reconcile (which writes `complete` for empty status) has
+		// already fired and won't race with our seeded status.
+		Eventually(func() repoguardsapv1.GithubOrganizationState {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: org.Namespace, Name: org.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.OrganizationStatus
+		}, 3*timeout, interval).Should(BeEquivalentTo(repoguardsapv1.GithubOrganizationStateComplete))
 
 		Expect(updateStatusWithRetry(ctx, k8sClient, &repoguardsapv1.GithubOrganization{
 			ObjectMeta: metav1.ObjectMeta{Name: org.Name, Namespace: org.Namespace},

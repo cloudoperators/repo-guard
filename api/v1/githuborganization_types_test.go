@@ -7,6 +7,15 @@ import (
 	"testing"
 )
 
+// set builds a map[string]struct{} from a slice of strings.
+func set(members ...string) map[string]struct{} {
+	m := make(map[string]struct{}, len(members))
+	for _, s := range members {
+		m[s] = struct{}{}
+	}
+	return m
+}
+
 func TestRepoChangeCalculatorMethod(t *testing.T) {
 	repoWithTeam := GithubRepository{
 		Name: "repo1",
@@ -292,6 +301,330 @@ func TestRepoChangeCalculator(t *testing.T) {
 				if g.State != want.State {
 					t.Errorf("op[%d].State = %q, want %q", i, g.State, want.State)
 				}
+			}
+		})
+	}
+}
+
+func TestOrganizationMemberChangeCalculator(t *testing.T) {
+	tests := []struct {
+		name                  string
+		orgMembers            []string
+		orgOwners             []string
+		teamMembers           map[string]struct{}
+		protected             []string
+		teamObservationsCount int
+		existingOps           []GithubUserOperation
+		wantChanged           bool
+		wantOpsLen            int
+		wantRemoveUsers       []string
+	}{
+		{
+			name:                  "member in a team — no op",
+			orgMembers:            []string{"alice"},
+			orgOwners:             []string{},
+			teamMembers:           set("alice"),
+			protected:             nil,
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+		{
+			name:                  "member not in any team — remove op queued",
+			orgMembers:            []string{"bob"},
+			orgOwners:             []string{},
+			teamMembers:           set(),
+			protected:             nil,
+			teamObservationsCount: 1,
+			wantChanged:           true,
+			wantOpsLen:            1,
+			wantRemoveUsers:       []string{"bob"},
+		},
+		{
+			name:                  "member is org owner — no op",
+			orgMembers:            []string{"carol"},
+			orgOwners:             []string{"carol"},
+			teamMembers:           set(),
+			protected:             nil,
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+		{
+			name:                  "member is in protected list — no op",
+			orgMembers:            []string{"bot-user"},
+			orgOwners:             []string{},
+			teamMembers:           set(),
+			protected:             []string{"bot-user"},
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+		{
+			name:                  "teamObservationsCount == 0 — safety rail, no ops generated",
+			orgMembers:            []string{"dave", "eve"},
+			orgOwners:             []string{},
+			teamMembers:           set(),
+			protected:             nil,
+			teamObservationsCount: 0,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+		{
+			name:        "existing pending op for same user — not duplicated",
+			orgMembers:  []string{"frank"},
+			orgOwners:   []string{},
+			teamMembers: set(),
+			protected:   nil,
+			existingOps: []GithubUserOperation{
+				{User: "frank", Operation: GithubUserOperationTypeRemove, State: GithubUserOperationStatePending},
+			},
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            1,
+		},
+		{
+			name:        "existing failed op for same user — no new pending op generated",
+			orgMembers:  []string{"grace"},
+			orgOwners:   []string{},
+			teamMembers: set(),
+			protected:   nil,
+			existingOps: []GithubUserOperation{
+				{User: "grace", Operation: GithubUserOperationTypeRemove, State: GithubUserOperationStateFailed},
+			},
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            1,
+		},
+		{
+			name:                  "mixed: one team member, one non-member — only non-member gets remove op",
+			orgMembers:            []string{"alice", "bob"},
+			orgOwners:             []string{},
+			teamMembers:           set("alice"),
+			protected:             nil,
+			teamObservationsCount: 2,
+			wantChanged:           true,
+			wantOpsLen:            1,
+			wantRemoveUsers:       []string{"bob"},
+		},
+		{
+			name:                  "case-insensitive: owner stored as uppercase — still skipped",
+			orgMembers:            []string{"Admin"},
+			orgOwners:             []string{"admin"},
+			teamMembers:           set(),
+			protected:             nil,
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+		{
+			name:                  "case-insensitive: protected stored as uppercase — still skipped",
+			orgMembers:            []string{"Bot"},
+			orgOwners:             []string{},
+			teamMembers:           set(),
+			protected:             []string{"BOT"},
+			teamObservationsCount: 1,
+			wantChanged:           false,
+			wantOpsLen:            0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org := &GithubOrganization{}
+			org.Status.Operations.OrganizationMemberOperations = tt.existingOps
+
+			changed, newStatus := org.OrganizationMemberChangeCalculator(
+				tt.orgMembers,
+				tt.orgOwners,
+				tt.teamMembers,
+				tt.protected,
+				tt.teamObservationsCount,
+			)
+
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+
+			got := newStatus.Operations.OrganizationMemberOperations
+			if len(got) != tt.wantOpsLen {
+				t.Fatalf("len(OrganizationMemberOperations) = %d, want %d\ngot: %+v", len(got), tt.wantOpsLen, got)
+			}
+
+			for _, wantUser := range tt.wantRemoveUsers {
+				found := false
+				for _, op := range got {
+					if op.User == wantUser && op.Operation == GithubUserOperationTypeRemove && op.State == GithubUserOperationStatePending {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected remove op for user %q not found in ops: %+v", wantUser, got)
+				}
+			}
+
+			if tt.wantChanged && newStatus.OrganizationStatus != GithubOrganizationStatePendingOperations {
+				t.Errorf("OrganizationStatus = %q, want %q", newStatus.OrganizationStatus, GithubOrganizationStatePendingOperations)
+			}
+		})
+	}
+}
+
+func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
+	tests := []struct {
+		name              string
+		repoCollaborators map[string][]string
+		repoTeamMembers   map[string]map[string]struct{}
+		orgOwners         []string
+		protected         []string
+		existingOps       []GithubRepoUserOperation
+		wantChanged       bool
+		wantOpsLen        int
+		wantRemove        []struct{ repo, user string }
+	}{
+		{
+			name:              "collaborator in a team for that repo — no op",
+			repoCollaborators: map[string][]string{"repo1": {"alice"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set("alice")},
+			orgOwners:         nil,
+			protected:         nil,
+			wantChanged:       false,
+			wantOpsLen:        0,
+		},
+		{
+			name:              "collaborator not in any team for that repo — remove op",
+			repoCollaborators: map[string][]string{"repo1": {"bob"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         nil,
+			protected:         nil,
+			wantChanged:       true,
+			wantOpsLen:        1,
+			wantRemove:        []struct{ repo, user string }{{"repo1", "bob"}},
+		},
+		{
+			name:              "collaborator is org owner — no op",
+			repoCollaborators: map[string][]string{"repo1": {"carol"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         []string{"carol"},
+			protected:         nil,
+			wantChanged:       false,
+			wantOpsLen:        0,
+		},
+		{
+			name:              "collaborator is protected — no op",
+			repoCollaborators: map[string][]string{"repo1": {"deploy-bot"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         nil,
+			protected:         []string{"deploy-bot"},
+			wantChanged:       false,
+			wantOpsLen:        0,
+		},
+		{
+			name:              "outside collaborator — repo has no teams — remove op",
+			repoCollaborators: map[string][]string{"repo1": {"outsider"}},
+			repoTeamMembers:   map[string]map[string]struct{}{},
+			orgOwners:         nil,
+			protected:         nil,
+			wantChanged:       true,
+			wantOpsLen:        1,
+			wantRemove:        []struct{ repo, user string }{{"repo1", "outsider"}},
+		},
+		{
+			name:              "multiple repos — only non-team collaborators get ops",
+			repoCollaborators: map[string][]string{"repo1": {"alice", "dave"}, "repo2": {"eve"}},
+			repoTeamMembers: map[string]map[string]struct{}{
+				"repo1": set("alice"),
+				"repo2": set("eve"),
+			},
+			orgOwners:   nil,
+			protected:   nil,
+			wantChanged: true,
+			wantOpsLen:  1,
+			wantRemove:  []struct{ repo, user string }{{"repo1", "dave"}},
+		},
+		{
+			name:              "existing pending op for same repo+user — not duplicated",
+			repoCollaborators: map[string][]string{"repo1": {"frank"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         nil,
+			protected:         nil,
+			existingOps: []GithubRepoUserOperation{
+				{Repo: "repo1", User: "frank", Operation: GithubRepoUserOperationTypeRemove, State: GithubRepoUserOperationStatePending},
+			},
+			wantChanged: false,
+			wantOpsLen:  1,
+		},
+		{
+			name:              "existing failed op for same repo+user — no new pending op",
+			repoCollaborators: map[string][]string{"repo1": {"grace"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         nil,
+			protected:         nil,
+			existingOps: []GithubRepoUserOperation{
+				{Repo: "repo1", User: "grace", Operation: GithubRepoUserOperationTypeRemove, State: GithubRepoUserOperationStateFailed},
+			},
+			wantChanged: false,
+			wantOpsLen:  1,
+		},
+		{
+			name:              "case-insensitive owner match — no op",
+			repoCollaborators: map[string][]string{"repo1": {"Admin"}},
+			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
+			orgOwners:         []string{"admin"},
+			protected:         nil,
+			wantChanged:       false,
+			wantOpsLen:        0,
+		},
+		{
+			name:              "no collaborators — no ops",
+			repoCollaborators: map[string][]string{},
+			repoTeamMembers:   map[string]map[string]struct{}{},
+			orgOwners:         nil,
+			protected:         nil,
+			wantChanged:       false,
+			wantOpsLen:        0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org := &GithubOrganization{}
+			org.Status.Operations.RepositoryCollaboratorOperations = tt.existingOps
+
+			changed, newStatus := org.RepositoryDirectCollaboratorChangeCalculator(
+				tt.repoCollaborators,
+				tt.repoTeamMembers,
+				tt.orgOwners,
+				tt.protected,
+			)
+
+			if changed != tt.wantChanged {
+				t.Errorf("changed = %v, want %v", changed, tt.wantChanged)
+			}
+
+			got := newStatus.Operations.RepositoryCollaboratorOperations
+			if len(got) != tt.wantOpsLen {
+				t.Fatalf("len(RepositoryCollaboratorOperations) = %d, want %d\ngot: %+v", len(got), tt.wantOpsLen, got)
+			}
+
+			for _, want := range tt.wantRemove {
+				found := false
+				for _, op := range got {
+					if op.Repo == want.repo && op.User == want.user &&
+						op.Operation == GithubRepoUserOperationTypeRemove &&
+						op.State == GithubRepoUserOperationStatePending {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected remove op for repo=%q user=%q not found in ops: %+v", want.repo, want.user, got)
+				}
+			}
+
+			if tt.wantChanged && newStatus.OrganizationStatus != GithubOrganizationStatePendingOperations {
+				t.Errorf("OrganizationStatus = %q, want %q", newStatus.OrganizationStatus, GithubOrganizationStatePendingOperations)
 			}
 		})
 	}

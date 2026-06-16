@@ -141,6 +141,58 @@
       ]
     },
     {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "✅ OK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 5 },
+      "id": 31,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "⏳ Org Member Pending Ops",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(repo_guard_githuborganization_operations{scope=\"orgmembers\", state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "green", "index": 0, "text": "✅ OK" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 5 },
+      "id": 32,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "⏳ Repo Direct Collab Pending Ops",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(repo_guard_githuborganization_operations{scope=\"repocollaborators\", state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)", "refId": "A" }
+      ]
+    },
+    {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 200,
@@ -222,7 +274,7 @@
       "title": "🏢 Team & Repo Operations (Line Chart)",
       "type": "timeseries",
       "targets": [
-        { "expr": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))", "legendFormat": "{{scope}} {{operation}}", "refId": "A" }
+        { "expr": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos|orgmembers|repocollaborators\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))", "legendFormat": "{{scope}} {{operation}}", "refId": "A" }
       ]
     },
     {

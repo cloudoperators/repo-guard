@@ -14,6 +14,8 @@ metadata:
     repo-guard.cloudoperators.dev/addRepositoryTeam: "{{ $org.addRepositoryTeam | default "true" }}"
     repo-guard.cloudoperators.dev/removeRepositoryTeam: "{{ $org.removeRepositoryTeam | default "true" }}"
     repo-guard.cloudoperators.dev/dryRun: "{{ $org.dryRun | default "false" }}"
+    repo-guard.cloudoperators.dev/removeOrganizationMember: "{{ $org.removeOrganizationMember | default "false" }}"
+    repo-guard.cloudoperators.dev/removeRepositoryDirectCollaborator: "{{ $org.removeRepositoryDirectCollaborator | default "false" }}"
     {{- $ttl := (get $org "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
     repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
@@ -37,6 +39,10 @@ spec:
   {{- if and $org.organizationOwnerTeams (gt (len $org.organizationOwnerTeams) 0) }}
   organizationOwnerTeams:
 {{ toYaml $org.organizationOwnerTeams | indent 4 }}
+  {{- end }}
+  {{- if and $org.protectedMembers (gt (len $org.protectedMembers) 0) }}
+  protectedMembers:
+{{ toYaml $org.protectedMembers | indent 4 }}
   {{- end }}
   installationID: {{ $org.installationID | int64 }}
 ---

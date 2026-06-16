@@ -91,3 +91,30 @@ func applyTeamOpsTTL(
 	}
 	return out, true
 }
+
+// applyRepoUserOpsTTL drops GithubRepoUserOperations whose State equals state and
+// whose own Timestamp is older than ttl. See applyUserOpsTTL for semantics.
+func applyRepoUserOpsTTL(
+	ops []v1.GithubRepoUserOperation,
+	ttl time.Duration,
+	state v1.GithubRepoUserOperationState,
+	now time.Time,
+) ([]v1.GithubRepoUserOperation, bool) {
+	var out []v1.GithubRepoUserOperation
+	for i, op := range ops {
+		if op.State == state && !op.Timestamp.IsZero() && now.After(op.Timestamp.Add(ttl)) {
+			if out == nil {
+				out = make([]v1.GithubRepoUserOperation, i, len(ops))
+				copy(out, ops[:i])
+			}
+			continue
+		}
+		if out != nil {
+			out = append(out, op)
+		}
+	}
+	if out == nil {
+		return ops, false
+	}
+	return out, true
+}
