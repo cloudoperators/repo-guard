@@ -946,6 +946,7 @@ func (g *GithubOrganization) OrganizationMemberChangeCalculator(
 
 	if changed {
 		newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		newStatus.OrganizationStatusError = ""
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
 	}
 
@@ -1022,6 +1023,7 @@ func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 
 	if changed {
 		newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		newStatus.OrganizationStatusError = ""
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
 	}
 

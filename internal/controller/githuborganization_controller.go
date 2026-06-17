@@ -730,9 +730,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				// Reuse teamsList fetched earlier in the reconcile (already validated non-error).
 				teamMembersUnion := make(map[string]struct{})
 				teamObservationsCount := 0
+				var teamMembersRateLimitResult *reconcile.Result
 				for _, team := range teamsList {
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
+						if t, ok := parseGitHubRateLimitReset(merr.Error()); ok {
+							now := time.Now().UTC()
+							if t.After(now) {
+								teamMembersRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
+							} else {
+								teamMembersRateLimitResult = &reconcile.Result{Requeue: true}
+							}
+							break
+						}
 						l.Error(merr, "org-member calculator: error fetching team members, skipping team", "team", team)
 						continue
 					}
@@ -740,6 +750,9 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						teamMembersUnion[strings.ToLower(m)] = struct{}{}
 					}
 					teamObservationsCount++
+				}
+				if teamMembersRateLimitResult != nil {
+					return *teamMembersRateLimitResult, nil
 				}
 
 				// Build owner login list from extended owner data
@@ -789,12 +802,22 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			// Per-reconcile cache: team slug -> set of member logins (avoid re-fetching same team across repos)
 			teamMembersCache := make(map[string]map[string]struct{})
+			var repoCollabRateLimitResult *reconcile.Result
 			getTeamMembers := func(teamSlug string) map[string]struct{} {
 				if cached, ok := teamMembersCache[teamSlug]; ok {
 					return cached
 				}
 				members, err := teamsProvider.Members(ctx, teamSlug)
 				if err != nil {
+					if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+						now := time.Now().UTC()
+						if t.After(now) {
+							repoCollabRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
+						} else {
+							repoCollabRateLimitResult = &reconcile.Result{Requeue: true}
+						}
+						return nil
+					}
 					l.Error(err, "repo-collab calculator: error fetching team members", "team", teamSlug)
 					teamMembersCache[teamSlug] = nil
 					return nil
@@ -862,6 +885,9 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					continue
 				}
 				repoTeamMembers[repo.Name] = membersForRepo
+			}
+			if repoCollabRateLimitResult != nil {
+				return *repoCollabRateLimitResult, nil
 			}
 
 			statusChanged, newStatus := githubOrganization.RepositoryDirectCollaboratorChangeCalculator(
