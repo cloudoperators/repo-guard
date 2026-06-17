@@ -1326,6 +1326,18 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				statusChanged = true
 				continue
 			}
+			// Re-check protected members at execution time (spec may have changed since the op was queued).
+			orgMemberProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+			for _, p := range githubOrganization.Spec.ProtectedMembers {
+				orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
+			}
+			if _, isProt := orgMemberProtectedSet[strings.ToLower(op.User)]; isProt {
+				l.Info("org-member operation: user is protected, skipping", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
 			err := organizationsProvider.RemoveFromOrg(ctx, op.User)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -1387,6 +1399,18 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			if op.Operation != v1.GithubRepoUserOperationTypeRemove {
 				l.Info("repo-collab operation: unexpected operation type, skipping", "repo", op.Repo, "user", op.User, "operation", op.Operation)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			// Re-check protected members at execution time (spec may have changed since the op was queued).
+			repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+			for _, p := range githubOrganization.Spec.ProtectedMembers {
+				repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
+			}
+			if _, isProt := repoCollabProtectedSet[strings.ToLower(op.User)]; isProt {
+				l.Info("repo-collab operation: user is protected, skipping", "repo", op.Repo, "user", op.User)
 				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
 				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
