@@ -723,8 +723,9 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					}
 					return reconcile.Result{Requeue: true}, nil
 				}
-				// non-rate-limit error: log and skip (don't block other reconciles)
-				l.Error(err, "org-member calculator: skipping due to error fetching org members")
+				// non-rate-limit error: return so controller-runtime retries with backoff
+				l.Error(err, "org-member calculator: error fetching org members, requeueing")
+				return reconcile.Result{}, err
 			} else {
 				// Fetch GitHub-side team members for the org-member safety check.
 				// Reuse teamsList fetched earlier in the reconcile (already validated non-error).
