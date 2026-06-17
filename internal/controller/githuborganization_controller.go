@@ -166,7 +166,17 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				newStatus.Operations.GithubTeamOperations = updated
 				anyChanged = true
 			}
-			if updated, changed := applyRepoUserOpsTTL(newStatus.Operations.RepositoryCollaboratorOperations, ttl, v1.GithubRepoUserOperationState(userState), now); changed {
+			var repoUserState v1.GithubRepoUserOperationState
+			switch userState {
+			case v1.GithubUserOperationStateFailed:
+				repoUserState = v1.GithubRepoUserOperationStateFailed
+			case v1.GithubUserOperationStateComplete:
+				repoUserState = v1.GithubRepoUserOperationStateComplete
+			default:
+				// No corresponding GithubRepoUserOperationState; skip cleanup for this bucket.
+				return
+			}
+			if updated, changed := applyRepoUserOpsTTL(newStatus.Operations.RepositoryCollaboratorOperations, ttl, repoUserState, now); changed {
 				newStatus.Operations.RepositoryCollaboratorOperations = updated
 				anyChanged = true
 			}
@@ -756,6 +766,21 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					teamObservationsCount++
 				}
 				if teamMembersRateLimitResult != nil {
+					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+					githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for org-member safety check"
+					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+					rlStatus := githubOrganization.Status
+					if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = rlStatus
+						return r.Client.Status().Update(ctx, latest)
+					}); uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
+					}
 					return *teamMembersRateLimitResult, nil
 				}
 
@@ -897,6 +922,21 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				repoTeamMembers[repo.Name] = membersForRepo
 			}
 			if repoCollabRateLimitResult != nil {
+				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+				githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for repo-collab safety check"
+				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+				rlStatus := githubOrganization.Status
+				if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubOrganization{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status = rlStatus
+					return r.Client.Status().Update(ctx, latest)
+				}); uerr != nil {
+					l.Error(uerr, "error during status update")
+					return reconcile.Result{}, uerr
+				}
 				return *repoCollabRateLimitResult, nil
 			}
 
