@@ -460,7 +460,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Team & Repo Operations"
+            "name": "🏢 Org Operations (Teams, Repos, Members & Collaborators)"
           },
           "plugin": {
             "kind": "TimeSeriesChart",

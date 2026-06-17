@@ -869,8 +869,9 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				repoCollaborators[repo.Name] = collabs
 
 				// Build union of team members for all teams that have access to this repo.
-				// Safety rail: if the repo has teams but none could be observed (all fetches
-				// failed), skip the repo to avoid false-positive collaborator removals.
+				// Safety rail: if the repo has teams but any team-member fetch fails, skip
+				// the repo entirely to avoid false-positive collaborator removals from an
+				// incomplete member set.
 				teamsWithAccess := len(repo.Teams)
 				membersForRepo := make(map[string]struct{})
 				observedTeams := 0

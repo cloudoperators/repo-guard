@@ -271,7 +271,7 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 35,
       "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "title": "🏢 Team & Repo Operations (Line Chart)",
+      "title": "🏢 Org Operations (Teams, Repos, Members & Collaborators) (Line Chart)",
       "type": "timeseries",
       "targets": [
         { "expr": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos|orgmembers|repocollaborators\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))", "legendFormat": "{{scope}} {{operation}}", "refId": "A" }
