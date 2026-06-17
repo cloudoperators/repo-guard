@@ -700,7 +700,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
 			orgMembers, err := organizationsProvider.Members(ctx)
 			if err != nil {
-				l.Error(err, "error in getting org members from github for org-member calculator")
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 					now := time.Now().UTC()
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
@@ -1290,6 +1289,13 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				statusChanged = true
 				continue
 			}
+			if op.Operation != v1.GithubUserOperationTypeRemove {
+				l.Info("org-member operation: unexpected operation type, skipping", "user", op.User, "operation", op.Operation)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
 			err := organizationsProvider.RemoveFromOrg(ctx, op.User)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -1344,6 +1350,13 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			if githubOrganization.Labels == nil || githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
 				l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			if op.Operation != v1.GithubRepoUserOperationTypeRemove {
+				l.Info("repo-collab operation: unexpected operation type, skipping", "repo", op.Repo, "user", op.User, "operation", op.Operation)
 				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
 				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
