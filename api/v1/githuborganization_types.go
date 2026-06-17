@@ -941,6 +941,7 @@ func (g *GithubOrganization) OrganizationMemberChangeCalculator(
 				Timestamp: metav1.Now(),
 			},
 		)
+		pendingSet[login] = struct{}{}
 		changed = true
 	}
 
@@ -1017,6 +1018,7 @@ func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 					Timestamp: metav1.Now(),
 				},
 			)
+			pendingSet[repoUser{repo: repo, user: login}] = struct{}{}
 			changed = true
 		}
 	}

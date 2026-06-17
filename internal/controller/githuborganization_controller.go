@@ -743,8 +743,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							}
 							break
 						}
-						l.Error(merr, "org-member calculator: error fetching team members, skipping team", "team", team)
-						continue
+						// Non-rate-limit error: treat as hard stop to avoid false-positive
+						// org-member removals from an incomplete team-member union.
+						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
+						teamObservationsCount = 0
+						break
 					}
 					for _, m := range members {
 						teamMembersUnion[strings.ToLower(m)] = struct{}{}
@@ -879,8 +882,8 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						observedTeams++
 					}
 				}
-				if teamsWithAccess > 0 && observedTeams == 0 {
-					l.Info("repo-collab calculator: all team-member fetches failed for repo, skipping to avoid false removals", "repo", repo.Name)
+				if teamsWithAccess > 0 && observedTeams != teamsWithAccess {
+					l.Info("repo-collab calculator: not all team-member fetches succeeded for repo, skipping to avoid false removals", "repo", repo.Name, "teamsWithAccess", teamsWithAccess, "observedTeams", observedTeams)
 					delete(repoCollaborators, repo.Name)
 					continue
 				}
