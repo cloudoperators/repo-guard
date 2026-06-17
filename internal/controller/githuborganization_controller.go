@@ -810,6 +810,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if cached, ok := teamMembersCache[teamSlug]; ok {
 					return cached
 				}
+				// If a rate-limit was already encountered, skip further API calls.
+				if repoCollabRateLimitResult != nil {
+					return nil
+				}
 				members, err := teamsProvider.Members(ctx, teamSlug)
 				if err != nil {
 					if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -819,6 +823,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						} else {
 							repoCollabRateLimitResult = &reconcile.Result{Requeue: true}
 						}
+						teamMembersCache[teamSlug] = nil
 						return nil
 					}
 					l.Error(err, "repo-collab calculator: error fetching team members", "team", teamSlug)
@@ -1308,6 +1313,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// OrganizationMemberOperations (#147) — remove org members not in any team
+		orgMemberProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+		for _, p := range githubOrganization.Spec.ProtectedMembers {
+			orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
+		}
 		for i, op := range newStatus.Operations.OrganizationMemberOperations {
 			if op.State != v1.GithubUserOperationStatePending {
 				continue
@@ -1327,10 +1336,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				continue
 			}
 			// Re-check protected members at execution time (spec may have changed since the op was queued).
-			orgMemberProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
-			for _, p := range githubOrganization.Spec.ProtectedMembers {
-				orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
-			}
 			if _, isProt := orgMemberProtectedSet[strings.ToLower(op.User)]; isProt {
 				l.Info("org-member operation: user is protected, skipping", "user", op.User)
 				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
@@ -1386,6 +1391,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// RepositoryCollaboratorOperations (#146) — remove non-team direct collaborators
+		repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+		for _, p := range githubOrganization.Spec.ProtectedMembers {
+			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
+		}
 		for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
 			if op.State != v1.GithubRepoUserOperationStatePending {
 				continue
@@ -1405,10 +1414,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				continue
 			}
 			// Re-check protected members at execution time (spec may have changed since the op was queued).
-			repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
-			for _, p := range githubOrganization.Spec.ProtectedMembers {
-				repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
-			}
 			if _, isProt := repoCollabProtectedSet[strings.ToLower(op.User)]; isProt {
 				l.Info("repo-collab operation: user is protected, skipping", "repo", op.Repo, "user", op.User)
 				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
