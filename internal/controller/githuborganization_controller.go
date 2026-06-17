@@ -727,24 +727,20 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				// non-rate-limit error: log and skip (don't block other reconciles)
 				l.Error(err, "org-member calculator: skipping due to error fetching org members")
 			} else {
-				// Fetch GitHub-side team members for the org-member safety check
-				allTeamsList, listErr := teamsProvider.List(ctx)
+				// Fetch GitHub-side team members for the org-member safety check.
+				// Reuse teamsList fetched earlier in the reconcile (already validated non-error).
 				teamMembersUnion := make(map[string]struct{})
 				teamObservationsCount := 0
-				if listErr == nil {
-					for _, team := range allTeamsList {
-						members, merr := teamsProvider.Members(ctx, team)
-						if merr != nil {
-							l.Error(merr, "org-member calculator: error fetching team members, skipping team", "team", team)
-							continue
-						}
-						for _, m := range members {
-							teamMembersUnion[strings.ToLower(m)] = struct{}{}
-						}
-						teamObservationsCount++
+				for _, team := range teamsList {
+					members, merr := teamsProvider.Members(ctx, team)
+					if merr != nil {
+						l.Error(merr, "org-member calculator: error fetching team members, skipping team", "team", team)
+						continue
 					}
-				} else {
-					l.Error(listErr, "org-member calculator: error listing teams; no remove ops will be generated")
+					for _, m := range members {
+						teamMembersUnion[strings.ToLower(m)] = struct{}{}
+					}
+					teamObservationsCount++
 				}
 
 				// Build owner login list from extended owner data
@@ -847,14 +843,24 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				}
 				repoCollaborators[repo.Name] = collabs
 
-				// Build union of team members for all teams that have access to this repo
+				// Build union of team members for all teams that have access to this repo.
+				// Safety rail: if the repo has teams but none could be observed (all fetches
+				// failed), skip the repo to avoid false-positive collaborator removals.
+				teamsWithAccess := len(repo.Teams)
 				membersForRepo := make(map[string]struct{})
+				observedTeams := 0
 				for _, teamWithPerm := range repo.Teams {
 					if ms := getTeamMembers(teamWithPerm.Team); ms != nil {
 						for login := range ms {
 							membersForRepo[login] = struct{}{}
 						}
+						observedTeams++
 					}
+				}
+				if teamsWithAccess > 0 && observedTeams == 0 {
+					l.Info("repo-collab calculator: all team-member fetches failed for repo, skipping to avoid false removals", "repo", repo.Name)
+					delete(repoCollaborators, repo.Name)
+					continue
 				}
 				repoTeamMembers[repo.Name] = membersForRepo
 			}
@@ -1309,12 +1315,20 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					}
 					return reconcile.Result{Requeue: true}, nil
 				}
-				l.Error(err, "error during removing org member", "user", op.User)
-				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateFailed
-				newStatus.Operations.OrganizationMemberOperations[i].Error = err.Error()
-				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
-				statusChanged = true
-				failed = true
+				// "user not a member" (404) — treat as success/complete
+				if strings.Contains(err.Error(), "404") {
+					l.Info("org member already not a member (404), treating as complete", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateComplete
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				} else {
+					l.Error(err, "error during removing org member", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateFailed
+					newStatus.Operations.OrganizationMemberOperations[i].Error = err.Error()
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+					failed = true
+				}
 			} else {
 				l.Info("org member removed", "user", op.User)
 				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateComplete
