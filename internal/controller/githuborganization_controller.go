@@ -707,7 +707,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 		}
 		// PART 4: org-member comparison (#147) — remove org members not in any GitHub team
-		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+		removeOrgMemberLabelValue := ""
+		if githubOrganization.Labels != nil {
+			removeOrgMemberLabelValue = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
+		}
+		if removeOrgMemberLabelValue == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE || removeOrgMemberLabelValue == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
 			orgMembers, err := organizationsProvider.Members(ctx)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -824,7 +828,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// PART 5: repo direct-collaborator comparison (#146) — remove non-team direct collaborators
-		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+		removeRepoCollabLabelValue := ""
+		if githubOrganization.Labels != nil {
+			removeRepoCollabLabelValue = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
+		}
+		if removeRepoCollabLabelValue == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE || removeRepoCollabLabelValue == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
 			// Build owner login list from extended owner data
 			orgOwnerLogins := make([]string, 0, len(ownerList))
 			for _, o := range ownerList {
@@ -1286,8 +1294,16 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if op.State != v1.GithubUserOperationStatePending {
 				continue
 			}
-			if githubOrganization.Labels == nil || githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
-				l.Info("removing organization members is not enabled: operation skipped", "user", op.User)
+			orgMemberLabel := ""
+			if githubOrganization.Labels != nil {
+				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
+			}
+			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+				if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
+					l.Info("removing organization members is in dry-run mode: operation skipped (not executed)", "user", op.User)
+				} else {
+					l.Info("removing organization members is not enabled: operation skipped", "user", op.User)
+				}
 				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
 				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
@@ -1364,8 +1380,16 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if op.State != v1.GithubRepoUserOperationStatePending {
 				continue
 			}
-			if githubOrganization.Labels == nil || githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
-				l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
+			repoCollabLabel := ""
+			if githubOrganization.Labels != nil {
+				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
+			}
+			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+				if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
+					l.Info("removing repository direct collaborators is in dry-run mode: operation skipped (not executed)", "repo", op.Repo, "user", op.User)
+				} else {
+					l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
+				}
 				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
 				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
@@ -1655,10 +1679,12 @@ const GITHUB_ORG_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedT
 // Opt-in labels for #147 (remove org members not in any team)
 const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER = "repo-guard.cloudoperators.dev/removeOrganizationMember"
 const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE = "true"
+const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE = "dryRun"
 
 // Opt-in labels for #146 (remove direct repo collaborators not in any team)
 const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR = "repo-guard.cloudoperators.dev/removeRepositoryDirectCollaborator"
 const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE = "true"
+const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE = "dryRun"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {
