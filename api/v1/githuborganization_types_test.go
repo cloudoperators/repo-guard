@@ -483,7 +483,7 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		wantRemove        []struct{ repo, user string }
 	}{
 		{
-			name:              "collaborator in a team for that repo — remove op",
+			name:              "collaborator — remove op (team membership irrelevant)",
 			repoCollaborators: map[string][]string{"repo1": {"alice"}},
 			orgOwners:         nil,
 			protected:         nil,
@@ -492,7 +492,7 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 			wantRemove:        []struct{ repo, user string }{{"repo1", "alice"}},
 		},
 		{
-			name:              "collaborator not in any team for that repo — remove op",
+			name:              "collaborator (different user) — remove op",
 			repoCollaborators: map[string][]string{"repo1": {"bob"}},
 			orgOwners:         nil,
 			protected:         nil,

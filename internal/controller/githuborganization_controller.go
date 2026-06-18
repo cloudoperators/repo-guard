@@ -827,7 +827,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 		}
 
-		// PART 5: repo direct-collaborator comparison (#146) — remove non-team direct collaborators
+		// PART 5: repo direct-collaborator comparison (#146) — remove all direct collaborators (team membership is irrelevant)
 		removeRepoCollabLabelValue := ""
 		if githubOrganization.Labels != nil {
 			removeRepoCollabLabelValue = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
@@ -1298,12 +1298,13 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if githubOrganization.Labels != nil {
 				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
 			}
+			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
+				// dry-run: keep op pending so operators can inspect who would be removed
+				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				continue
+			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
-				if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
-					l.Info("removing organization members is in dry-run mode: operation skipped (not executed)", "user", op.User)
-				} else {
-					l.Info("removing organization members is not enabled: operation skipped", "user", op.User)
-				}
+				l.Info("removing organization members is not enabled: operation skipped", "user", op.User)
 				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
 				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
@@ -1371,7 +1372,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 		}
 
-		// RepositoryCollaboratorOperations (#146) — remove non-team direct collaborators
+		// RepositoryCollaboratorOperations (#146) — remove all direct collaborators (team membership is irrelevant)
 		repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
@@ -1384,12 +1385,13 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if githubOrganization.Labels != nil {
 				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
 			}
+			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
+				// dry-run: keep op pending so operators can inspect who would be removed
+				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				continue
+			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
-				if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
-					l.Info("removing repository direct collaborators is in dry-run mode: operation skipped (not executed)", "repo", op.Repo, "user", op.User)
-				} else {
-					l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
-				}
+				l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
 				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
 				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
 				statusChanged = true
