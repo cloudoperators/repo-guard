@@ -192,8 +192,8 @@ github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba h1:DO8NFYdcRv1dnyAIN
 github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba/go.mod h1:4S0XndRL8HNOaQBfdViJ2F/GPCgL524xlXRuXFH12/U=
 github.com/onsi/ginkgo/v2 v2.31.0 h1:GtuJos5DFUV9EerYJo8RhYxosYNGvOdDE5haKq6Grfs=
 github.com/onsi/ginkgo/v2 v2.31.0/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
-github.com/onsi/gomega v1.41.0 h1:OwKp4pXNgVxf6sCplzYo794OFNuoL2q2SBMU5NSWOjA=
-github.com/onsi/gomega v1.41.0/go.mod h1:M/Uqpu/8qTjtzCLUA2zJHX9Iilrau25x1PdoSRbWh5A=
+github.com/onsi/gomega v1.42.0 h1:CJby8u36xb7v34W78F8WKvqTQP7PCMIPB78IVDB73l4=
+github.com/onsi/gomega v1.42.0/go.mod h1:M/Uqpu/8qTjtzCLUA2zJHX9Iilrau25x1PdoSRbWh5A=
 github.com/palantir/go-githubapp v0.45.0 h1:wVldKEz7ZNjbqcwlUUOuQW6SDTB4kyN1WaIOuMB8yaY=
 github.com/palantir/go-githubapp v0.45.0/go.mod h1:OrIFZV9FEKYvW0UQX/lDt6TNtd1HmXmlzIL/6crBuIs=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
