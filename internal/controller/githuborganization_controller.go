@@ -742,6 +742,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				teamMembersUnion := make(map[string]struct{})
 				teamObservationsCount := 0
 				var teamMembersRateLimitResult *reconcile.Result
+				var teamMembersRateLimitErr string
 				for _, team := range teamsList {
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
@@ -752,6 +753,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							} else {
 								teamMembersRateLimitResult = &reconcile.Result{Requeue: true}
 							}
+							teamMembersRateLimitErr = merr.Error()
 							break
 						}
 						// Non-rate-limit error: treat as hard stop to avoid false-positive
@@ -767,7 +769,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				}
 				if teamMembersRateLimitResult != nil {
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
-					githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for org-member safety check"
+					githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for org-member safety check: " + teamMembersRateLimitErr
 					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 					rlStatus := githubOrganization.Status
 					if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -832,6 +834,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			// Per-reconcile cache: team slug -> set of member logins (avoid re-fetching same team across repos)
 			teamMembersCache := make(map[string]map[string]struct{})
 			var repoCollabRateLimitResult *reconcile.Result
+			var repoCollabRateLimitErr string
 			getTeamMembers := func(teamSlug string) map[string]struct{} {
 				if cached, ok := teamMembersCache[teamSlug]; ok {
 					return cached
@@ -849,6 +852,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						} else {
 							repoCollabRateLimitResult = &reconcile.Result{Requeue: true}
 						}
+						repoCollabRateLimitErr = err.Error()
 						teamMembersCache[teamSlug] = nil
 						return nil
 					}
@@ -923,7 +927,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			if repoCollabRateLimitResult != nil {
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
-				githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for repo-collab safety check"
+				githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for repo-collab safety check: " + repoCollabRateLimitErr
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				rlStatus := githubOrganization.Status
 				if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
