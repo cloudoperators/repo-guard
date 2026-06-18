@@ -475,7 +475,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 	tests := []struct {
 		name              string
 		repoCollaborators map[string][]string
-		repoTeamMembers   map[string]map[string]struct{}
 		orgOwners         []string
 		protected         []string
 		existingOps       []GithubRepoUserOperation
@@ -484,18 +483,17 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		wantRemove        []struct{ repo, user string }
 	}{
 		{
-			name:              "collaborator in a team for that repo — no op",
+			name:              "collaborator in a team for that repo — remove op",
 			repoCollaborators: map[string][]string{"repo1": {"alice"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set("alice")},
 			orgOwners:         nil,
 			protected:         nil,
-			wantChanged:       false,
-			wantOpsLen:        0,
+			wantChanged:       true,
+			wantOpsLen:        1,
+			wantRemove:        []struct{ repo, user string }{{"repo1", "alice"}},
 		},
 		{
 			name:              "collaborator not in any team for that repo — remove op",
 			repoCollaborators: map[string][]string{"repo1": {"bob"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         nil,
 			protected:         nil,
 			wantChanged:       true,
@@ -505,7 +503,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "collaborator is org owner — no op",
 			repoCollaborators: map[string][]string{"repo1": {"carol"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         []string{"carol"},
 			protected:         nil,
 			wantChanged:       false,
@@ -514,7 +511,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "collaborator is protected — no op",
 			repoCollaborators: map[string][]string{"repo1": {"deploy-bot"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         nil,
 			protected:         []string{"deploy-bot"},
 			wantChanged:       false,
@@ -523,7 +519,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "outside collaborator — repo has no teams — remove op",
 			repoCollaborators: map[string][]string{"repo1": {"outsider"}},
-			repoTeamMembers:   map[string]map[string]struct{}{},
 			orgOwners:         nil,
 			protected:         nil,
 			wantChanged:       true,
@@ -531,22 +526,21 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 			wantRemove:        []struct{ repo, user string }{{"repo1", "outsider"}},
 		},
 		{
-			name:              "multiple repos — only non-team collaborators get ops",
+			name:              "multiple repos — all collaborators get ops",
 			repoCollaborators: map[string][]string{"repo1": {"alice", "dave"}, "repo2": {"eve"}},
-			repoTeamMembers: map[string]map[string]struct{}{
-				"repo1": set("alice"),
-				"repo2": set("eve"),
+			orgOwners:         nil,
+			protected:         nil,
+			wantChanged:       true,
+			wantOpsLen:        3,
+			wantRemove: []struct{ repo, user string }{
+				{"repo1", "alice"},
+				{"repo1", "dave"},
+				{"repo2", "eve"},
 			},
-			orgOwners:   nil,
-			protected:   nil,
-			wantChanged: true,
-			wantOpsLen:  1,
-			wantRemove:  []struct{ repo, user string }{{"repo1", "dave"}},
 		},
 		{
 			name:              "existing pending op for same repo+user — not duplicated",
 			repoCollaborators: map[string][]string{"repo1": {"frank"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         nil,
 			protected:         nil,
 			existingOps: []GithubRepoUserOperation{
@@ -558,7 +552,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "existing failed op for same repo+user — no new pending op",
 			repoCollaborators: map[string][]string{"repo1": {"grace"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         nil,
 			protected:         nil,
 			existingOps: []GithubRepoUserOperation{
@@ -570,7 +563,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "case-insensitive owner match — no op",
 			repoCollaborators: map[string][]string{"repo1": {"Admin"}},
-			repoTeamMembers:   map[string]map[string]struct{}{"repo1": set()},
 			orgOwners:         []string{"admin"},
 			protected:         nil,
 			wantChanged:       false,
@@ -579,7 +571,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 		{
 			name:              "no collaborators — no ops",
 			repoCollaborators: map[string][]string{},
-			repoTeamMembers:   map[string]map[string]struct{}{},
 			orgOwners:         nil,
 			protected:         nil,
 			wantChanged:       false,
@@ -594,7 +585,6 @@ func TestRepositoryDirectCollaboratorChangeCalculator(t *testing.T) {
 
 			changed, newStatus := org.RepositoryDirectCollaboratorChangeCalculator(
 				tt.repoCollaborators,
-				tt.repoTeamMembers,
 				tt.orgOwners,
 				tt.protected,
 			)

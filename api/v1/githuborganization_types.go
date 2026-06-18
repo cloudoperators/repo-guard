@@ -955,11 +955,11 @@ func (g *GithubOrganization) OrganizationMemberChangeCalculator(
 }
 
 // RepositoryDirectCollaboratorChangeCalculator computes remove operations for
-// direct repository collaborators that are not a member of any team with access
-// to that repo, not an org owner, and not in the protected list.
+// all direct repository collaborators, except org owners and protected members.
+// Team membership is not considered — the intent is that repository access is
+// managed exclusively through teams.
 func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 	repoCollaborators map[string][]string,
-	repoTeamMembers map[string]map[string]struct{},
 	orgOwners []string,
 	protected []string,
 ) (bool, GithubOrganizationStatus) {
@@ -986,8 +986,6 @@ func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 
 	changed := false
 	for repo, collaborators := range repoCollaborators {
-		teamMembersForRepo := repoTeamMembers[repo]
-
 		for _, collab := range collaborators {
 			login := strings.ToLower(collab)
 
@@ -997,10 +995,6 @@ func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 			}
 			// skip protected members
 			if _, isProt := protectedSet[login]; isProt {
-				continue
-			}
-			// skip if in a team that has access to this repo
-			if _, inTeam := teamMembersForRepo[login]; inTeam {
 				continue
 			}
 			// skip if already has a pending or failed op

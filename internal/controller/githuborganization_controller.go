@@ -831,46 +831,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				orgOwnerLogins = append(orgOwnerLogins, o.Login)
 			}
 
-			// Per-reconcile cache: team slug -> set of member logins (avoid re-fetching same team across repos)
-			teamMembersCache := make(map[string]map[string]struct{})
-			var repoCollabRateLimitResult *reconcile.Result
-			var repoCollabRateLimitErr string
-			getTeamMembers := func(teamSlug string) map[string]struct{} {
-				if cached, ok := teamMembersCache[teamSlug]; ok {
-					return cached
-				}
-				// If a rate-limit was already encountered, skip further API calls.
-				if repoCollabRateLimitResult != nil {
-					return nil
-				}
-				members, err := teamsProvider.Members(ctx, teamSlug)
-				if err != nil {
-					if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
-						now := time.Now().UTC()
-						if t.After(now) {
-							repoCollabRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
-						} else {
-							repoCollabRateLimitResult = &reconcile.Result{Requeue: true}
-						}
-						repoCollabRateLimitErr = err.Error()
-						teamMembersCache[teamSlug] = nil
-						return nil
-					}
-					l.Error(err, "repo-collab calculator: error fetching team members", "team", teamSlug)
-					teamMembersCache[teamSlug] = nil
-					return nil
-				}
-				set := make(map[string]struct{}, len(members))
-				for _, m := range members {
-					set[strings.ToLower(m)] = struct{}{}
-				}
-				teamMembersCache[teamSlug] = set
-				return set
-			}
-
 			repoCollaborators := make(map[string][]string)
-			repoTeamMembers := make(map[string]map[string]struct{})
-
 			allRepos := append(publicRepos, privateRepos...)
 			for _, repo := range allRepos {
 				collabs, err := reposProvider.RepositoryCollobarators(ctx, repo.Name)
@@ -902,51 +863,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					continue
 				}
 				repoCollaborators[repo.Name] = collabs
-
-				// Build union of team members for all teams that have access to this repo.
-				// Safety rail: if the repo has teams but any team-member fetch fails, skip
-				// the repo entirely to avoid false-positive collaborator removals from an
-				// incomplete member set.
-				teamsWithAccess := len(repo.Teams)
-				membersForRepo := make(map[string]struct{})
-				observedTeams := 0
-				for _, teamWithPerm := range repo.Teams {
-					if ms := getTeamMembers(teamWithPerm.Team); ms != nil {
-						for login := range ms {
-							membersForRepo[login] = struct{}{}
-						}
-						observedTeams++
-					}
-				}
-				if teamsWithAccess > 0 && observedTeams != teamsWithAccess {
-					l.Info("repo-collab calculator: not all team-member fetches succeeded for repo, skipping to avoid false removals", "repo", repo.Name, "teamsWithAccess", teamsWithAccess, "observedTeams", observedTeams)
-					delete(repoCollaborators, repo.Name)
-					continue
-				}
-				repoTeamMembers[repo.Name] = membersForRepo
-			}
-			if repoCollabRateLimitResult != nil {
-				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
-				githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for repo-collab safety check: " + repoCollabRateLimitErr
-				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
-				rlStatus := githubOrganization.Status
-				if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = rlStatus
-					return r.Client.Status().Update(ctx, latest)
-				}); uerr != nil {
-					l.Error(uerr, "error during status update")
-					return reconcile.Result{}, uerr
-				}
-				return *repoCollabRateLimitResult, nil
 			}
 
 			statusChanged, newStatus := githubOrganization.RepositoryDirectCollaboratorChangeCalculator(
 				repoCollaborators,
-				repoTeamMembers,
 				orgOwnerLogins,
 				githubOrganization.Spec.ProtectedMembers,
 			)
