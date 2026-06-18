@@ -878,9 +878,10 @@ const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "repo-guard.cloudoper
 // OrganizationMemberChangeCalculator computes remove operations for org members
 // that are not in any GitHub team, not an org owner, and not in the protected list.
 //
-// Safety rail: if teamObservationsCount == 0 (no teams were successfully observed),
-// no remove operations are generated regardless of the member list. This prevents
-// mass-removal when the GitHub API is temporarily unavailable for team data.
+// Safety rail: if teamObservationsCount == 0, no remove operations are generated
+// regardless of the member list. This value is 0 either because the org has no
+// teams, or because a team-member fetch failed and the controller zeroed the count
+// to suppress removals. Both cases prevent mass-removal when team data is incomplete.
 func (g *GithubOrganization) OrganizationMemberChangeCalculator(
 	orgMembers []string,
 	orgOwners []string,
