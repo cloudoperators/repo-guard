@@ -21,6 +21,13 @@ type GithubOrganizationSpec struct {
 	DefaultPublicRepositoryTeams  []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
 	DefaultPrivateRepositoryTeams []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
 
+	// ProtectedMembers is a list of GitHub logins that must never be removed by
+	// the removeOrganizationMember or removeRepositoryDirectCollaborator features.
+	// Use this to protect bot accounts (including the GitHub App installation user)
+	// or human escape-hatch accounts.
+	// +optional
+	ProtectedMembers []string `json:"protectedMembers,omitempty"`
+
 	InstallationID int64 `json:"installationID,omitempty"`
 }
 
@@ -112,10 +119,37 @@ type GithubOrganizationStatus struct {
 }
 
 type GithubOrganizationStatusOperations struct {
-	OrganizationOwnerOperations []GithubUserOperation     `json:"organizationOwnerOperations,omitempty"`
-	GithubTeamOperations        []GithubTeamOperation     `json:"teamOperations,omitempty"`
-	RepositoryTeamOperations    []GithubRepoTeamOperation `json:"repoOperations,omitempty"`
+	OrganizationOwnerOperations      []GithubUserOperation     `json:"organizationOwnerOperations,omitempty"`
+	OrganizationMemberOperations     []GithubUserOperation     `json:"organizationMemberOperations,omitempty"`
+	GithubTeamOperations             []GithubTeamOperation     `json:"teamOperations,omitempty"`
+	RepositoryTeamOperations         []GithubRepoTeamOperation `json:"repoOperations,omitempty"`
+	RepositoryCollaboratorOperations []GithubRepoUserOperation `json:"repoCollaboratorOperations,omitempty"`
 }
+
+// GithubRepoUserOperation represents a pending/completed operation on a direct
+// repository collaborator (e.g., removing a non-team direct collaborator).
+type GithubRepoUserOperation struct {
+	Operation GithubRepoUserOperationType  `json:"operation,omitempty"`
+	Repo      string                       `json:"repo,omitempty"`
+	User      string                       `json:"user,omitempty"`
+	State     GithubRepoUserOperationState `json:"state,omitempty"`
+	Error     string                       `json:"error,omitempty"`
+	Timestamp metav1.Time                  `json:"timestamp,omitempty"`
+}
+
+type GithubRepoUserOperationType string
+
+const GithubRepoUserOperationTypeRemove GithubRepoUserOperationType = "remove"
+
+type GithubRepoUserOperationState string
+
+const (
+	GithubRepoUserOperationStatePending  GithubRepoUserOperationState = "pending"
+	GithubRepoUserOperationStateComplete GithubRepoUserOperationState = "complete"
+	GithubRepoUserOperationStateFailed   GithubRepoUserOperationState = "failed"
+	GithubRepoUserOperationStateSkipped  GithubRepoUserOperationState = "skipped"
+)
+
 type GithubOrganizationState string
 
 const (
@@ -591,6 +625,12 @@ func (g GithubOrganization) PendingOperationsFound() bool {
 		}
 	}
 
+	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+		if op.State == GithubUserOperationStatePending {
+			return true
+		}
+	}
+
 	for _, op := range g.Status.Operations.RepositoryTeamOperations {
 		if op.State == GithubRepoTeamOperationStatePending {
 			return true
@@ -598,6 +638,12 @@ func (g GithubOrganization) PendingOperationsFound() bool {
 	}
 	for _, op := range g.Status.Operations.GithubTeamOperations {
 		if op.State == GithubTeamOperationStatePending {
+			return true
+		}
+	}
+
+	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+		if op.State == GithubRepoUserOperationStatePending {
 			return true
 		}
 	}
@@ -614,6 +660,12 @@ func (g GithubOrganization) FailedOperationsFound() bool {
 		}
 	}
 
+	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+		if op.State == GithubUserOperationStateFailed {
+			return true
+		}
+	}
+
 	for _, op := range g.Status.Operations.RepositoryTeamOperations {
 		if op.State == GithubRepoTeamOperationStateFailed {
 			return true
@@ -621,6 +673,12 @@ func (g GithubOrganization) FailedOperationsFound() bool {
 	}
 	for _, op := range g.Status.Operations.GithubTeamOperations {
 		if op.State == GithubTeamOperationStateFailed {
+			return true
+		}
+	}
+
+	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+		if op.State == GithubRepoUserOperationStateFailed {
 			return true
 		}
 	}
@@ -643,6 +701,15 @@ func (g GithubOrganization) CleanCompletedOperations() (GithubOrganizationStatus
 		}
 	}
 
+	newOrganizationMemberOperations := []GithubUserOperation{}
+	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+		if op.State == GithubUserOperationStateComplete {
+			cleaned = true
+		} else {
+			newOrganizationMemberOperations = append(newOrganizationMemberOperations, op)
+		}
+	}
+
 	newRepositoryTeamOperations := []GithubRepoTeamOperation{}
 	for _, op := range g.Status.Operations.RepositoryTeamOperations {
 
@@ -662,9 +729,20 @@ func (g GithubOrganization) CleanCompletedOperations() (GithubOrganizationStatus
 		}
 	}
 
+	newRepositoryCollaboratorOperations := []GithubRepoUserOperation{}
+	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+		if op.State == GithubRepoUserOperationStateComplete {
+			cleaned = true
+		} else {
+			newRepositoryCollaboratorOperations = append(newRepositoryCollaboratorOperations, op)
+		}
+	}
+
 	newStatus.Operations.OrganizationOwnerOperations = newOrganizationOwnerOperations
+	newStatus.Operations.OrganizationMemberOperations = newOrganizationMemberOperations
 	newStatus.Operations.RepositoryTeamOperations = newRepositoryTeamOperations
 	newStatus.Operations.GithubTeamOperations = newGithubTeamOperations
+	newStatus.Operations.RepositoryCollaboratorOperations = newRepositoryCollaboratorOperations
 
 	return *newStatus, cleaned
 
@@ -681,6 +759,15 @@ func (g GithubOrganization) CleanFailedOperations() (GithubOrganizationStatus, b
 			cleaned = true
 		} else {
 			newOrganizationOwnerOperations = append(newOrganizationOwnerOperations, op)
+		}
+	}
+
+	newOrganizationMemberOperations := []GithubUserOperation{}
+	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+		if op.State == GithubUserOperationStateFailed {
+			cleaned = true
+		} else {
+			newOrganizationMemberOperations = append(newOrganizationMemberOperations, op)
 		}
 	}
 
@@ -703,9 +790,20 @@ func (g GithubOrganization) CleanFailedOperations() (GithubOrganizationStatus, b
 		}
 	}
 
+	newRepositoryCollaboratorOperations := []GithubRepoUserOperation{}
+	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+		if op.State == GithubRepoUserOperationStateFailed {
+			cleaned = true
+		} else {
+			newRepositoryCollaboratorOperations = append(newRepositoryCollaboratorOperations, op)
+		}
+	}
+
 	newStatus.Operations.OrganizationOwnerOperations = newOrganizationOwnerOperations
+	newStatus.Operations.OrganizationMemberOperations = newOrganizationMemberOperations
 	newStatus.Operations.RepositoryTeamOperations = newRepositoryTeamOperations
 	newStatus.Operations.GithubTeamOperations = newGithubTeamOperations
+	newStatus.Operations.RepositoryCollaboratorOperations = newRepositoryCollaboratorOperations
 
 	return *newStatus, cleaned
 
@@ -776,3 +874,155 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 }
 
 const GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY = "repo-guard.cloudoperators.dev/skipDefaultRepositoryTeams"
+
+// OrganizationMemberChangeCalculator computes remove operations for org members
+// that are not in any GitHub team, not an org owner, and not in the protected list.
+//
+// Safety rail: if teamObservationsCount == 0, no remove operations are generated
+// regardless of the member list. This value is 0 either because the org has no
+// teams, or because a team-member fetch failed and the controller zeroed the count
+// to suppress removals. Both cases prevent mass-removal when team data is incomplete.
+func (g *GithubOrganization) OrganizationMemberChangeCalculator(
+	orgMembers []string,
+	orgOwners []string,
+	teamMembers map[string]struct{},
+	protected []string,
+	teamObservationsCount int,
+) (bool, GithubOrganizationStatus) {
+	newStatus := g.Status.DeepCopy()
+
+	// Safety rail: no team data observed — skip generating remove ops
+	if teamObservationsCount == 0 {
+		return false, *newStatus
+	}
+
+	ownerSet := make(map[string]struct{}, len(orgOwners))
+	for _, o := range orgOwners {
+		ownerSet[strings.ToLower(o)] = struct{}{}
+	}
+
+	protectedSet := make(map[string]struct{}, len(protected))
+	for _, p := range protected {
+		protectedSet[strings.ToLower(p)] = struct{}{}
+	}
+
+	// Build set of users with existing pending ops to avoid duplicates
+	pendingSet := make(map[string]struct{})
+	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+		if op.State == GithubUserOperationStatePending || op.State == GithubUserOperationStateFailed {
+			pendingSet[strings.ToLower(op.User)] = struct{}{}
+		}
+	}
+
+	changed := false
+	for _, member := range orgMembers {
+		login := strings.ToLower(member)
+		// skip org owners
+		if _, isOwner := ownerSet[login]; isOwner {
+			continue
+		}
+		// skip protected members
+		if _, isProt := protectedSet[login]; isProt {
+			continue
+		}
+		// skip if already in a team
+		if _, inTeam := teamMembers[login]; inTeam {
+			continue
+		}
+		// skip if already has a pending or failed op
+		if _, hasPending := pendingSet[login]; hasPending {
+			continue
+		}
+		newStatus.Operations.OrganizationMemberOperations = append(
+			newStatus.Operations.OrganizationMemberOperations,
+			GithubUserOperation{
+				Operation: GithubUserOperationTypeRemove,
+				User:      member,
+				State:     GithubUserOperationStatePending,
+				Timestamp: metav1.Now(),
+			},
+		)
+		pendingSet[login] = struct{}{}
+		changed = true
+	}
+
+	if changed {
+		newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		newStatus.OrganizationStatusError = ""
+		newStatus.OrganizationStatusTimestamp = metav1.Now()
+	}
+
+	return changed, *newStatus
+}
+
+// RepositoryDirectCollaboratorChangeCalculator computes remove operations for
+// all direct repository collaborators, except org owners and protected members.
+// Team membership is not considered — the intent is that repository access is
+// managed exclusively through teams.
+func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
+	repoCollaborators map[string][]string,
+	orgOwners []string,
+	protected []string,
+) (bool, GithubOrganizationStatus) {
+	newStatus := g.Status.DeepCopy()
+
+	ownerSet := make(map[string]struct{}, len(orgOwners))
+	for _, o := range orgOwners {
+		ownerSet[strings.ToLower(o)] = struct{}{}
+	}
+
+	protectedSet := make(map[string]struct{}, len(protected))
+	for _, p := range protected {
+		protectedSet[strings.ToLower(p)] = struct{}{}
+	}
+
+	// Build set of (repo, user) pairs with existing pending ops to avoid duplicates
+	type repoUser struct{ repo, user string }
+	pendingSet := make(map[repoUser]struct{})
+	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+		if op.State == GithubRepoUserOperationStatePending || op.State == GithubRepoUserOperationStateFailed {
+			pendingSet[repoUser{repo: op.Repo, user: strings.ToLower(op.User)}] = struct{}{}
+		}
+	}
+
+	changed := false
+	for repo, collaborators := range repoCollaborators {
+		for _, collab := range collaborators {
+			login := strings.ToLower(collab)
+
+			// skip org owners
+			if _, isOwner := ownerSet[login]; isOwner {
+				continue
+			}
+			// skip protected members
+			if _, isProt := protectedSet[login]; isProt {
+				continue
+			}
+			// skip if already has a pending or failed op
+			if _, hasPending := pendingSet[repoUser{repo: repo, user: login}]; hasPending {
+				continue
+			}
+
+			newStatus.Operations.RepositoryCollaboratorOperations = append(
+				newStatus.Operations.RepositoryCollaboratorOperations,
+				GithubRepoUserOperation{
+					Operation: GithubRepoUserOperationTypeRemove,
+					Repo:      repo,
+					User:      collab,
+					State:     GithubRepoUserOperationStatePending,
+					Timestamp: metav1.Now(),
+				},
+			)
+			pendingSet[repoUser{repo: repo, user: login}] = struct{}{}
+			changed = true
+		}
+	}
+
+	if changed {
+		newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		newStatus.OrganizationStatusError = ""
+		newStatus.OrganizationStatusTimestamp = metav1.Now()
+	}
+
+	return changed, *newStatus
+}

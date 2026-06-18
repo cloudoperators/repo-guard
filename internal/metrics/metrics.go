@@ -164,7 +164,7 @@ func SetGithubOrganizationMetrics(org *v1.GithubOrganization) {
 	setOrgOps := func(scope, op, state string, v float64) {
 		GithubOrganizationOperations.WithLabelValues(github, organization, scope, op, state).Set(v)
 	}
-	scopes := []string{"owners", "teams", "repos"}
+	scopes := []string{"owners", "teams", "repos", "orgmembers", "repocollaborators"}
 	ops := []string{"add", "remove"}
 	states := []string{"pending", "complete", "failed", "skipped", "notfound"}
 	for _, sc := range scopes {
@@ -222,6 +222,40 @@ func SetGithubOrganizationMetrics(org *v1.GithubOrganization) {
 		for op, byState := range counts {
 			for st, v := range byState {
 				setOrgOps("repos", op, st, v)
+			}
+		}
+	}
+	// orgmembers (#147)
+	if org.Status.Operations.OrganizationMemberOperations != nil {
+		counts := map[string]map[string]float64{}
+		for _, o := range org.Status.Operations.OrganizationMemberOperations {
+			op := string(o.Operation)
+			st := string(o.State)
+			if counts[op] == nil {
+				counts[op] = map[string]float64{}
+			}
+			counts[op][st] += 1
+		}
+		for op, byState := range counts {
+			for st, v := range byState {
+				setOrgOps("orgmembers", op, st, v)
+			}
+		}
+	}
+	// repocollaborators (#146)
+	if org.Status.Operations.RepositoryCollaboratorOperations != nil {
+		counts := map[string]map[string]float64{}
+		for _, o := range org.Status.Operations.RepositoryCollaboratorOperations {
+			op := string(o.Operation)
+			st := string(o.State)
+			if counts[op] == nil {
+				counts[op] = map[string]float64{}
+			}
+			counts[op][st] += 1
+		}
+		for op, byState := range counts {
+			for st, v := range byState {
+				setOrgOps("repocollaborators", op, st, v)
 			}
 		}
 	}

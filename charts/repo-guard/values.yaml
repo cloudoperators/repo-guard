@@ -107,6 +107,15 @@ monitoring:
 #     addRepositoryTeam:
 #     removeRepositoryTeam:
 #     dryRun:
+#     # Opt-in: remove org members that are not in any GitHub team.
+#     # Values: "true" (calculate + execute), "dryRun" (calculate only, ops appear in status but not executed), "false"/unset (disabled).
+#     removeOrganizationMember:
+#     # Opt-in: remove all direct repo collaborators so repository access is managed exclusively through teams.
+#     # Values: "true" (calculate + execute), "dryRun" (calculate only, ops appear in status but not executed), "false"/unset (disabled).
+#     removeRepositoryDirectCollaborator:
+#     # List of GitHub logins that must never be removed by removeOrganizationMember or
+#     # removeRepositoryDirectCollaborator. Typically includes bot accounts and the GitHub App user.
+#     protectedMembers: []
 #     disableInternalUsernames:
 #     # GithubAccountLink email verification settings applied to all GALs
 #     # associated with this GitHub (organization-level policy).

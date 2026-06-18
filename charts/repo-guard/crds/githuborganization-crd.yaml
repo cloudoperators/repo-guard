@@ -82,6 +82,15 @@ spec:
                 items:
                   type: string
                 type: array
+              protectedMembers:
+                description: |-
+                  ProtectedMembers is a list of GitHub logins that must never be removed by
+                  the removeOrganizationMember or removeRepositoryDirectCollaborator features.
+                  Use this to protect bot accounts (including the GitHub App installation user)
+                  or human escape-hatch accounts.
+                items:
+                  type: string
+                type: array
             type: object
           status:
             description: GithubOrganizationStatus defines the observed state of GithubOrganization
@@ -90,12 +99,49 @@ spec:
                 type: string
               operations:
                 properties:
+                  organizationMemberOperations:
+                    items:
+                      properties:
+                        error:
+                          type: string
+                        operation:
+                          type: string
+                        state:
+                          type: string
+                        timestamp:
+                          format: date-time
+                          type: string
+                        user:
+                          type: string
+                      type: object
+                    type: array
                   organizationOwnerOperations:
                     items:
                       properties:
                         error:
                           type: string
                         operation:
+                          type: string
+                        state:
+                          type: string
+                        timestamp:
+                          format: date-time
+                          type: string
+                        user:
+                          type: string
+                      type: object
+                    type: array
+                  repoCollaboratorOperations:
+                    items:
+                      description: |-
+                        GithubRepoUserOperation represents a pending/completed operation on a direct
+                        repository collaborator (e.g., removing a non-team direct collaborator).
+                      properties:
+                        error:
+                          type: string
+                        operation:
+                          type: string
+                        repo:
                           type: string
                         state:
                           type: string

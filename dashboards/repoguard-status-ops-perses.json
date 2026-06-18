@@ -157,6 +157,84 @@
           ]
         }
       },
+      "orgMemberPending": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "⏳ Org Member Pending Ops"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githuborganization_operations{scope=\"orgmembers\", state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "repoCollabPending": {
+        "kind": "Panel",
+        "spec": {
+          "display": {
+            "name": "⏳ Repo Direct Collab Pending Ops"
+          },
+          "plugin": {
+            "kind": "StatChart",
+            "spec": {
+              "calculation": "last-number",
+              "thresholds": {
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "queries": [
+            {
+              "kind": "TimeSeriesQuery",
+              "spec": {
+                "plugin": {
+                  "kind": "PrometheusTimeSeriesQuery",
+                  "spec": {
+                    "query": "sum(repo_guard_githuborganization_operations{scope=\"repocollaborators\", state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
       "orgsAttention": {
         "kind": "Panel",
         "spec": {
@@ -382,7 +460,7 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Team & Repo Operations"
+            "name": "🏢 Org Operations (Teams, Repos, Members & Collaborators)"
           },
           "plugin": {
             "kind": "TimeSeriesChart",
@@ -399,7 +477,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
+                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos|orgmembers|repocollaborators\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
                     "seriesNameFormat": "{{scope}} {{operation}}"
                   }
                 }
@@ -591,6 +669,24 @@
             {
               "x": 0,
               "y": 4,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/orgMemberPending"
+              }
+            },
+            {
+              "x": 6,
+              "y": 4,
+              "width": 6,
+              "height": 4,
+              "content": {
+                "$ref": "#/spec/panels/repoCollabPending"
+              }
+            },
+            {
+              "x": 0,
+              "y": 8,
               "width": 12,
               "height": 8,
               "content": {
@@ -599,7 +695,7 @@
             },
             {
               "x": 12,
-              "y": 4,
+              "y": 8,
               "width": 12,
               "height": 8,
               "content": {
@@ -608,7 +704,7 @@
             },
             {
               "x": 0,
-              "y": 12,
+              "y": 16,
               "width": 12,
               "height": 8,
               "content": {
@@ -617,7 +713,7 @@
             },
             {
               "x": 12,
-              "y": 12,
+              "y": 16,
               "width": 12,
               "height": 8,
               "content": {

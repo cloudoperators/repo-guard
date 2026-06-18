@@ -154,12 +154,30 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				newStatus.Operations.OrganizationOwnerOperations = updated
 				anyChanged = true
 			}
+			if updated, changed := applyUserOpsTTL(newStatus.Operations.OrganizationMemberOperations, ttl, userState, now); changed {
+				newStatus.Operations.OrganizationMemberOperations = updated
+				anyChanged = true
+			}
 			if updated, changed := applyRepoOpsTTL(newStatus.Operations.RepositoryTeamOperations, ttl, repoState, now); changed {
 				newStatus.Operations.RepositoryTeamOperations = updated
 				anyChanged = true
 			}
 			if updated, changed := applyTeamOpsTTL(newStatus.Operations.GithubTeamOperations, ttl, userState, now); changed {
 				newStatus.Operations.GithubTeamOperations = updated
+				anyChanged = true
+			}
+			var repoUserState v1.GithubRepoUserOperationState
+			switch userState {
+			case v1.GithubUserOperationStateFailed:
+				repoUserState = v1.GithubRepoUserOperationStateFailed
+			case v1.GithubUserOperationStateComplete:
+				repoUserState = v1.GithubRepoUserOperationStateComplete
+			default:
+				// No corresponding GithubRepoUserOperationState; skip cleanup for this bucket.
+				return
+			}
+			if updated, changed := applyRepoUserOpsTTL(newStatus.Operations.RepositoryCollaboratorOperations, ttl, repoUserState, now); changed {
+				newStatus.Operations.RepositoryCollaboratorOperations = updated
 				anyChanged = true
 			}
 		}
@@ -688,6 +706,201 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return reconcile.Result{}, nil
 			}
 		}
+		// PART 4: org-member comparison (#147) — remove org members not in any GitHub team
+		removeOrgMemberLabelValue := ""
+		if githubOrganization.Labels != nil {
+			removeOrgMemberLabelValue = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
+		}
+		if removeOrgMemberLabelValue == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE || removeOrgMemberLabelValue == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
+			orgMembers, err := organizationsProvider.Members(ctx)
+			if err != nil {
+				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					now := time.Now().UTC()
+					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+					githubOrganization.Status.OrganizationStatusError = "error in getting org members: " + err.Error()
+					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+					newStatus := githubOrganization.Status
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = newStatus
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
+					}
+					if t.After(now) {
+						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+					}
+					return reconcile.Result{Requeue: true}, nil
+				}
+				// non-rate-limit error: return so controller-runtime retries with backoff
+				l.Error(err, "org-member calculator: error fetching org members, requeueing")
+				return reconcile.Result{}, err
+			} else {
+				// Fetch GitHub-side team members for the org-member safety check.
+				// Reuse teamsList fetched earlier in the reconcile (already validated non-error).
+				teamMembersUnion := make(map[string]struct{})
+				teamObservationsCount := 0
+				var teamMembersRateLimitResult *reconcile.Result
+				var teamMembersRateLimitErr string
+				for _, team := range teamsList {
+					members, merr := teamsProvider.Members(ctx, team)
+					if merr != nil {
+						if t, ok := parseGitHubRateLimitReset(merr.Error()); ok {
+							now := time.Now().UTC()
+							if t.After(now) {
+								teamMembersRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
+							} else {
+								teamMembersRateLimitResult = &reconcile.Result{Requeue: true}
+							}
+							teamMembersRateLimitErr = merr.Error()
+							break
+						}
+						// Non-rate-limit error: treat as hard stop to avoid false-positive
+						// org-member removals from an incomplete team-member union.
+						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
+						teamObservationsCount = 0
+						break
+					}
+					for _, m := range members {
+						teamMembersUnion[strings.ToLower(m)] = struct{}{}
+					}
+					teamObservationsCount++
+				}
+				if teamMembersRateLimitResult != nil {
+					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+					githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for org-member safety check: " + teamMembersRateLimitErr
+					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+					rlStatus := githubOrganization.Status
+					if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = rlStatus
+						return r.Client.Status().Update(ctx, latest)
+					}); uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
+					}
+					return *teamMembersRateLimitResult, nil
+				}
+
+				// Build owner login list from extended owner data
+				orgOwnerLogins := make([]string, 0, len(ownerList))
+				for _, o := range ownerList {
+					orgOwnerLogins = append(orgOwnerLogins, o.Login)
+				}
+
+				statusChanged, newStatus := githubOrganization.OrganizationMemberChangeCalculator(
+					orgMembers,
+					orgOwnerLogins,
+					teamMembersUnion,
+					githubOrganization.Spec.ProtectedMembers,
+					teamObservationsCount,
+				)
+				if statusChanged {
+					l.Info("status update for organization due to org-member change calculation")
+					ns := newStatus
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = ns
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if err != nil {
+						if errors.IsNotFound(err) {
+							l.Info("resource not found in kubernetes: reconcile is skipped")
+							return reconcile.Result{}, nil
+						}
+						l.Error(err, "error during status update")
+						return reconcile.Result{}, err
+					}
+					return reconcile.Result{}, nil
+				}
+			}
+		}
+
+		// PART 5: repo direct-collaborator comparison (#146) — remove all direct collaborators (team membership is irrelevant)
+		removeRepoCollabLabelValue := ""
+		if githubOrganization.Labels != nil {
+			removeRepoCollabLabelValue = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
+		}
+		if removeRepoCollabLabelValue == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE || removeRepoCollabLabelValue == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
+			// Build owner login list from extended owner data
+			orgOwnerLogins := make([]string, 0, len(ownerList))
+			for _, o := range ownerList {
+				orgOwnerLogins = append(orgOwnerLogins, o.Login)
+			}
+
+			repoCollaborators := make(map[string][]string)
+			allRepos := append(publicRepos, privateRepos...)
+			for _, repo := range allRepos {
+				collabs, err := reposProvider.RepositoryCollobarators(ctx, repo.Name)
+				if err != nil {
+					if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+						now := time.Now().UTC()
+						githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+						githubOrganization.Status.OrganizationStatusError = "error in getting repo collaborators: " + err.Error()
+						githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+						newStatus := githubOrganization.Status
+						uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+							latest := &v1.GithubOrganization{}
+							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+								return err
+							}
+							latest.Status = newStatus
+							return r.Client.Status().Update(ctx, latest)
+						})
+						if uerr != nil {
+							l.Error(uerr, "error during status update")
+							return reconcile.Result{}, uerr
+						}
+						if t.After(now) {
+							return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+						}
+						return reconcile.Result{Requeue: true}, nil
+					}
+					l.Error(err, "repo-collab calculator: error fetching collaborators, skipping repo", "repo", repo.Name)
+					continue
+				}
+				repoCollaborators[repo.Name] = collabs
+			}
+
+			statusChanged, newStatus := githubOrganization.RepositoryDirectCollaboratorChangeCalculator(
+				repoCollaborators,
+				orgOwnerLogins,
+				githubOrganization.Spec.ProtectedMembers,
+			)
+			if statusChanged {
+				l.Info("status update for organization due to repo-collaborator change calculation")
+				ns := newStatus
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubOrganization{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status = ns
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
+					l.Error(err, "error during status update")
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{}, nil
+			}
+		}
+
 		// check for empty status in kubernetes resource (for the first run)
 		//  no error until here, if there is already error in the status, remove it
 		if githubOrganization.Status.OrganizationStatus == "" {
@@ -1072,6 +1285,180 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 		}
 
+		// OrganizationMemberOperations (#147) — remove org members not in any team
+		orgMemberProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+		for _, p := range githubOrganization.Spec.ProtectedMembers {
+			orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
+		}
+		for i, op := range newStatus.Operations.OrganizationMemberOperations {
+			if op.State != v1.GithubUserOperationStatePending {
+				continue
+			}
+			orgMemberLabel := ""
+			if githubOrganization.Labels != nil {
+				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
+			}
+			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
+				// dry-run: keep op pending so operators can inspect who would be removed
+				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				continue
+			}
+			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+				l.Info("removing organization members is not enabled: operation skipped", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			if op.Operation != v1.GithubUserOperationTypeRemove {
+				l.Info("org-member operation: unexpected operation type, skipping", "user", op.User, "operation", op.Operation)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			// Re-check protected members at execution time (spec may have changed since the op was queued).
+			if _, isProt := orgMemberProtectedSet[strings.ToLower(op.User)]; isProt {
+				l.Info("org-member operation: user is protected, skipping", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			err := organizationsProvider.RemoveFromOrg(ctx, op.User)
+			if err != nil {
+				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					now := time.Now().UTC()
+					newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+					newStatus.OrganizationStatusError = "rate limited during org member removal: " + err.Error()
+					newStatus.OrganizationStatusTimestamp = metav1.Now()
+					ns := *newStatus
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = ns
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
+					}
+					if t.After(now) {
+						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+					}
+					return reconcile.Result{Requeue: true}, nil
+				}
+				// "user not a member" (404) — treat as success/complete
+				if strings.Contains(err.Error(), "404") {
+					l.Info("org member already not a member (404), treating as complete", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateComplete
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				} else {
+					l.Error(err, "error during removing org member", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateFailed
+					newStatus.Operations.OrganizationMemberOperations[i].Error = err.Error()
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+					failed = true
+				}
+			} else {
+				l.Info("org member removed", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateComplete
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+			}
+		}
+
+		// RepositoryCollaboratorOperations (#146) — remove all direct collaborators (team membership is irrelevant)
+		repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
+		for _, p := range githubOrganization.Spec.ProtectedMembers {
+			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
+		}
+		for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
+			if op.State != v1.GithubRepoUserOperationStatePending {
+				continue
+			}
+			repoCollabLabel := ""
+			if githubOrganization.Labels != nil {
+				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
+			}
+			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
+				// dry-run: keep op pending so operators can inspect who would be removed
+				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				continue
+			}
+			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+				l.Info("removing repository direct collaborators is not enabled: operation skipped", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			if op.Operation != v1.GithubRepoUserOperationTypeRemove {
+				l.Info("repo-collab operation: unexpected operation type, skipping", "repo", op.Repo, "user", op.User, "operation", op.Operation)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			// Re-check protected members at execution time (spec may have changed since the op was queued).
+			if _, isProt := repoCollabProtectedSet[strings.ToLower(op.User)]; isProt {
+				l.Info("repo-collab operation: user is protected, skipping", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+				continue
+			}
+			_, err := reposProvider.RepositoryCollobaratorRemove(ctx, op.Repo, op.User)
+			if err != nil {
+				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					now := time.Now().UTC()
+					newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+					newStatus.OrganizationStatusError = "rate limited during repo collaborator removal: " + err.Error()
+					newStatus.OrganizationStatusTimestamp = metav1.Now()
+					ns := *newStatus
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						latest := &v1.GithubOrganization{}
+						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+							return err
+						}
+						latest.Status = ns
+						return r.Client.Status().Update(ctx, latest)
+					})
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
+					}
+					if t.After(now) {
+						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+					}
+					return reconcile.Result{Requeue: true}, nil
+				}
+				// "user not found" (404) — treat as success/complete
+				if strings.Contains(err.Error(), "user not found in github") {
+					l.Info("repo collaborator already removed (not found)", "repo", op.Repo, "user", op.User)
+					newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateComplete
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				} else {
+					l.Error(err, "error during removing repo collaborator", "repo", op.Repo, "user", op.User)
+					newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateFailed
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Error = err.Error()
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+					failed = true
+				}
+			} else {
+				l.Info("repo collaborator removed", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateComplete
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
+			}
+		}
+
 		// status changed check & reflect on Kubernetes
 		if statusChanged {
 
@@ -1290,6 +1677,16 @@ const GITHUB_ORG_LABEL_CLEAN_OPERATIONS_FAILED = "failed"
 // completedTTL clears completed operations to avoid status bloat
 const GITHUB_ORG_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
 const GITHUB_ORG_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
+
+// Opt-in labels for #147 (remove org members not in any team)
+const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER = "repo-guard.cloudoperators.dev/removeOrganizationMember"
+const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE = "true"
+const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE = "dryRun"
+
+// Opt-in labels for #146 (remove direct repo collaborators not in any team)
+const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR = "repo-guard.cloudoperators.dev/removeRepositoryDirectCollaborator"
+const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE = "true"
+const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE = "dryRun"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {

@@ -396,12 +396,16 @@ GithubOrganization labels:
 | `repo-guard.cloudoperators.dev/removeTeam` | "true"/"false" | Allows the controller to remove teams that are out of policy. | Disabled (must be "true" to remove) |
 | `repo-guard.cloudoperators.dev/addRepositoryTeam` | "true"/"false" | Allows setting default team permissions on repositories. | Disabled (must be "true" to add) |
 | `repo-guard.cloudoperators.dev/removeRepositoryTeam` | "true"/"false" | Allows removing default team permissions from repositories. | Disabled (must be "true" to remove) |
+| `repo-guard.cloudoperators.dev/removeOrganizationMember` | "true"/"dryRun"/"false" | Allows the controller to remove org members who are not in any GitHub team. Use `"dryRun"` to calculate and preview pending removals in `.status` without executing them. All team-member lists must be fetched successfully; if any single fetch fails (non-rate-limit error), no removals are generated (safety rail). If the organization has no teams, no removals are generated either. See `spec.protectedMembers` to exempt specific logins. | Disabled (must be "true" to remove) |
+| `repo-guard.cloudoperators.dev/removeRepositoryDirectCollaborator` | "true"/"dryRun"/"false" | Allows the controller to remove all direct repository collaborators, so that repository access is managed exclusively through teams. Use `"dryRun"` to calculate and preview pending removals in `.status` without executing them. Org owners and `spec.protectedMembers` logins are exempt. | Disabled (must be "true" to remove) |
 | `repo-guard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no changes are made on GitHub; status shows planned operations. | "false" |
 | `repo-guard.cloudoperators.dev/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
 
 Note: GithubOrganization also supports the annotation `repo-guard.cloudoperators.dev/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
+
+Note: `spec.protectedMembers` (a list of GitHub logins) exempts specific accounts from both `removeOrganizationMember` and `removeRepositoryDirectCollaborator`. Use it to protect bot accounts, the GitHub App installation user, and any emergency escape-hatch accounts.
 
 GithubTeam labels:
 
