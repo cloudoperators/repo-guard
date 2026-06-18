@@ -28,6 +28,21 @@ func TestSetGithubOrganizationMetrics(t *testing.T) {
 						State:     v1.GithubUserOperationStatePending,
 					},
 				},
+				OrganizationMemberOperations: []v1.GithubUserOperation{
+					{
+						Operation: v1.GithubUserOperationTypeRemove,
+						User:      "user1",
+						State:     v1.GithubUserOperationStatePending,
+					},
+				},
+				RepositoryCollaboratorOperations: []v1.GithubRepoUserOperation{
+					{
+						Operation: v1.GithubRepoUserOperationTypeRemove,
+						Repo:      "repo1",
+						User:      "user2",
+						State:     v1.GithubRepoUserOperationStatePending,
+					},
+				},
 			},
 		},
 	}
@@ -55,6 +70,14 @@ repo_guard_githuborganization_status{github="github.com",organization="sapcc",st
 
 	count := testutil.ToFloat64(GithubOrganizationOperations.WithLabelValues("github.com", "sapcc", "teams", "add", "pending"))
 	assert.Equal(t, 1.0, count)
+
+	// Check orgmembers scope (#147)
+	countOrgMembers := testutil.ToFloat64(GithubOrganizationOperations.WithLabelValues("github.com", "sapcc", "orgmembers", "remove", "pending"))
+	assert.Equal(t, 1.0, countOrgMembers)
+
+	// Check repocollaborators scope (#146)
+	countRepoCollab := testutil.ToFloat64(GithubOrganizationOperations.WithLabelValues("github.com", "sapcc", "repocollaborators", "remove", "pending"))
+	assert.Equal(t, 1.0, countRepoCollab)
 }
 
 func TestSetGithubTeamMetrics(t *testing.T) {
