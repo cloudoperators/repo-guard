@@ -282,7 +282,8 @@ func (t *DefaultRepositoryProvider) IsPrivate(ctx context.Context, repo string) 
 		return false, fmt.Errorf("getting repository response code: %d", response.StatusCode)
 	}
 
-	if r.GetVisibility() == "private" {
+	vis := r.GetVisibility()
+	if vis == "private" || vis == "internal" {
 		return true, nil
 	}
 

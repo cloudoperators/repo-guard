@@ -662,6 +662,14 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					body.Visibility = "public"
 				}
 			}
+			// Reject unknown visibility values the same way real GitHub does.
+			switch body.Visibility {
+			case "public", "private", "internal":
+				// valid
+			default:
+				writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","field":"visibility","code":"invalid"}]}`, http.StatusUnprocessableEntity)
+				return
+			}
 			// Derive private from visibility so they are always consistent,
 			// regardless of what the caller sent.
 			body.Private = body.Visibility != "public"
