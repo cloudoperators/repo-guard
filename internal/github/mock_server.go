@@ -36,6 +36,15 @@ type MockTeam struct {
 	ID   int64
 	Name string
 	Slug string
+	Type string // "organization" (default) or "enterprise"
+}
+
+// teamType returns the effective team type, defaulting to "organization".
+func (t MockTeam) teamType() string {
+	if t.Type != "" {
+		return t.Type
+	}
+	return "organization"
 }
 
 // MockRepo represents a GitHub repository for mock purposes.
@@ -43,6 +52,8 @@ type MockRepo struct {
 	Name       string
 	Private    bool
 	Visibility string // "public", "private", or "internal"; defaults derived from Private when empty
+	Archived   bool
+	Disabled   bool
 	Teams      []MockTeamWithPermission
 }
 
@@ -436,6 +447,24 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		// DELETE /api/v3/orgs/{org}/teams/{slug}
 		case subPath == "" && r.Method == http.MethodDelete:
 			stateMu.Lock()
+			// Find the target team; reject enterprise teams with 422 before deleting.
+			var targetTeam *MockTeam
+			for i := range teams {
+				if teams[i].Slug == teamSlug {
+					targetTeam = &teams[i]
+					break
+				}
+			}
+			if targetTeam == nil {
+				stateMu.Unlock()
+				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
+				return
+			}
+			if targetTeam.teamType() == "enterprise" {
+				stateMu.Unlock()
+				writeJSONError(w, `{"message":"An enterprise team may not be managed through the organization API"}`, http.StatusUnprocessableEntity)
+				return
+			}
 			var newTeams []MockTeam
 			for _, t := range teams {
 				if t.Slug != teamSlug {
@@ -570,10 +599,16 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				// unknown repositories.  Team existence is not validated here
 				// because seeded teams may be deleted by other concurrent
 				// reconcilers during the test suite, causing spurious 404s.
-				repoFound := lookupRepo(repoName) != nil
-				if !repoFound {
+				repoEntry := lookupRepo(repoName)
+				if repoEntry == nil {
 					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
+					return
+				}
+				// Reject team-repo mutations on archived repositories.
+				if repoEntry.Archived {
+					stateMu.Unlock()
+					writeJSONError(w, `{"message":"Repository is archived."}`, http.StatusUnprocessableEntity)
 					return
 				}
 				perms := teamRepoPerms[repoName]
@@ -601,6 +636,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				w.WriteHeader(http.StatusNoContent)
 			case http.MethodDelete:
 				stateMu.Lock()
+				// Reject team-repo mutations on archived repositories.
+				if repoEntry := lookupRepo(repoName); repoEntry != nil && repoEntry.Archived {
+					stateMu.Unlock()
+					writeJSONError(w, `{"message":"Repository is archived."}`, http.StatusUnprocessableEntity)
+					return
+				}
 				var newPerms []MockTeamWithPermission
 				for _, tp := range teamRepoPerms[repoName] {
 					if tp.Slug != teamSlug {
@@ -638,6 +679,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					"private":    repo.repoVisibility() != "public",
 					"visibility": repo.repoVisibility(),
 					"full_name":  fmt.Sprintf("%s/%s", org, repo.Name),
+					"archived":   repo.Archived,
+					"disabled":   repo.Disabled,
 				})
 			}
 			writeJSON(w, result)
@@ -724,6 +767,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				"private":    repoSnapshot.repoVisibility() != "public",
 				"visibility": repoSnapshot.repoVisibility(),
 				"full_name":  fmt.Sprintf("%s/%s", org, repoSnapshot.Name),
+				"archived":   repoSnapshot.Archived,
+				"disabled":   repoSnapshot.Disabled,
 			})
 
 		// DELETE /api/v3/repos/{org}/{repo}
@@ -853,6 +898,7 @@ func teamToMap(team MockTeam) map[string]interface{} {
 		"id":   team.ID,
 		"name": team.Name,
 		"slug": team.Slug,
+		"type": team.teamType(),
 	}
 }
 

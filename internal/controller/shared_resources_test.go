@@ -73,6 +73,9 @@ const (
 	TEST_DEFAULT_INTERNAL_REPO_ADMIN = "internal-admin-team"
 
 	TEST_CUSTOM_TEAM = "custom-team-for-private-repo"
+
+	TEST_ENTERPRISE_TEAM = "enterprise-team"
+	TEST_ARCHIVED_REPO   = "archived-repo"
 )
 
 func loadTestEnv() map[string]string {
