@@ -4,7 +4,6 @@
 package github
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +104,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 				}
 			})
 
-			pub, priv, intern, err := provider.List(context.Background())
+			pub, priv, intern, err := provider.List(t.Context())
 			if err != nil {
 				t.Fatalf("List: unexpected error: %v", err)
 			}

@@ -68,6 +68,10 @@ const (
 	TEST_DEFAULT_PRIVATE_REPO_PUSH  = "private-push-team"
 	TEST_DEFAULT_PRIVATE_REPO_ADMIN = "private-admin-team"
 
+	TEST_DEFAULT_INTERNAL_REPO_PULL  = "internal-pull-team"
+	TEST_DEFAULT_INTERNAL_REPO_PUSH  = "internal-push-team"
+	TEST_DEFAULT_INTERNAL_REPO_ADMIN = "internal-admin-team"
+
 	TEST_CUSTOM_TEAM = "custom-team-for-private-repo"
 )
 
@@ -556,6 +560,11 @@ func initSharedResources() {
 				{Team: TEST_DEFAULT_PRIVATE_REPO_PULL, Permission: repoguardsapv1.GithubTeamPermissionPull},
 				{Team: TEST_DEFAULT_PRIVATE_REPO_PUSH, Permission: repoguardsapv1.GithubTeamPermissionPush},
 				{Team: TEST_DEFAULT_PRIVATE_REPO_ADMIN, Permission: repoguardsapv1.GithubTeamPermissionAdmin},
+			},
+			DefaultInternalRepositoryTeams: []repoguardsapv1.GithubTeamWithPermission{
+				{Team: TEST_DEFAULT_INTERNAL_REPO_PULL, Permission: repoguardsapv1.GithubTeamPermissionPull},
+				{Team: TEST_DEFAULT_INTERNAL_REPO_PUSH, Permission: repoguardsapv1.GithubTeamPermissionPush},
+				{Team: TEST_DEFAULT_INTERNAL_REPO_ADMIN, Permission: repoguardsapv1.GithubTeamPermissionAdmin},
 			},
 			InstallationID: GITHUB_INSTALLATION_ID,
 		},

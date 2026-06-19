@@ -27,6 +27,10 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		defaultPrivatePush  = "private-push-team"
 		defaultPrivateAdmin = "private-admin-team"
 
+		defaultInternalPull  = "internal-pull-team"
+		defaultInternalPush  = "internal-push-team"
+		defaultInternalAdmin = "internal-admin-team"
+
 		customTeam = "custom-team-for-private-repo"
 	)
 
@@ -49,6 +53,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		orgResource   string
 		repoPublic    string
 		repoPrivate   string
+		repoInternal  string
 	)
 
 	BeforeEach(func() {
@@ -83,6 +88,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		orgResource = "org-res-repo-" + uniqueID
 		repoPublic = "repo-pub-" + uniqueID
 		repoPrivate = "repo-priv-" + uniqueID
+		repoInternal = "repo-int-" + uniqueID
 
 		nsObj = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uniqueNS}}
 		Expect(ensureResourceCreated(ctx, nsObj)).To(Succeed())
@@ -110,6 +116,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		teams := []string{
 			defaultPublicPull, defaultPublicPush, defaultPublicAdmin,
 			defaultPrivatePull, defaultPrivatePush, defaultPrivateAdmin,
+			defaultInternalPull, defaultInternalPush, defaultInternalAdmin,
 			customTeam,
 		}
 		for _, t := range teams {
@@ -118,6 +125,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, "public")).To(Succeed())
 		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPrivate, "private")).To(Succeed())
+		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoInternal, "internal")).To(Succeed())
 
 		orgCR = githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
 		orgCR.Name = orgResource
@@ -141,13 +149,14 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 			_, _ = client.Repositories.Delete(ctx, orgName, repoPublic)
 			_, _ = client.Repositories.Delete(ctx, orgName, repoPrivate)
+			_, _ = client.Repositories.Delete(ctx, orgName, repoInternal)
 			for _, t := range teams {
 				_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, t)
 			}
 		})
 	})
 
-	It("assigns default teams to public/private repos and custom team to private repo", func() {
+	It("assigns default teams to public/private/internal repos and custom team to private repo", func() {
 		Expect(ensureResourceCreated(ctx, orgCR)).To(Succeed())
 		Expect(ensureResourceCreated(ctx, tr)).To(Succeed())
 
@@ -179,5 +188,10 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		Expect(err).NotTo(HaveOccurred())
 		Expect(resp.StatusCode).To(Equal(200))
 		Expect(privateTeams).To(HaveLen(4))
+
+		internalTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoInternal, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode).To(Equal(200))
+		Expect(internalTeams).To(HaveLen(3))
 	})
 })
