@@ -53,6 +53,15 @@ spec:
           spec:
             description: GithubOrganizationSpec defines the desired state of GithubOrganization
             properties:
+              defaultInternalRepositoryTeams:
+                items:
+                  properties:
+                    permission:
+                      type: string
+                    team:
+                      type: string
+                  type: object
+                type: array
               defaultPrivateRepositoryTeams:
                 items:
                   properties:
@@ -97,6 +106,22 @@ spec:
             properties:
               error:
                 type: string
+              internalRepositories:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    teams:
+                      items:
+                        properties:
+                          permission:
+                            type: string
+                          team:
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                type: array
               operations:
                 properties:
                   organizationMemberOperations:

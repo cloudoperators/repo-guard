@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	githubAPI "github.com/google/go-github/v85/github"
+	githubAPI "github.com/google/go-github/v88/github"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -180,7 +180,8 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 // In mock mode the repo is created directly against the mock server so that
 // the controller's PUT /teams/{slug}/repos/… calls succeed (the mock validates
 // repo existence since the previous review fix).
-func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, private bool) error {
+// visibility must be one of "public", "private", or "internal".
+func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, visibility string) error {
 	org = strings.TrimSpace(org)
 	repo = strings.TrimSpace(repo)
 	if org == "" || repo == "" {
@@ -202,7 +203,7 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 		// "…/api/v3/api/uploads".
 		uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
 		var err error
-		client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+		client, err = githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
 		if err != nil {
 			return err
 		}
@@ -218,15 +219,22 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 	}
 
 	r := &githubAPI.Repository{
-		Name:    githubAPI.Ptr(repo),
-		Private: githubAPI.Ptr(private),
+		Name:       githubAPI.Ptr(repo),
+		Private:    githubAPI.Ptr(visibility != "public"),
+		Visibility: githubAPI.Ptr(visibility),
 	}
 	_, resp, err = client.Repositories.Create(ctx, org, r)
 	if err == nil {
 		return nil
 	}
+	// A 422 from Create can mean either "already exists" (idempotent) or a
+	// validation failure (e.g. invalid visibility).  Only treat it as success
+	// when a follow-up GET confirms the repo is actually there.
 	if resp != nil && resp.StatusCode == 422 {
-		return nil
+		_, getResp, getErr := client.Repositories.Get(ctx, org, repo)
+		if getErr == nil && getResp != nil && getResp.StatusCode >= 200 && getResp.StatusCode < 300 {
+			return nil
+		}
 	}
 	return err
 }

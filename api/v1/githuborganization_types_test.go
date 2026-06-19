@@ -25,19 +25,21 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		privateTeams []GithubTeamWithPermission
-		publicTeams  []GithubTeamWithPermission
-		privateRepos []GithubRepository
-		publicRepos  []GithubRepository
-		seedStatus   GithubOrganizationState
-		seedError    string
-		wantChanged  bool
-		wantStatus   GithubOrganizationState
-		wantOpsLen   int
+		name          string
+		privateTeams  []GithubTeamWithPermission
+		publicTeams   []GithubTeamWithPermission
+		internalTeams []GithubTeamWithPermission
+		privateRepos  []GithubRepository
+		publicRepos   []GithubRepository
+		internalRepos []GithubRepository
+		seedStatus    GithubOrganizationState
+		seedError     string
+		wantChanged   bool
+		wantStatus    GithubOrganizationState
+		wantOpsLen    int
 	}{
 		{
-			name:        "both default team lists empty — no change, no failure",
+			name:        "all three default team lists empty — no change, no failure",
 			wantChanged: false,
 			wantStatus:  "",
 		},
@@ -62,8 +64,18 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 			wantOpsLen:   0,
 		},
 		{
+			// Empty internal list must not generate any ops for internal repos.
+			// All team lists are nil, so no bucket participates.
+			name:          "all team lists nil — existing internal repo teams generate no ops",
+			privateTeams:  nil,
+			internalTeams: nil,
+			internalRepos: []GithubRepository{repoWithTeam},
+			wantChanged:   false,
+			wantOpsLen:    0,
+		},
+		{
 			// Production recovery: org stuck in failed due to old DefaultPrivateRepositoryTeams guard.
-			name:        "both lists empty, stuck in failed (private error) — clears failure",
+			name:        "all three lists empty, stuck in failed (private error) — clears failure",
 			seedStatus:  GithubOrganizationStateFailed,
 			seedError:   "DefaultPrivateRepositoryTeams is empty",
 			wantChanged: true,
@@ -71,11 +83,29 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 		},
 		{
 			// Production recovery: org stuck in failed due to old DefaultPublicRepositoryTeams guard.
-			name:        "both lists empty, stuck in failed (public error) — clears failure",
+			name:        "all three lists empty, stuck in failed (public error) — clears failure",
 			seedStatus:  GithubOrganizationStateFailed,
 			seedError:   "DefaultPublicRepositoryTeams is empty",
 			wantChanged: true,
 			wantStatus:  GithubOrganizationStateComplete,
+		},
+		{
+			name:          "internal team missing from internal repo generates ADD op",
+			internalTeams: []GithubTeamWithPermission{{Team: "internal-guard", Permission: GithubTeamPermissionPull}},
+			internalRepos: []GithubRepository{{Name: "secret-repo", Teams: []GithubTeamWithPermission{}}},
+			wantChanged:   true,
+			wantOpsLen:    1,
+		},
+		{
+			name:          "all three lists present — ops generated independently",
+			publicTeams:   []GithubTeamWithPermission{{Team: "pub-team", Permission: GithubTeamPermissionPull}},
+			privateTeams:  []GithubTeamWithPermission{{Team: "priv-team", Permission: GithubTeamPermissionPull}},
+			internalTeams: []GithubTeamWithPermission{{Team: "int-team", Permission: GithubTeamPermissionPull}},
+			publicRepos:   []GithubRepository{{Name: "pub-repo", Teams: []GithubTeamWithPermission{}}},
+			privateRepos:  []GithubRepository{{Name: "priv-repo", Teams: []GithubTeamWithPermission{}}},
+			internalRepos: []GithubRepository{{Name: "int-repo", Teams: []GithubTeamWithPermission{}}},
+			wantChanged:   true,
+			wantOpsLen:    3,
 		},
 	}
 
@@ -84,8 +114,10 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 			org := GithubOrganization{}
 			org.Spec.DefaultPrivateRepositoryTeams = tt.privateTeams
 			org.Spec.DefaultPublicRepositoryTeams = tt.publicTeams
+			org.Spec.DefaultInternalRepositoryTeams = tt.internalTeams
 			org.Status.PrivateRepositories = tt.privateRepos
 			org.Status.PublicRepositories = tt.publicRepos
+			org.Status.InternalRepositories = tt.internalRepos
 			org.Status.OrganizationStatus = tt.seedStatus
 			org.Status.OrganizationStatusError = tt.seedError
 			changed, newStatus := org.RepoChangeCalculator(nil)

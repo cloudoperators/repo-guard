@@ -36,6 +36,10 @@ spec:
   defaultPrivateRepositoryTeams:
 {{ toYaml $org.defaultPrivateRepositoryTeams | indent 4 }}
   {{- end }}
+  {{- if and $org.defaultInternalRepositoryTeams (gt (len $org.defaultInternalRepositoryTeams) 0) }}
+  defaultInternalRepositoryTeams:
+{{ toYaml $org.defaultInternalRepositoryTeams | indent 4 }}
+  {{- end }}
   {{- if and $org.organizationOwnerTeams (gt (len $org.organizationOwnerTeams) 0) }}
   organizationOwnerTeams:
 {{ toYaml $org.organizationOwnerTeams | indent 4 }}

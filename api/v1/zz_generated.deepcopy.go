@@ -550,6 +550,11 @@ func (in *GithubOrganizationSpec) DeepCopyInto(out *GithubOrganizationSpec) {
 		*out = make([]GithubTeamWithPermission, len(*in))
 		copy(*out, *in)
 	}
+	if in.DefaultInternalRepositoryTeams != nil {
+		in, out := &in.DefaultInternalRepositoryTeams, &out.DefaultInternalRepositoryTeams
+		*out = make([]GithubTeamWithPermission, len(*in))
+		copy(*out, *in)
+	}
 	if in.ProtectedMembers != nil {
 		in, out := &in.ProtectedMembers, &out.ProtectedMembers
 		*out = make([]string, len(*in))
@@ -584,6 +589,13 @@ func (in *GithubOrganizationStatus) DeepCopyInto(out *GithubOrganizationStatus) 
 	}
 	if in.PrivateRepositories != nil {
 		in, out := &in.PrivateRepositories, &out.PrivateRepositories
+		*out = make([]GithubRepository, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.InternalRepositories != nil {
+		in, out := &in.InternalRepositories, &out.InternalRepositories
 		*out = make([]GithubRepository, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
