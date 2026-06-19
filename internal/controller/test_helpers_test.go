@@ -227,8 +227,14 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 	if err == nil {
 		return nil
 	}
+	// A 422 from Create can mean either "already exists" (idempotent) or a
+	// validation failure (e.g. invalid visibility).  Only treat it as success
+	// when a follow-up GET confirms the repo is actually there.
 	if resp != nil && resp.StatusCode == 422 {
-		return nil
+		_, getResp, getErr := client.Repositories.Get(ctx, org, repo)
+		if getErr == nil && getResp != nil && getResp.StatusCode >= 200 && getResp.StatusCode < 300 {
+			return nil
+		}
 	}
 	return err
 }
