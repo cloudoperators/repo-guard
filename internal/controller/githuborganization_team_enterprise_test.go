@@ -109,8 +109,7 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 			for _, op := range cur.Status.Operations.GithubTeamOperations {
 				if strings.EqualFold(op.Team, TEST_ENTERPRISE_TEAM) &&
 					op.Operation == repoguardsapv1.GithubTeamOperationTypeRemove {
-					g.Expect(false).To(BeTrue(),
-						"found unexpected REMOVE operation for enterprise team %q", TEST_ENTERPRISE_TEAM)
+					Fail(fmt.Sprintf("found unexpected REMOVE operation for enterprise team %q", TEST_ENTERPRISE_TEAM))
 				}
 			}
 		}, 3*timeout, interval).Should(Succeed())
