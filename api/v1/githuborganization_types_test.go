@@ -66,7 +66,7 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 		{
 			// Empty internal list must not generate any ops for internal repos.
 			// All team lists are nil, so no bucket participates.
-			name:          "only internal list empty — no ops generated even with existing repo teams",
+			name:          "all team lists nil — existing internal repo teams generate no ops",
 			privateTeams:  nil,
 			internalTeams: nil,
 			internalRepos: []GithubRepository{repoWithTeam},

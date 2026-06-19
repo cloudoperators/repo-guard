@@ -449,11 +449,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedList(ctx)
 		if err != nil {
-			l.Error(err, "error in getting teams from github")
+			l.Error(err, "error listing repositories from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				now := time.Now().UTC()
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
-				githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
+				githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
 				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -474,7 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return reconcile.Result{Requeue: true}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
-			githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
+			githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			newStatus := githubOrganization.Status
 			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
