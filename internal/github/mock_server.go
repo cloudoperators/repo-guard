@@ -662,9 +662,9 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					body.Visibility = "public"
 				}
 			}
-			if body.Visibility == "internal" {
-				body.Private = true
-			}
+			// Derive private from visibility so they are always consistent,
+			// regardless of what the caller sent.
+			body.Private = body.Visibility != "public"
 			stateMu.Lock()
 			if lookupRepo(body.Name) != nil {
 				stateMu.Unlock()
