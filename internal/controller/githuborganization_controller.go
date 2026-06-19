@@ -447,7 +447,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, nil
 		}
 
-		publicRepos, privateRepos, err := reposProvider.ExtendedList(ctx)
+		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedList(ctx)
 		if err != nil {
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
@@ -495,9 +495,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		updateRequired := false
 		// Compact repository status is enabled by default: avoid persisting full repo lists.
 		// Ensure we don't keep growing the status by repo lists; clear them if present.
-		if len(githubOrganization.Status.PublicRepositories) > 0 || len(githubOrganization.Status.PrivateRepositories) > 0 {
+		if len(githubOrganization.Status.PublicRepositories) > 0 ||
+			len(githubOrganization.Status.PrivateRepositories) > 0 ||
+			len(githubOrganization.Status.InternalRepositories) > 0 {
 			githubOrganization.Status.PublicRepositories = nil
 			githubOrganization.Status.PrivateRepositories = nil
+			githubOrganization.Status.InternalRepositories = nil
 			updateRequired = true
 		}
 
@@ -679,6 +682,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			temp := githubOrganization.DeepCopy()
 			temp.Status.PrivateRepositories = privateRepos
 			temp.Status.PublicRepositories = publicRepos
+			temp.Status.InternalRepositories = internalRepos
 			statusChanged, newStatus = temp.RepoChangeCalculator(githubTeamRepositoryListByOrganization)
 
 			if statusChanged {
@@ -687,6 +691,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				newStatus.OutOfPolicyRepositories = uniquePendingOrFailedRepoNames(newStatus.Operations.RepositoryTeamOperations)
 				newStatus.PublicRepositories = nil
 				newStatus.PrivateRepositories = nil
+				newStatus.InternalRepositories = nil
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubOrganization{}
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {

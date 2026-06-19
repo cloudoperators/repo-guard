@@ -40,9 +40,10 @@ type MockTeam struct {
 
 // MockRepo represents a GitHub repository for mock purposes.
 type MockRepo struct {
-	Name    string
-	Private bool
-	Teams   []MockTeamWithPermission
+	Name       string
+	Private    bool
+	Visibility string // "public", "private", or "internal"; defaults derived from Private when empty
+	Teams      []MockTeamWithPermission
 }
 
 // MockTeamWithPermission pairs a team slug with a permission for a repo.
@@ -633,16 +634,18 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			result := make([]map[string]interface{}, 0, len(snapshot))
 			for _, repo := range snapshot {
 				result = append(result, map[string]interface{}{
-					"name":      repo.Name,
-					"private":   repo.Private,
-					"full_name": fmt.Sprintf("%s/%s", org, repo.Name),
+					"name":       repo.Name,
+					"private":    repo.Private,
+					"visibility": repo.repoVisibility(),
+					"full_name":  fmt.Sprintf("%s/%s", org, repo.Name),
 				})
 			}
 			writeJSON(w, result)
 		case http.MethodPost:
 			var body struct {
-				Name    string `json:"name"`
-				Private bool   `json:"private"`
+				Name       string `json:"name"`
+				Private    bool   `json:"private"`
+				Visibility string `json:"visibility"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				writeJSONError(w, `{"message":"Problems parsing JSON"}`, http.StatusBadRequest)
@@ -657,12 +660,13 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"Repository","code":"already_exists"}]}`, http.StatusUnprocessableEntity)
 				return
 			}
-			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private})
+			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private, Visibility: body.Visibility})
 			stateMu.Unlock()
 			writeJSONCreated(w, map[string]interface{}{
-				"name":      body.Name,
-				"private":   body.Private,
-				"full_name": fmt.Sprintf("%s/%s", org, body.Name),
+				"name":       body.Name,
+				"private":    body.Private,
+				"visibility": body.Visibility,
+				"full_name":  fmt.Sprintf("%s/%s", org, body.Name),
 			})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -699,7 +703,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			writeJSON(w, map[string]interface{}{
 				"name":       repoSnapshot.Name,
 				"private":    repoSnapshot.Private,
-				"visibility": visibilityStr(repoSnapshot.Private),
+				"visibility": repoSnapshot.repoVisibility(),
 				"full_name":  fmt.Sprintf("%s/%s", org, repoSnapshot.Name),
 			})
 
@@ -833,8 +837,11 @@ func teamToMap(team MockTeam) map[string]interface{} {
 	}
 }
 
-func visibilityStr(private bool) string {
-	if private {
+func (r MockRepo) repoVisibility() string {
+	if r.Visibility != "" {
+		return r.Visibility
+	}
+	if r.Private {
 		return "private"
 	}
 	return "public"

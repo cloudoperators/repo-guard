@@ -15,8 +15,8 @@ import (
 )
 
 type RepositoryProvider interface {
-	List(ctx context.Context) ([]string, []string, error)
-	ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
+	List(ctx context.Context) ([]string, []string, []string, error)
+	ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
 	RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error)
 	RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error
 	RepositoryTeamRemove(ctx context.Context, repo, team string) error
@@ -52,20 +52,21 @@ func NewRepositoryProvider(cc githubapp.ClientCreator, organization string, inst
 	return &DefaultRepositoryProvider{repositoryService: *client.Repositories, teamsService: *client.Teams, organization: organization}, nil
 }
 
-func (t *DefaultRepositoryProvider) ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
+func (t *DefaultRepositoryProvider) ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
 	publicRepos := make([]repoguardsapv1.GithubRepository, 0)
 	privateRepos := make([]repoguardsapv1.GithubRepository, 0)
+	internalRepos := make([]repoguardsapv1.GithubRepository, 0)
 
-	publicRepoList, privateRepoList, err := t.List(ctx)
+	publicRepoList, privateRepoList, internalRepoList, err := t.List(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	for _, repo := range publicRepoList {
 
 		teams, err := t.RepositoryTeams(ctx, repo)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		publicRepos = append(publicRepos, repoguardsapv1.GithubRepository{Name: repo, Teams: teams})
@@ -75,17 +76,27 @@ func (t *DefaultRepositoryProvider) ExtendedList(ctx context.Context) ([]repogua
 
 		teams, err := t.RepositoryTeams(ctx, repo)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		privateRepos = append(privateRepos, repoguardsapv1.GithubRepository{Name: repo, Teams: teams})
 	}
 
-	return publicRepos, privateRepos, nil
+	for _, repo := range internalRepoList {
+
+		teams, err := t.RepositoryTeams(ctx, repo)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		internalRepos = append(internalRepos, repoguardsapv1.GithubRepository{Name: repo, Teams: teams})
+	}
+
+	return publicRepos, privateRepos, internalRepos, nil
 
 }
 
-func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []string, error) {
+func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []string, []string, error) {
 
 	opt := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
@@ -95,7 +106,7 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 	for {
 		repos, resp, err := t.repositoryService.ListByOrg(ctx, t.organization, opt)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		allRepos = append(allRepos, repos...)
 		if resp.NextPage == 0 {
@@ -106,6 +117,7 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 
 	publicRepoList := make([]string, 0)
 	privateRepoList := make([]string, 0)
+	internalRepoList := make([]string, 0)
 	for _, repo := range allRepos {
 		if repo == nil {
 			continue
@@ -114,14 +126,17 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 		if name == "" {
 			continue
 		}
-		if repo.GetPrivate() {
+		switch repo.GetVisibility() {
+		case "private":
 			privateRepoList = append(privateRepoList, name)
-		} else {
+		case "internal":
+			internalRepoList = append(internalRepoList, name)
+		default: // "public" and unknown values
 			publicRepoList = append(publicRepoList, name)
 		}
 	}
 
-	return publicRepoList, privateRepoList, nil
+	return publicRepoList, privateRepoList, internalRepoList, nil
 }
 
 type CollobaratorWithPermission struct {

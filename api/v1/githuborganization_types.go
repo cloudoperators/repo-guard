@@ -17,9 +17,10 @@ type GithubOrganizationSpec struct {
 	Github       string `json:"github,omitempty"`
 	Organization string `json:"organization,omitempty"`
 
-	OrganizationOwnerTeams        []string                   `json:"organizationOwnerTeams,omitempty"`
-	DefaultPublicRepositoryTeams  []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
-	DefaultPrivateRepositoryTeams []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
+	OrganizationOwnerTeams         []string                   `json:"organizationOwnerTeams,omitempty"`
+	DefaultPublicRepositoryTeams   []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
+	DefaultPrivateRepositoryTeams  []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
+	DefaultInternalRepositoryTeams []GithubTeamWithPermission `json:"defaultInternalRepositoryTeams,omitempty"`
 
 	// ProtectedMembers is a list of GitHub logins that must never be removed by
 	// the removeOrganizationMember or removeRepositoryDirectCollaborator features.
@@ -99,10 +100,11 @@ const (
 
 // GithubOrganizationStatus defines the observed state of GithubOrganization
 type GithubOrganizationStatus struct {
-	Teams               []string           `json:"teams,omitempty"`
-	PublicRepositories  []GithubRepository `json:"publicRepositories,omitempty"`
-	PrivateRepositories []GithubRepository `json:"privateRepositories,omitempty"`
-	OrganizationOwners  []Member           `json:"organizationOwners,omitempty"`
+	Teams                []string           `json:"teams,omitempty"`
+	PublicRepositories   []GithubRepository `json:"publicRepositories,omitempty"`
+	PrivateRepositories  []GithubRepository `json:"privateRepositories,omitempty"`
+	InternalRepositories []GithubRepository `json:"internalRepositories,omitempty"`
+	OrganizationOwners   []Member           `json:"organizationOwners,omitempty"`
 
 	// OutOfPolicyRepositories is a compact representation used to reduce
 	// the size of the status payload. The controller stores only repositories
@@ -814,7 +816,9 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	newStatus := g.Status.DeepCopy()
 	changed := false
 
-	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 && len(g.Spec.DefaultPublicRepositoryTeams) == 0 {
+	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 &&
+		len(g.Spec.DefaultPublicRepositoryTeams) == 0 &&
+		len(g.Spec.DefaultInternalRepositoryTeams) == 0 {
 		// Both lists absent is a valid no-op configuration. If the org is
 		// currently stuck in failed due to the old single-list guards, clear
 		// the failure so the controller persists the recovery.
@@ -859,6 +863,14 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 		publicRepoOperations := repoChangeCalculator(g.Spec.DefaultPublicRepositoryTeams, g.Status.PublicRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
 		if len(publicRepoOperations) > 0 {
 			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, publicRepoOperations...)
+			changed = true
+		}
+	}
+
+	if len(g.Spec.DefaultInternalRepositoryTeams) > 0 {
+		internalRepoOperations := repoChangeCalculator(g.Spec.DefaultInternalRepositoryTeams, g.Status.InternalRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		if len(internalRepoOperations) > 0 {
+			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, internalRepoOperations...)
 			changed = true
 		}
 	}
