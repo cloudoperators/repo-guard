@@ -635,7 +635,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			for _, repo := range snapshot {
 				result = append(result, map[string]interface{}{
 					"name":       repo.Name,
-					"private":    repo.Private,
+					"private":    repo.repoVisibility() == "private",
 					"visibility": repo.repoVisibility(),
 					"full_name":  fmt.Sprintf("%s/%s", org, repo.Name),
 				})
@@ -653,6 +653,17 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			if body.Name == "" {
 				body.Name = "new-repo"
+			}
+			// Normalise visibility/private consistency.
+			if body.Visibility == "" {
+				if body.Private {
+					body.Visibility = "private"
+				} else {
+					body.Visibility = "public"
+				}
+			}
+			if body.Visibility == "internal" {
+				body.Private = true
 			}
 			stateMu.Lock()
 			if lookupRepo(body.Name) != nil {
@@ -702,7 +713,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			writeJSON(w, map[string]interface{}{
 				"name":       repoSnapshot.Name,
-				"private":    repoSnapshot.Private,
+				"private":    repoSnapshot.repoVisibility() == "private",
 				"visibility": repoSnapshot.repoVisibility(),
 				"full_name":  fmt.Sprintf("%s/%s", org, repoSnapshot.Name),
 			})

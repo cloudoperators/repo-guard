@@ -126,7 +126,16 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 		if name == "" {
 			continue
 		}
-		switch repo.GetVisibility() {
+		vis := repo.GetVisibility()
+		if vis == "" {
+			// Fall back to the private bool for older API responses.
+			if repo.GetPrivate() {
+				vis = "private"
+			} else {
+				vis = "public"
+			}
+		}
+		switch vis {
 		case "private":
 			privateRepoList = append(privateRepoList, name)
 		case "internal":

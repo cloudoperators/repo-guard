@@ -819,7 +819,7 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	if len(g.Spec.DefaultPrivateRepositoryTeams) == 0 &&
 		len(g.Spec.DefaultPublicRepositoryTeams) == 0 &&
 		len(g.Spec.DefaultInternalRepositoryTeams) == 0 {
-		// Both lists absent is a valid no-op configuration. If the org is
+		// All three lists absent is a valid no-op configuration. If the org is
 		// currently stuck in failed due to the old single-list guards, clear
 		// the failure so the controller persists the recovery.
 		if newStatus.OrganizationStatus == GithubOrganizationStateFailed &&
