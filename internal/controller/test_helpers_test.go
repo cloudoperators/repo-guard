@@ -180,7 +180,8 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 // In mock mode the repo is created directly against the mock server so that
 // the controller's PUT /teams/{slug}/repos/… calls succeed (the mock validates
 // repo existence since the previous review fix).
-func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, private bool) error {
+// visibility must be one of "public", "private", or "internal".
+func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Client, org, repo string, visibility string) error {
 	org = strings.TrimSpace(org)
 	repo = strings.TrimSpace(repo)
 	if org == "" || repo == "" {
@@ -218,8 +219,9 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 	}
 
 	r := &githubAPI.Repository{
-		Name:    githubAPI.Ptr(repo),
-		Private: githubAPI.Ptr(private),
+		Name:       githubAPI.Ptr(repo),
+		Private:    githubAPI.Ptr(visibility != "public"),
+		Visibility: githubAPI.Ptr(visibility),
 	}
 	_, resp, err = client.Repositories.Create(ctx, org, r)
 	if err == nil {

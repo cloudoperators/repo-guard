@@ -116,8 +116,8 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			Expect(githubEnsureTeam(ctx, client, orgName, t)).To(Succeed())
 		}
 
-		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, false)).To(Succeed())
-		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPrivate, true)).To(Succeed())
+		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, "public")).To(Succeed())
+		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPrivate, "private")).To(Succeed())
 
 		orgCR = githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
 		orgCR.Name = orgResource

@@ -75,7 +75,7 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 		},
 		{
 			// Production recovery: org stuck in failed due to old DefaultPrivateRepositoryTeams guard.
-			name:        "both lists empty, stuck in failed (private error) — clears failure",
+			name:        "all three lists empty, stuck in failed (private error) — clears failure",
 			seedStatus:  GithubOrganizationStateFailed,
 			seedError:   "DefaultPrivateRepositoryTeams is empty",
 			wantChanged: true,
@@ -83,7 +83,7 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 		},
 		{
 			// Production recovery: org stuck in failed due to old DefaultPublicRepositoryTeams guard.
-			name:        "both lists empty, stuck in failed (public error) — clears failure",
+			name:        "all three lists empty, stuck in failed (public error) — clears failure",
 			seedStatus:  GithubOrganizationStateFailed,
 			seedError:   "DefaultPublicRepositoryTeams is empty",
 			wantChanged: true,
