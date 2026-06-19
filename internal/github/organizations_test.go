@@ -24,7 +24,7 @@ func newTestOrganizationProvider(t *testing.T) (*DefaultOrganizationProvider, *h
 	client, err := gogithub.NewClient(
 		gogithub.WithHTTPClient(srv.Client()),
 		gogithub.WithAuthToken("test-token"),
-		gogithub.WithEnterpriseURLs(srv.URL+"/", srv.URL+"/"),
+		gogithub.WithEnterpriseURLs(srv.URL+"/api/v3/", srv.URL+"/"),
 	)
 	if err != nil {
 		t.Fatalf("create github client: %v", err)
