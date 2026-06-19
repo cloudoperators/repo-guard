@@ -143,8 +143,9 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 		case "public":
 			publicRepoList = append(publicRepoList, name)
 		default:
-			// Unknown visibility value — treat as public to avoid silent data loss.
-			publicRepoList = append(publicRepoList, name)
+			// Skip repos with unknown visibility values rather than
+			// silently promoting them to a bucket with incorrect semantics.
+			continue
 		}
 	}
 

@@ -77,11 +77,11 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 			wantInternal: []string{},
 		},
 		{
-			name: "unknown visibility treated as public",
+			name: "unknown visibility skipped — not promoted to any bucket",
 			fixtures: []map[string]interface{}{
 				{"name": "mystery-repo", "private": false, "visibility": "unknown-future-value"},
 			},
-			wantPublic:   []string{"mystery-repo"},
+			wantPublic:   []string{},
 			wantPrivate:  []string{},
 			wantInternal: []string{},
 		},
