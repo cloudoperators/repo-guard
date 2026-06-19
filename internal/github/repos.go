@@ -140,7 +140,10 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 			privateRepoList = append(privateRepoList, name)
 		case "internal":
 			internalRepoList = append(internalRepoList, name)
-		default: // "public" and unknown values
+		case "public":
+			publicRepoList = append(publicRepoList, name)
+		default:
+			// Unknown visibility value — treat as public to avoid silent data loss.
 			publicRepoList = append(publicRepoList, name)
 		}
 	}
