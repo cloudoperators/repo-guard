@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	githubAPI "github.com/google/go-github/v85/github"
+	githubAPI "github.com/google/go-github/v88/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -55,7 +55,9 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		ctx = context.Background()
 
 		orgName = requireEnv("ORGANIZATION")
-		client = githubAPI.NewClient(nil).WithAuthToken(requireEnv("GITHUB_TOKEN"))
+		var clientErr error
+		client, clientErr = githubAPI.NewClient(githubAPI.WithAuthToken(requireEnv("GITHUB_TOKEN")))
+		Expect(clientErr).NotTo(HaveOccurred())
 		if isMockMode() {
 			// In mock mode point the client at the mock server so that any direct
 			// API calls (e.g. cleanup in DeferCleanup) never hit api.github.com.
@@ -69,7 +71,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 				// "…/api/v3/api/uploads".
 				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
 				var err error
-				client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+				client, err = githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
 				Expect(err).NotTo(HaveOccurred())
 			}
 		}

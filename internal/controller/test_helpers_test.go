@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	githubAPI "github.com/google/go-github/v85/github"
+	githubAPI "github.com/google/go-github/v88/github"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -202,7 +202,7 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 		// "…/api/v3/api/uploads".
 		uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
 		var err error
-		client, err = githubAPI.NewClient(nil).WithAuthToken("mock-token").WithEnterpriseURLs(v3URL, uploadURL)
+		client, err = githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
 		if err != nil {
 			return err
 		}

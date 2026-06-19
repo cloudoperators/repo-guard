@@ -6,7 +6,7 @@ package controller
 import (
 	"net/http"
 
-	gogithub "github.com/google/go-github/v85/github"
+	gogithub "github.com/google/go-github/v88/github"
 	githubv4 "github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
@@ -25,10 +25,12 @@ func NewFakeClientCreator(serverURL string) *FakeClientCreator {
 }
 
 func (f *FakeClientCreator) newClient() (*gogithub.Client, error) {
-	httpClient := &http.Client{}
-	c, err := gogithub.NewClient(httpClient).WithEnterpriseURLs(
-		f.serverURL+"/api/v3/",
-		f.serverURL+"/", // server root avoids go-github doubling the path to …/api/v3/api/uploads
+	c, err := gogithub.NewClient(
+		gogithub.WithHTTPClient(&http.Client{}),
+		gogithub.WithEnterpriseURLs(
+			f.serverURL+"/api/v3/",
+			f.serverURL+"/", // server root avoids go-github doubling the path to …/api/v3/api/uploads
+		),
 	)
 	if err != nil {
 		return nil, err

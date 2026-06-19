@@ -11,7 +11,7 @@ import (
 	"github.com/palantir/go-githubapp/githubapp"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	"github.com/google/go-github/v85/github"
+	"github.com/google/go-github/v88/github"
 )
 
 type RepositoryProvider interface {

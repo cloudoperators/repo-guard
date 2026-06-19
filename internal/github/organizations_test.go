@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gogithub "github.com/google/go-github/v85/github"
+	gogithub "github.com/google/go-github/v88/github"
 )
 
 // newTestOrganizationProvider creates a DefaultOrganizationProvider backed by a
@@ -21,8 +21,11 @@ func newTestOrganizationProvider(t *testing.T) (*DefaultOrganizationProvider, *h
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	httpClient := srv.Client()
-	client, err := gogithub.NewClient(httpClient).WithAuthToken("test-token").WithEnterpriseURLs(srv.URL+"/", srv.URL+"/")
+	client, err := gogithub.NewClient(
+		gogithub.WithHTTPClient(srv.Client()),
+		gogithub.WithAuthToken("test-token"),
+		gogithub.WithEnterpriseURLs(srv.URL+"/", srv.URL+"/"),
+	)
 	if err != nil {
 		t.Fatalf("create github client: %v", err)
 	}
