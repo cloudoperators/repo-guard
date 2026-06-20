@@ -355,9 +355,9 @@ func SetGithubOrganizationMetrics(org *v1.GithubOrganization) {
 
 	// managed resource totals
 	ManagedTeamsTotal.WithLabelValues(github, organization).Set(float64(len(org.Status.Teams)))
-	ManagedReposTotal.WithLabelValues(github, organization, "public").Set(float64(len(org.Status.PublicRepositories)))
-	ManagedReposTotal.WithLabelValues(github, organization, "private").Set(float64(len(org.Status.PrivateRepositories)))
-	ManagedReposTotal.WithLabelValues(github, organization, "internal").Set(float64(len(org.Status.InternalRepositories)))
+	// Note: ManagedReposTotal is set directly by the org controller at reconcile-time from live
+	// ExtendedList() results, before the status compaction clears the repo lists. Setting it here
+	// from org.Status.*Repositories would always produce 0 due to that compaction.
 
 	// pending operations total (sum across all five scopes)
 	var pendingTotal float64

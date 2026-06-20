@@ -65,6 +65,9 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	l := log.FromContext(ctx)
 	done := ghmetrics.StartReconcileTimer("GithubOrganization")
 	var githubOrganization *v1.GithubOrganization
+	// failedScopes tracks which fetch-phase scopes failed (set before early returns so the
+	// defer block can increment per-scope sync failure counters even when no operations exist).
+	var failedScopes []string
 	defer func() {
 		// reflect final metrics for organization status/operations
 		if githubOrganization != nil {
@@ -73,20 +76,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if githubOrganization.Status.OrganizationStatus == v1.GithubOrganizationStateFailed {
 				github := strings.TrimSpace(githubOrganization.Spec.Github)
 				organization := strings.TrimSpace(githubOrganization.Spec.Organization)
-				if orgScopeHasFailedOps(githubOrganization, "owners") {
-					ghmetrics.IncOrgSyncFailures(github, organization, "owners")
+				// collect scopes that have failed operations in status (execution-phase failures)
+				firedScopes := make(map[string]bool)
+				for _, scope := range []string{"owners", "teams", "repos", "orgmembers", "repocollaborators"} {
+					if orgScopeHasFailedOps(githubOrganization, scope) {
+						ghmetrics.IncOrgSyncFailures(github, organization, scope)
+						firedScopes[scope] = true
+					}
 				}
-				if orgScopeHasFailedOps(githubOrganization, "teams") {
-					ghmetrics.IncOrgSyncFailures(github, organization, "teams")
-				}
-				if orgScopeHasFailedOps(githubOrganization, "repos") {
-					ghmetrics.IncOrgSyncFailures(github, organization, "repos")
-				}
-				if orgScopeHasFailedOps(githubOrganization, "orgmembers") {
-					ghmetrics.IncOrgSyncFailures(github, organization, "orgmembers")
-				}
-				if orgScopeHasFailedOps(githubOrganization, "repocollaborators") {
-					ghmetrics.IncOrgSyncFailures(github, organization, "repocollaborators")
+				// also cover fetch-phase failures that returned early before any operations were created
+				for _, scope := range failedScopes {
+					if !firedScopes[scope] {
+						ghmetrics.IncOrgSyncFailures(github, organization, scope)
+					}
 				}
 				ghmetrics.IncOrgSyncFailures(github, organization, "overall")
 			}
@@ -408,6 +410,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+			failedScopes = append(failedScopes, "owners")
 			newStatus := githubOrganization.Status
 			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganization{}
@@ -454,6 +457,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+			failedScopes = append(failedScopes, "teams")
 			newStatus := githubOrganization.Status
 			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganization{}
@@ -500,6 +504,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+			failedScopes = append(failedScopes, "repos")
 			newStatus := githubOrganization.Status
 			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganization{}
@@ -517,6 +522,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		updateRequired := false
+		// Record managed repo counts from live fetch results before the status compaction below clears them.
+		ghmetrics.ManagedReposTotal.WithLabelValues(strings.TrimSpace(githubOrganization.Spec.Github), strings.TrimSpace(githubOrganization.Spec.Organization), "public").Set(float64(len(publicRepos)))
+		ghmetrics.ManagedReposTotal.WithLabelValues(strings.TrimSpace(githubOrganization.Spec.Github), strings.TrimSpace(githubOrganization.Spec.Organization), "private").Set(float64(len(privateRepos)))
+		ghmetrics.ManagedReposTotal.WithLabelValues(strings.TrimSpace(githubOrganization.Spec.Github), strings.TrimSpace(githubOrganization.Spec.Organization), "internal").Set(float64(len(internalRepos)))
 		// Compact repository status is enabled by default: avoid persisting full repo lists.
 		// Ensure we don't keep growing the status by repo lists; clear them if present.
 		if len(githubOrganization.Status.PublicRepositories) > 0 ||
@@ -583,6 +592,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 				githubOrganization.Status.OrganizationStatusError = "error in getting owners: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+				failedScopes = append(failedScopes, "owners")
 				newStatus := githubOrganization.Status
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubOrganization{}
@@ -645,6 +655,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 				githubOrganization.Status.OrganizationStatusError = err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
+				failedScopes = append(failedScopes, "teams")
 				newStatus := githubOrganization.Status
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubOrganization{}

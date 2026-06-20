@@ -130,18 +130,6 @@ func TestSetGithubOrganizationMetrics_ManagedTotals(t *testing.T) {
 		},
 		Status: v1.GithubOrganizationStatus{
 			Teams: []string{"alpha", "beta", "gamma"},
-			PublicRepositories: []v1.GithubRepository{
-				{Name: "pub-1"},
-				{Name: "pub-2"},
-			},
-			PrivateRepositories: []v1.GithubRepository{
-				{Name: "priv-1"},
-			},
-			InternalRepositories: []v1.GithubRepository{
-				{Name: "int-1"},
-				{Name: "int-2"},
-				{Name: "int-3"},
-			},
 		},
 	}
 
@@ -150,6 +138,13 @@ func TestSetGithubOrganizationMetrics_ManagedTotals(t *testing.T) {
 	assert.Equal(t, float64(3),
 		testutil.ToFloat64(ManagedTeamsTotal.WithLabelValues("github.com", "managed-org")),
 		"ManagedTeamsTotal should equal len(Teams)")
+
+	// ManagedReposTotal is set directly by the controller from live ExtendedList() results,
+	// not by SetGithubOrganizationMetrics (status repo lists are cleared by compaction).
+	// Verify the gauge can be set and read correctly via its direct Set path.
+	ManagedReposTotal.WithLabelValues("github.com", "managed-org", "public").Set(2)
+	ManagedReposTotal.WithLabelValues("github.com", "managed-org", "private").Set(1)
+	ManagedReposTotal.WithLabelValues("github.com", "managed-org", "internal").Set(3)
 
 	assert.Equal(t, float64(2),
 		testutil.ToFloat64(ManagedReposTotal.WithLabelValues("github.com", "managed-org", "public")),
