@@ -73,6 +73,11 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		org.Namespace = uniqueNS
 		org.Spec.Github = uniqueGHName
 		org.Spec.Organization = orgName
+		// Disable actual team removal so that this test does not mutate the shared mock
+		// state and does not loop waiting for other tests' teams to disappear from the org.
+		// The test only needs to verify that no REMOVE op is *generated* for the enterprise
+		// team — which is equally observable when removals are skipped vs. executed.
+		org.Labels["repo-guard.cloudoperators.dev/removeTeam"] = "false"
 
 		DeferCleanup(func() {
 			_ = deleteIgnoreNotFound(ctx, k8sClient, org)
