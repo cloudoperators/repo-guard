@@ -40,11 +40,11 @@ func newTestRepositoryProvider(t *testing.T) (*DefaultRepositoryProvider, *http.
 
 func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 	cases := []struct {
-		name             string
-		fixtures         []map[string]interface{}
-		wantPublic       []string
-		wantPrivate      []string
-		wantInternal     []string
+		name         string
+		fixtures     []map[string]interface{}
+		wantPublic   []string
+		wantPrivate  []string
+		wantInternal []string
 	}{
 		{
 			name: "three-way split by visibility field",
@@ -82,6 +82,26 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 			},
 			wantPublic:   []string{},
 			wantPrivate:  []string{},
+			wantInternal: []string{},
+		},
+		{
+			name: "archived repo is excluded from all buckets",
+			fixtures: []map[string]interface{}{
+				{"name": "pub-repo", "private": false, "visibility": "public"},
+				{"name": "archived-repo", "private": false, "visibility": "public", "archived": true},
+			},
+			wantPublic:   []string{"pub-repo"},
+			wantPrivate:  []string{},
+			wantInternal: []string{},
+		},
+		{
+			name: "disabled repo is excluded from all buckets",
+			fixtures: []map[string]interface{}{
+				{"name": "priv-repo", "private": true, "visibility": "private"},
+				{"name": "disabled-repo", "private": true, "visibility": "private", "disabled": true},
+			},
+			wantPublic:   []string{},
+			wantPrivate:  []string{"priv-repo"},
 			wantInternal: []string{},
 		},
 		{

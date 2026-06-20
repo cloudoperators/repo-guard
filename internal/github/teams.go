@@ -68,6 +68,11 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 			if team == nil {
 				continue
 			}
+			// Skip enterprise-managed teams — they cannot be managed via the org API.
+			// Attempting to add/remove them returns HTTP 422.
+			if team.GetType() == "enterprise" {
+				continue
+			}
 			name := team.GetName()
 			if name == "" {
 				continue

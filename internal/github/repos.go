@@ -122,6 +122,11 @@ func (t *DefaultRepositoryProvider) List(ctx context.Context) ([]string, []strin
 		if repo == nil {
 			continue
 		}
+		// Skip archived or disabled repositories — GitHub rejects API mutations
+		// on these repos with HTTP 422.
+		if repo.GetArchived() || repo.GetDisabled() {
+			continue
+		}
 		name := repo.GetName()
 		if name == "" {
 			continue

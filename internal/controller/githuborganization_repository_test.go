@@ -194,4 +194,38 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		Expect(resp.StatusCode).To(Equal(200))
 		Expect(internalTeams).To(HaveLen(3))
 	})
+
+	It("does not generate repository-team operations for archived repos", func() {
+		if !isMockMode() {
+			Skip("relies on mock-seeded archived repo; only valid in mock mode")
+		}
+		// The mock server seeds TEST_ARCHIVED_REPO ("archived-repo") with Archived: true.
+		// The List() filter in repos.go must exclude it before it reaches
+		// repoChangeCalculator, so no ops should ever reference it.
+		Expect(ensureResourceCreated(ctx, orgCR)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, tr)).To(Succeed())
+
+		// Wait for the first reconcile to complete.
+		Eventually(func() bool {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return false
+			}
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete ||
+				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
+		}, 3*timeout, interval).Should(BeTrue())
+
+		// Assert that the archived repo never appears in status or operations.
+		cur := &repoguardsapv1.GithubOrganization{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur)).To(Succeed())
+
+		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+			Expect(op.Repo).NotTo(Equal(TEST_ARCHIVED_REPO),
+				"archived-repo must not appear in RepositoryTeamOperations")
+		}
+		for _, repo := range cur.Status.OutOfPolicyRepositories {
+			Expect(repo).NotTo(Equal(TEST_ARCHIVED_REPO),
+				"archived-repo must not appear in status.outOfPolicyRepositories")
+		}
+	})
 })

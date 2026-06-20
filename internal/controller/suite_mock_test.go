@@ -77,10 +77,16 @@ func startMockGitHubServer() {
 			{ID: 14, Name: TEST_DEFAULT_INTERNAL_REPO_PULL, Slug: TEST_DEFAULT_INTERNAL_REPO_PULL},
 			{ID: 15, Name: TEST_DEFAULT_INTERNAL_REPO_PUSH, Slug: TEST_DEFAULT_INTERNAL_REPO_PUSH},
 			{ID: 16, Name: TEST_DEFAULT_INTERNAL_REPO_ADMIN, Slug: TEST_DEFAULT_INTERNAL_REPO_ADMIN},
+			// Enterprise-managed team — should be silently filtered by List() and
+			// never trigger remove operations.
+			{ID: 17, Name: TEST_ENTERPRISE_TEAM, Slug: TEST_ENTERPRISE_TEAM, Type: "enterprise"},
 		},
 		Repos: []internalgithub.MockRepo{
 			{Name: "public-repo", Private: false},
 			{Name: "private-repo", Private: true},
+			// Archived repo — should be silently filtered by List() and never
+			// trigger repository-team operations.
+			{Name: TEST_ARCHIVED_REPO, Private: false, Archived: true},
 		},
 	}
 
