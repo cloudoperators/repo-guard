@@ -69,6 +69,27 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		// reflect final metrics for organization status/operations
 		if githubOrganization != nil {
 			ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+			// increment sync failure counters when the reconcile ends in a failed state
+			if githubOrganization.Status.OrganizationStatus == v1.GithubOrganizationStateFailed {
+				github := strings.TrimSpace(githubOrganization.Spec.Github)
+				organization := strings.TrimSpace(githubOrganization.Spec.Organization)
+				if orgScopeHasFailedOps(githubOrganization, "owners") {
+					ghmetrics.IncOrgSyncFailures(github, organization, "owners")
+				}
+				if orgScopeHasFailedOps(githubOrganization, "teams") {
+					ghmetrics.IncOrgSyncFailures(github, organization, "teams")
+				}
+				if orgScopeHasFailedOps(githubOrganization, "repos") {
+					ghmetrics.IncOrgSyncFailures(github, organization, "repos")
+				}
+				if orgScopeHasFailedOps(githubOrganization, "orgmembers") {
+					ghmetrics.IncOrgSyncFailures(github, organization, "orgmembers")
+				}
+				if orgScopeHasFailedOps(githubOrganization, "repocollaborators") {
+					ghmetrics.IncOrgSyncFailures(github, organization, "repocollaborators")
+				}
+				ghmetrics.IncOrgSyncFailures(github, organization, "overall")
+			}
 		}
 		result := "success"
 		if err != nil {
@@ -361,6 +382,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			l.Error(err, "error in getting organization owners from github")
 			// Check for GitHub rate limit and requeue accordingly
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+				recordOrgRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
@@ -406,6 +428,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err != nil {
 			l.Error(err, "error in getting teams from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+				recordOrgRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
@@ -451,6 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		if err != nil {
 			l.Error(err, "error listing repositories from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+				recordOrgRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 				githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
@@ -720,6 +744,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			orgMembers, err := organizationsProvider.Members(ctx)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					recordOrgRateLimitHit(err.Error(), t)
 					now := time.Now().UTC()
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 					githubOrganization.Status.OrganizationStatusError = "error in getting org members: " + err.Error()
@@ -756,6 +781,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
 						if t, ok := parseGitHubRateLimitReset(merr.Error()); ok {
+							recordOrgRateLimitHit(merr.Error(), t)
 							now := time.Now().UTC()
 							if t.After(now) {
 								teamMembersRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
@@ -850,6 +876,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				collabs, err := reposProvider.RepositoryCollobarators(ctx, repo.Name)
 				if err != nil {
 					if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+						recordOrgRateLimitHit(err.Error(), t)
 						now := time.Now().UTC()
 						githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 						githubOrganization.Status.OrganizationStatusError = "error in getting repo collaborators: " + err.Error()
@@ -1333,6 +1360,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			err := organizationsProvider.RemoveFromOrg(ctx, op.User)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					recordOrgRateLimitHit(err.Error(), t)
 					now := time.Now().UTC()
 					newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 					newStatus.OrganizationStatusError = "rate limited during org member removal: " + err.Error()
@@ -1420,6 +1448,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			_, err := reposProvider.RepositoryCollobaratorRemove(ctx, op.Repo, op.User)
 			if err != nil {
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					recordOrgRateLimitHit(err.Error(), t)
 					now := time.Now().UTC()
 					newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 					newStatus.OrganizationStatusError = "rate limited during repo collaborator removal: " + err.Error()
@@ -1700,6 +1729,56 @@ func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {
 		return false, err
 	}
 	return now.After(since.Add(d)), nil
+}
+
+// recordOrgRateLimitHit records a rate-limit event for the org controller and logs the backoff.
+func recordOrgRateLimitHit(errMsg string, resetAt time.Time) {
+	limitType := "api"
+	if strings.Contains(strings.ToLower(errMsg), "invitation") {
+		limitType = "invitation"
+	}
+	var backoff time.Duration
+	if now := time.Now().UTC(); resetAt.After(now) {
+		backoff = resetAt.Sub(now)
+	}
+	ghmetrics.ObserveRateLimitHit("GithubOrganization", limitType, backoff)
+}
+
+// orgScopeHasFailedOps returns true if the given scope has at least one failed operation.
+func orgScopeHasFailedOps(org *v1.GithubOrganization, scope string) bool {
+	switch scope {
+	case "owners":
+		for _, op := range org.Status.Operations.OrganizationOwnerOperations {
+			if op.State == v1.GithubUserOperationStateFailed {
+				return true
+			}
+		}
+	case "teams":
+		for _, op := range org.Status.Operations.GithubTeamOperations {
+			if op.State == v1.GithubTeamOperationStateFailed {
+				return true
+			}
+		}
+	case "repos":
+		for _, op := range org.Status.Operations.RepositoryTeamOperations {
+			if op.State == v1.GithubRepoTeamOperationStateFailed {
+				return true
+			}
+		}
+	case "orgmembers":
+		for _, op := range org.Status.Operations.OrganizationMemberOperations {
+			if op.State == v1.GithubUserOperationStateFailed {
+				return true
+			}
+		}
+	case "repocollaborators":
+		for _, op := range org.Status.Operations.RepositoryCollaboratorOperations {
+			if op.State == v1.GithubRepoUserOperationStateFailed {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // uniquePendingOrFailedRepoNames returns unique repository names that have pending or failed operations.

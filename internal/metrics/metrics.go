@@ -97,6 +97,91 @@ var (
 		},
 		[]string{"organization", "team", "operation", "state"},
 	)
+
+	// Managed resource totals
+	ManagedTeamsTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganization",
+			Name:      "managed_teams_total",
+			Help:      "Number of GitHub teams currently tracked (after filtering) for this organization.",
+		},
+		[]string{"github", "organization"},
+	)
+
+	ManagedReposTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganization",
+			Name:      "managed_repos_total",
+			Help:      "Number of GitHub repositories actively managed for this organization, partitioned by visibility.",
+		},
+		[]string{"github", "organization", "visibility"},
+	)
+
+	ManagedMembersTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githubteam",
+			Name:      "managed_members_total",
+			Help:      "Number of members currently managed in this GitHub team.",
+		},
+		[]string{"organization", "team"},
+	)
+
+	// Sync failure counters
+	OrgSyncFailuresTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganization",
+			Name:      "sync_failures_total",
+			Help:      "Cumulative count of reconcile cycles that ended in a failed state for this organization, partitioned by scope.",
+		},
+		[]string{"github", "organization", "scope"},
+	)
+
+	TeamSyncFailuresTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githubteam",
+			Name:      "sync_failures_total",
+			Help:      "Cumulative count of reconcile cycles that ended in a failed state for this team.",
+		},
+		[]string{"organization", "team"},
+	)
+
+	// Rate-limit metrics
+	RateLimitHitsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "github",
+			Name:      "ratelimit_hits_total",
+			Help:      "Total number of GitHub API rate-limit events encountered, by controller and rate-limit type.",
+		},
+		[]string{"controller", "type"},
+	)
+
+	RateLimitBackoffSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "repo_guard",
+			Subsystem: "github",
+			Name:      "ratelimit_backoff_seconds",
+			Help:      "Duration of rate-limit backoff windows in seconds, by controller.",
+			Buckets:   []float64{60, 300, 600, 1800, 3600, 7200},
+		},
+		[]string{"controller"},
+	)
+
+	// Pending operations snapshot
+	PendingOperationsTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganization",
+			Name:      "pending_operations_total",
+			Help:      "Total number of pending (not yet executed) operations across all scopes for this organization.",
+		},
+		[]string{"github", "organization"},
+	)
 )
 
 func init() {
@@ -109,6 +194,14 @@ func init() {
 		GithubOrganizationOperations,
 		GithubTeamStatus,
 		GithubTeamOperations,
+		ManagedTeamsTotal,
+		ManagedReposTotal,
+		ManagedMembersTotal,
+		OrgSyncFailuresTotal,
+		TeamSyncFailuresTotal,
+		RateLimitHitsTotal,
+		RateLimitBackoffSeconds,
+		PendingOperationsTotal,
 	)
 }
 
@@ -259,6 +352,41 @@ func SetGithubOrganizationMetrics(org *v1.GithubOrganization) {
 			}
 		}
 	}
+
+	// managed resource totals
+	ManagedTeamsTotal.WithLabelValues(github, organization).Set(float64(len(org.Status.Teams)))
+	ManagedReposTotal.WithLabelValues(github, organization, "public").Set(float64(len(org.Status.PublicRepositories)))
+	ManagedReposTotal.WithLabelValues(github, organization, "private").Set(float64(len(org.Status.PrivateRepositories)))
+	ManagedReposTotal.WithLabelValues(github, organization, "internal").Set(float64(len(org.Status.InternalRepositories)))
+
+	// pending operations total (sum across all five scopes)
+	var pendingTotal float64
+	for _, o := range org.Status.Operations.OrganizationOwnerOperations {
+		if o.State == v1.GithubUserOperationStatePending {
+			pendingTotal++
+		}
+	}
+	for _, o := range org.Status.Operations.GithubTeamOperations {
+		if o.State == v1.GithubTeamOperationStatePending {
+			pendingTotal++
+		}
+	}
+	for _, o := range org.Status.Operations.RepositoryTeamOperations {
+		if o.State == v1.GithubRepoTeamOperationStatePending {
+			pendingTotal++
+		}
+	}
+	for _, o := range org.Status.Operations.OrganizationMemberOperations {
+		if o.State == v1.GithubUserOperationStatePending {
+			pendingTotal++
+		}
+	}
+	for _, o := range org.Status.Operations.RepositoryCollaboratorOperations {
+		if o.State == v1.GithubRepoUserOperationStatePending {
+			pendingTotal++
+		}
+	}
+	PendingOperationsTotal.WithLabelValues(github, organization).Set(pendingTotal)
 }
 
 // SetGithubTeamMetrics sets gauges for the given GithubTeam's current status and operation counts.
@@ -305,5 +433,28 @@ func SetGithubTeamMetrics(team *v1.GithubTeam) {
 				GithubTeamOperations.WithLabelValues(org, tname, op, st).Set(v)
 			}
 		}
+	}
+
+	// managed members total
+	ManagedMembersTotal.WithLabelValues(org, tname).Set(float64(len(team.Status.Members)))
+}
+
+// IncOrgSyncFailures increments the sync failure counter for the given org and scope.
+// Call inside the controller defer after status is finalized.
+func IncOrgSyncFailures(github, organization, scope string) {
+	OrgSyncFailuresTotal.WithLabelValues(github, organization, scope).Inc()
+}
+
+// IncTeamSyncFailure increments the sync failure counter for the given team.
+func IncTeamSyncFailure(organization, team string) {
+	TeamSyncFailuresTotal.WithLabelValues(organization, team).Inc()
+}
+
+// ObserveRateLimitHit records a rate-limit event and the backoff window.
+// limitType is "api" or "invitation". backoff is the duration until reset (0 if already reset).
+func ObserveRateLimitHit(controller, limitType string, backoff time.Duration) {
+	RateLimitHitsTotal.WithLabelValues(controller, limitType).Inc()
+	if backoff > 0 {
+		RateLimitBackoffSeconds.WithLabelValues(controller).Observe(backoff.Seconds())
 	}
 }
