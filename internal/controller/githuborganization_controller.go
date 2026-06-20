@@ -1731,7 +1731,7 @@ func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {
 	return now.After(since.Add(d)), nil
 }
 
-// recordOrgRateLimitHit records a rate-limit event for the org controller and logs the backoff.
+// recordOrgRateLimitHit records a rate-limit event for the org controller, incrementing the hit counter and observing the backoff duration in the histogram.
 func recordOrgRateLimitHit(errMsg string, resetAt time.Time) {
 	limitType := "api"
 	if strings.Contains(strings.ToLower(errMsg), "invitation") {

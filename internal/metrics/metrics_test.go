@@ -240,8 +240,16 @@ func TestObserveRateLimitHit(t *testing.T) {
 		desc := m.Desc().String()
 		if strings.Contains(desc, "ratelimit_backoff_seconds") {
 			var dtoMetric dto.Metric
-			if err := m.Write(&dtoMetric); err == nil && dtoMetric.GetHistogram().GetSampleCount() > 0 {
-				found = true
+			if err := m.Write(&dtoMetric); err != nil {
+				continue
+			}
+			if dtoMetric.GetHistogram().GetSampleCount() == 0 {
+				continue
+			}
+			for _, lp := range dtoMetric.GetLabel() {
+				if lp.GetName() == "controller" && lp.GetValue() == ctrl {
+					found = true
+				}
 			}
 		}
 	}
