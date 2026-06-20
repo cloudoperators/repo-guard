@@ -407,6 +407,95 @@
       "targets": [
         { "expr": "sum by (organization, team, status) (repo_guard_githubteam_status{organization=~\"$org\", team=~\"$team\"} == 1)", "format": "table", "instant": true, "refId": "A" }
       ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 600,
+      "panels": [],
+      "title": "📊 Domain Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 42 },
+      "id": 601,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "🏢 Managed Teams",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum by (organization) (repo_guard_githuborganization_managed_teams_total{github=~\"$github\", organization=~\"$org\"})", "legendFormat": "{{organization}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 42 },
+      "id": 602,
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] }, "text": {}, "valueMode": "color" },
+      "title": "📁 Managed Repos by Visibility",
+      "type": "bargauge",
+      "targets": [
+        { "expr": "sum by (organization, visibility) (repo_guard_githuborganization_managed_repos_total{github=~\"$github\", organization=~\"$org\"})", "legendFormat": "{{organization}} / {{visibility}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } } },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 42 },
+      "id": 603,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "👥 Managed Members",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum by (organization) (repo_guard_githubteam_managed_members_total{organization=~\"$org\"})", "legendFormat": "{{organization}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 46 },
+      "id": 604,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "⏳ Pending Operations Total",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "repo_guard_githuborganization_pending_operations_total{github=~\"$github\", organization=~\"$org\"}", "legendFormat": "{{organization}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 46 },
+      "id": 605,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "🚫 Sync Failures Rate (org)",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "rate(repo_guard_githuborganization_sync_failures_total{github=~\"$github\", organization=~\"$org\"}[5m])", "legendFormat": "{{organization}} / {{scope}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 54 },
+      "id": 606,
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "title": "🚦 Rate-Limit Hits",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "increase(repo_guard_github_ratelimit_hits_total[1h])", "legendFormat": "{{controller}} / {{type}}", "refId": "A" }
+      ]
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 300 }, { "color": "red", "value": 1800 } ] }, "unit": "s" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 54 },
+      "id": 607,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "title": "⏱️ Rate-Limit Backoff p95",
+      "type": "stat",
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(repo_guard_github_ratelimit_backoff_seconds_bucket[1h])))", "legendFormat": "p95 backoff", "refId": "A" }
+      ]
     }
   ],
   "schemaVersion": 38,

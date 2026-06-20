@@ -56,6 +56,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// but in that case we simply skip setting metrics
 		if githubTeam != nil {
 			ghmetrics.SetGithubTeamMetrics(githubTeam)
+			// increment sync failure counter when the reconcile ends in a failed state
+			if githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed {
+				org := strings.TrimSpace(githubTeam.Spec.Organization)
+				team := strings.TrimSpace(githubTeam.Spec.Team)
+				ghmetrics.IncTeamSyncFailure(org, team)
+			}
 		}
 		result := "success"
 		if err != nil {
@@ -458,6 +464,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err != nil {
 			l.Error(err, "error during listing organization teams")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+				recordTeamRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
 				githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 				githubTeam.Status.TeamStatusError = "error during listing organization teams: " + err.Error()
@@ -486,6 +493,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			if err != nil {
 				l.Error(err, "error during adding team to Github")
 				if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+					recordTeamRateLimitHit(err.Error(), t)
 					now := time.Now().UTC()
 					githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 					githubTeam.Status.TeamStatusError = "error during adding team to Github: " + err.Error()
@@ -510,6 +518,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err != nil {
 			l.Error(err, "error during getting the members of the team in Github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
+				recordTeamRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
 				githubTeam.Status.TeamStatus = v1.GithubTeamStateRateLimited
 				githubTeam.Status.TeamStatusError = "error during getting the members of the team in Github: " + err.Error()
@@ -1418,3 +1427,16 @@ const GITHUB_TEAM_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
 const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
 const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repo-guard.cloudoperators.dev/notfoundTTL"
 const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repo-guard.cloudoperators.dev/skippedTTL"
+
+// recordTeamRateLimitHit records a rate-limit event for the team controller and observes the backoff.
+func recordTeamRateLimitHit(errMsg string, resetAt time.Time) {
+	limitType := "api"
+	if strings.Contains(strings.ToLower(errMsg), "invitation") {
+		limitType = "invitation"
+	}
+	var backoff time.Duration
+	if now := time.Now().UTC(); resetAt.After(now) {
+		backoff = resetAt.Sub(now)
+	}
+	ghmetrics.ObserveRateLimitHit("GithubTeam", limitType, backoff)
+}
