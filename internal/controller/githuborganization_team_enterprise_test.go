@@ -92,27 +92,33 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 			Skip("relies on mock-seeded enterprise team; only valid in mock mode")
 		}
 		// The mock server seeds an enterprise team (TEST_ENTERPRISE_TEAM / "enterprise-team")
-		// that has no matching GithubTeam CR.  Without the fix, the controller would
-		// enqueue a REMOVE op for it and hit a 422 from the mock, causing a failed cycle.
+		// with type="enterprise".  teams.go:List() must filter it out before it reaches
+		// TeamChangeCalculator, so it must never appear in status.Teams and no REMOVE op
+		// must ever be generated for it.
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 
-		// Wait for the org to finish its first reconcile.
-		Eventually(func() repoguardsapv1.GithubOrganizationState {
+		// Wait until the controller has fetched the team list at least once
+		// (status.Teams becomes non-empty when the first reconcile completes its
+		// team-list phase, regardless of any pending/skipped operations).
+		Eventually(func() int {
 			cur := &repoguardsapv1.GithubOrganization{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
-				return ""
+				return 0
 			}
-			return cur.Status.OrganizationStatus
-		}, 3*timeout, interval).Should(Or(
-			Equal(repoguardsapv1.GithubOrganizationStateComplete),
-			Equal(repoguardsapv1.GithubOrganizationStateRateLimited),
-		))
+			return len(cur.Status.Teams)
+		}, 3*timeout, interval).Should(BeNumerically(">", 0))
 
-		// Assert: no REMOVE operation for the enterprise team was ever recorded.
-		// We snapshot the status immediately after the first completed reconcile so
-		// that concurrent test activity (other orgs reconciling) does not interfere.
+		// Snapshot the status right after the first team-list fetch.
 		cur := &repoguardsapv1.GithubOrganization{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur)).To(Succeed())
+
+		// enterprise-team must not appear in the team list returned by the mock.
+		for _, team := range cur.Status.Teams {
+			if strings.EqualFold(team, TEST_ENTERPRISE_TEAM) {
+				Fail(fmt.Sprintf("enterprise team %q must be filtered by teams.List() and must not appear in status.Teams", TEST_ENTERPRISE_TEAM))
+			}
+		}
+		// No REMOVE op must have been generated for the enterprise team.
 		for _, op := range cur.Status.Operations.GithubTeamOperations {
 			if strings.EqualFold(op.Team, TEST_ENTERPRISE_TEAM) &&
 				op.Operation == repoguardsapv1.GithubTeamOperationTypeRemove {
