@@ -196,6 +196,9 @@ var _ = Describe("Github Organization controller - repository team assignments",
 	})
 
 	It("does not generate repository-team operations for archived repos", func() {
+		if !isMockMode() {
+			Skip("relies on mock-seeded archived repo; only valid in mock mode")
+		}
 		// The mock server seeds TEST_ARCHIVED_REPO ("archived-repo") with Archived: true.
 		// The List() filter in repos.go must exclude it before it reaches
 		// repoChangeCalculator, so no ops should ever reference it.
@@ -220,13 +223,9 @@ var _ = Describe("Github Organization controller - repository team assignments",
 			Expect(op.Repo).NotTo(Equal(TEST_ARCHIVED_REPO),
 				"archived-repo must not appear in RepositoryTeamOperations")
 		}
-		for _, repo := range cur.Status.PublicRepositories {
-			Expect(repo.Name).NotTo(Equal(TEST_ARCHIVED_REPO),
-				"archived-repo must not appear in status.publicRepositories")
-		}
-		for _, repo := range cur.Status.PrivateRepositories {
-			Expect(repo.Name).NotTo(Equal(TEST_ARCHIVED_REPO),
-				"archived-repo must not appear in status.privateRepositories")
+		for _, repo := range cur.Status.OutOfPolicyRepositories {
+			Expect(repo).NotTo(Equal(TEST_ARCHIVED_REPO),
+				"archived-repo must not appear in status.outOfPolicyRepositories")
 		}
 	})
 })

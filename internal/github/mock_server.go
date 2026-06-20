@@ -605,8 +605,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 					return
 				}
-				// Reject team-repo mutations on archived repositories.
-				if repoEntry.Archived {
+				// Reject team-repo mutations on archived or disabled repositories.
+				if repoEntry.Archived || repoEntry.Disabled {
 					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Repository is archived."}`, http.StatusUnprocessableEntity)
 					return
@@ -636,8 +636,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				w.WriteHeader(http.StatusNoContent)
 			case http.MethodDelete:
 				stateMu.Lock()
-				// Reject team-repo mutations on archived repositories.
-				if repoEntry := lookupRepo(repoName); repoEntry != nil && repoEntry.Archived {
+				// Reject team-repo mutations on archived or disabled repositories.
+				if repoEntry := lookupRepo(repoName); repoEntry != nil && (repoEntry.Archived || repoEntry.Disabled) {
 					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Repository is archived."}`, http.StatusUnprocessableEntity)
 					return
