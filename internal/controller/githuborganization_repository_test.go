@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -125,7 +126,12 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPublic, "public")).To(Succeed())
 		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoPrivate, "private")).To(Succeed())
-		Expect(githubEnsureRepoWithVisibility(ctx, client, orgName, repoInternal, "internal")).To(Succeed())
+		if err := githubEnsureRepoWithVisibility(ctx, client, orgName, repoInternal, "internal"); err != nil {
+			if errors.Is(err, errEnterpriseFeatureRequired) {
+				Skip("skipping: internal repository visibility requires a GitHub Enterprise organization")
+			}
+			Expect(err).NotTo(HaveOccurred())
+		}
 
 		orgCR = githubOrganizationGreenhouseSandboxForRepositoryTests.DeepCopy()
 		orgCR.Name = orgResource

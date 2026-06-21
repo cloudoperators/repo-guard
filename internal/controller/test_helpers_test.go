@@ -5,6 +5,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -17,6 +18,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 )
+
+// errEnterpriseFeatureRequired is returned by githubEnsureRepoWithVisibility when
+// the GitHub org does not support enterprise-only visibility (e.g. "internal").
+var errEnterpriseFeatureRequired = errors.New("enterprise feature required: organization is not associated with a GitHub Enterprise")
 
 // ---- env/string helpers ----
 
@@ -234,6 +239,12 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 		_, getResp, getErr := client.Repositories.Get(ctx, org, repo)
 		if getErr == nil && getResp != nil && getResp.StatusCode >= 200 && getResp.StatusCode < 300 {
 			return nil
+		}
+		// If the repo does not exist either, the 422 is a hard validation failure
+		// (e.g. "internal" visibility is enterprise-only).  Return a sentinel so
+		// callers can Skip the test instead of failing.
+		if visibility == "internal" && !isMockMode() {
+			return errEnterpriseFeatureRequired
 		}
 	}
 	return err
