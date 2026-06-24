@@ -299,7 +299,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m]))) > 0",
+                    "query": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m]))) >= 0",
                     "seriesNameFormat": "{{controller}} p95"
                   }
                 }
@@ -518,7 +518,7 @@
       "managedTeams": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "🏢 Teams Managed per Organization" },
+          "display": { "name": "🏢 Teams Managed per Organization", "description": "Number of GitHub teams currently tracked per organization. Derived from active GithubTeam resources after filtering." },
           "plugin": {
             "kind": "Table",
             "spec": {
@@ -547,7 +547,7 @@
       "managedReposByVisibility": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "📁 Repos Managed per Organization (by Visibility)" },
+          "display": { "name": "📁 Repos Managed per Organization (by Visibility)", "description": "Number of GitHub repositories actively managed per organization, broken down by visibility (public, private, internal)." },
           "plugin": {
             "kind": "Table",
             "spec": {
@@ -577,7 +577,7 @@
       "managedMembers": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "👥 Members Managed per Organization" },
+          "display": { "name": "👥 Team Memberships per Organization (sum across teams)", "description": "Total managed team membership slots per organization, summed across all teams. Note: a user in multiple teams is counted once per team." },
           "plugin": {
             "kind": "Table",
             "spec": {
