@@ -21,5 +21,6 @@ jobs:
       bump-make-version: true
       dispatch-greenhouse-extensions: true
       plugin-name: repo-guard
+      environment: release
     secrets:
       release-token: ${{ secrets.RELEASE_GH_TOKEN_PR }}
