@@ -14,8 +14,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "📡 GitHub API Errors (last 1h)",
-            "description": "Total failed GitHub API calls (4xx/5xx/errors) in the last hour. Should stay at 0."
+            "name": "📡 External API Errors (last 1h)",
+            "description": "Total failed external provider API calls (LDAP, HTTP member sources) in the last hour. Should stay at 0."
           },
           "plugin": {
             "kind": "StatChart",
@@ -48,8 +48,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "📡 GitHub API Error Rates by HTTP Status",
-            "description": "Rate of failed GitHub API calls over time, broken down by HTTP status code (401, 404, 502, etc.)."
+            "name": "📡 External API Error Rates by HTTP Status",
+            "description": "Rate of failed external provider API calls over time (LDAP, HTTP member sources), broken down by HTTP status code."
           },
           "plugin": {
             "kind": "TimeSeriesChart",
@@ -523,6 +523,7 @@
             "kind": "Table",
             "spec": {
               "columnSettings": [
+                { "name": "github", "header": "GitHub" },
                 { "name": "organization", "header": "Organization" },
                 { "name": "value", "header": "Teams" },
                 { "name": "timestamp", "hide": true },
@@ -536,7 +537,7 @@
               "spec": {
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
-                  "spec": { "query": "sum by (organization) (repo_guard_githuborganization_managed_teams_total{github=~\"$github\", organization=~\"$org\"})" }
+                  "spec": { "query": "sum by (github, organization) (repo_guard_githuborganization_managed_teams_total{github=~\"$github\", organization=~\"$org\"})" }
                 }
               }
             }
@@ -551,6 +552,7 @@
             "kind": "Table",
             "spec": {
               "columnSettings": [
+                { "name": "github", "header": "GitHub" },
                 { "name": "organization", "header": "Organization" },
                 { "name": "visibility", "header": "Visibility" },
                 { "name": "value", "header": "Repos" },
@@ -565,7 +567,7 @@
               "spec": {
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
-                  "spec": { "query": "sum by (organization, visibility) (repo_guard_githuborganization_managed_repos_total{github=~\"$github\", organization=~\"$org\"})" }
+                  "spec": { "query": "sum by (github, organization, visibility) (repo_guard_githuborganization_managed_repos_total{github=~\"$github\", organization=~\"$org\"})" }
                 }
               }
             }
