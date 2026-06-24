@@ -14,7 +14,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "📡 API Errors"
+            "name": "📡 External API Errors (last 1h)",
+            "description": "Total failed external provider API calls (LDAP, HTTP member sources) in the last hour. Should stay at 0."
           },
           "plugin": {
             "kind": "StatChart",
@@ -22,14 +23,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "red", "value": 1 }
                 ]
               }
             }
@@ -53,7 +48,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "📡 API Error Rates"
+            "name": "📡 External API Error Rates by HTTP Status",
+            "description": "Rate of failed external provider API calls over time (LDAP, HTTP member sources), broken down by HTTP status code."
           },
           "plugin": {
             "kind": "TimeSeriesChart",
@@ -83,7 +79,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🚫 Org Failures"
+            "name": "🚫 Organizations in Failed State",
+            "description": "Number of GitHub organizations that failed to sync. Any value above 0 requires attention."
           },
           "plugin": {
             "kind": "StatChart",
@@ -91,14 +88,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "red", "value": 1 }
                 ]
               }
             }
@@ -122,7 +113,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "⏳ Org Pending Ops"
+            "name": "⏳ Organization Changes Waiting to Apply",
+            "description": "Total pending operations across all organizations (team/repo/member changes queued but not yet applied to GitHub)."
           },
           "plugin": {
             "kind": "StatChart",
@@ -130,14 +122,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "orange", "value": 1 }
                 ]
               }
             }
@@ -161,7 +147,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "⏳ Org Member Pending Ops"
+            "name": "⏳ Org Membership Changes Waiting to Apply",
+            "description": "Pending organization owner/member add or remove operations not yet applied to GitHub."
           },
           "plugin": {
             "kind": "StatChart",
@@ -169,14 +156,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "orange", "value": 1 }
                 ]
               }
             }
@@ -196,71 +177,24 @@
           ]
         }
       },
-      "repoCollabPending": {
-        "kind": "Panel",
-        "spec": {
-          "display": {
-            "name": "⏳ Repo Direct Collab Pending Ops"
-          },
-          "plugin": {
-            "kind": "StatChart",
-            "spec": {
-              "calculation": "last-number",
-              "thresholds": {
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
-                ]
-              }
-            }
-          },
-          "queries": [
-            {
-              "kind": "TimeSeriesQuery",
-              "spec": {
-                "plugin": {
-                  "kind": "PrometheusTimeSeriesQuery",
-                  "spec": {
-                    "query": "sum(repo_guard_githuborganization_operations{scope=\"repocollaborators\", state=\"pending\", github=~\"$github\", organization=~\"$org\"}) or vector(0)"
-                  }
-                }
-              }
-            }
-          ]
-        }
-      },
       "orgsAttention": {
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Organizations • Current Status"
+            "name": "🏢 Organizations Needing Attention (failed / rate-limited / pending)",
+            "description": "Organizations currently in a non-healthy state. 'pending' means changes are queued, 'ratelimited' means GitHub API quota was hit, 'failed' means sync errors occurred."
           },
           "plugin": {
             "kind": "Table",
             "spec": {
               "columnSettings": [
-                {
-                  "name": "value",
-                  "hide": true
-                },
-                {
-                  "name": "Value",
-                  "hide": true
-                },
-                {
-                  "name": "timestamp",
-                  "hide": true
-                },
-                {
-                  "name": "Time",
-                  "hide": true
-                }
+                { "name": "github", "header": "GitHub" },
+                { "name": "organization", "header": "Organization" },
+                { "name": "status", "header": "Status" },
+                { "name": "value", "hide": true },
+                { "name": "Value", "hide": true },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
               ]
             }
           },
@@ -283,7 +217,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "👤 People Operations"
+            "name": "👤 Member Add / Remove Activity",
+            "description": "Rate of team member additions and removals applied to GitHub over time."
           },
           "plugin": {
             "kind": "TimeSeriesChart",
@@ -313,7 +248,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🚦 Rate Limit Status"
+            "name": "🚦 Organizations Currently Rate-Limited by GitHub",
+            "description": "Number of organizations where the controller is blocked by GitHub API rate limits right now."
           },
           "plugin": {
             "kind": "StatChart",
@@ -321,14 +257,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "orange", "value": 1 }
                 ]
               }
             }
@@ -352,14 +282,14 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "⏱️ Reconcile Duration (p95)"
+            "name": "⏱️ How Long Does One Sync Cycle Take? (p95)",
+            "description": "95th percentile time for the controller to complete one reconcile loop per controller type. High values mean the controller is slow to react to changes."
           },
           "plugin": {
             "kind": "TimeSeriesChart",
             "spec": {
-              "legend": {
-                "position": "bottom"
-              }
+              "legend": { "position": "bottom" },
+              "yAxis": { "format": { "unit": "seconds" } }
             }
           },
           "queries": [
@@ -369,7 +299,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m])))",
+                    "query": "histogram_quantile(0.95, sum by (le, controller) (rate(repo_guard_controller_reconcile_duration_seconds_bucket[5m]))) >= 0",
                     "seriesNameFormat": "{{controller}} p95"
                   }
                 }
@@ -382,7 +312,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🚫 Team Failures"
+            "name": "🚫 Teams in Failed State",
+            "description": "Number of GitHub teams that failed to sync. Any value above 0 requires attention."
           },
           "plugin": {
             "kind": "StatChart",
@@ -390,14 +321,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "red", "value": 1 }
                 ]
               }
             }
@@ -421,7 +346,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "⏳ Team Pending Ops"
+            "name": "⏳ Team Member Changes Waiting to Apply",
+            "description": "Pending team membership operations (add/remove members) not yet applied to GitHub."
           },
           "plugin": {
             "kind": "StatChart",
@@ -429,14 +355,8 @@
               "calculation": "last-number",
               "thresholds": {
                 "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
+                  { "color": "green", "value": 0 },
+                  { "color": "orange", "value": 1 }
                 ]
               }
             }
@@ -460,7 +380,8 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Org Operations (Teams, Repos, Members & Collaborators)"
+            "name": "🏢 GitHub Changes Applied Over Time (Teams, Repos, Members)",
+            "description": "Rate of completed operations: adding/removing teams, repos, and org members. A flat line means no changes are being applied."
           },
           "plugin": {
             "kind": "TimeSeriesChart",
@@ -477,7 +398,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos|orgmembers|repocollaborators\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
+                    "query": "sum by (scope, operation) (increase(repo_guard_githuborganization_operations{scope=~\"teams|repos|orgmembers\", state=\"complete\", github=~\"$github\", organization=~\"$org\"}[5m]))",
                     "seriesNameFormat": "{{scope}} {{operation}}"
                   }
                 }
@@ -490,28 +411,20 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "👥 Teams • Current Status"
+            "name": "👥 Teams Needing Attention (failed / rate-limited / pending)",
+            "description": "Teams currently in a non-healthy state. 'pending' means member changes are queued, 'ratelimited' means GitHub API quota was hit, 'failed' means sync errors occurred."
           },
           "plugin": {
             "kind": "Table",
             "spec": {
               "columnSettings": [
-                {
-                  "name": "value",
-                  "hide": true
-                },
-                {
-                  "name": "Value",
-                  "hide": true
-                },
-                {
-                  "name": "timestamp",
-                  "hide": true
-                },
-                {
-                  "name": "Time",
-                  "hide": true
-                }
+                { "name": "organization", "header": "Organization" },
+                { "name": "status", "header": "Status" },
+                { "name": "team", "header": "Team" },
+                { "name": "value", "hide": true },
+                { "name": "Value", "hide": true },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
               ]
             }
           },
@@ -534,28 +447,20 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "🏢 Organizations Status"
+            "name": "🏢 All Organizations — Last Known Status",
+            "description": "Most recent sync status for every managed organization over the selected time range."
           },
           "plugin": {
             "kind": "Table",
             "spec": {
               "columnSettings": [
-                {
-                  "name": "value",
-                  "hide": true
-                },
-                {
-                  "name": "Value",
-                  "hide": true
-                },
-                {
-                  "name": "timestamp",
-                  "hide": true
-                },
-                {
-                  "name": "Time",
-                  "hide": true
-                }
+                { "name": "github", "header": "GitHub" },
+                { "name": "organization", "header": "Organization" },
+                { "name": "status", "header": "Status" },
+                { "name": "value", "hide": true },
+                { "name": "Value", "hide": true },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
               ]
             }
           },
@@ -578,28 +483,20 @@
         "kind": "Panel",
         "spec": {
           "display": {
-            "name": "👥 Teams Status"
+            "name": "👥 All Teams — Last Known Status",
+            "description": "Most recent sync status for every managed team over the selected time range."
           },
           "plugin": {
             "kind": "Table",
             "spec": {
               "columnSettings": [
-                {
-                  "name": "value",
-                  "hide": true
-                },
-                {
-                  "name": "Value",
-                  "hide": true
-                },
-                {
-                  "name": "timestamp",
-                  "hide": true
-                },
-                {
-                  "name": "Time",
-                  "hide": true
-                }
+                { "name": "organization", "header": "Organization" },
+                { "name": "status", "header": "Status" },
+                { "name": "team", "header": "Team" },
+                { "name": "value", "hide": true },
+                { "name": "Value", "hide": true },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
               ]
             }
           },
@@ -621,10 +518,18 @@
       "managedTeams": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "🏢 Managed Teams" },
+          "display": { "name": "🏢 Teams Managed per Organization", "description": "Number of GitHub teams currently tracked per organization. Derived from active GithubTeam resources after filtering." },
           "plugin": {
-            "kind": "StatChart",
-            "spec": { "calculation": "last-number" }
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                { "name": "github", "header": "GitHub" },
+                { "name": "organization", "header": "Organization" },
+                { "name": "value", "header": "Teams" },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
+              ]
+            }
           },
           "queries": [
             {
@@ -632,7 +537,7 @@
               "spec": {
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
-                  "spec": { "query": "sum by (organization) (repo_guard_githuborganization_managed_teams_total{github=~\"$github\", organization=~\"$org\"})", "seriesNameFormat": "{{organization}}" }
+                  "spec": { "query": "sum by (github, organization) (repo_guard_githuborganization_managed_teams_total{github=~\"$github\", organization=~\"$org\"})" }
                 }
               }
             }
@@ -642,10 +547,19 @@
       "managedReposByVisibility": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "📁 Managed Repos by Visibility" },
+          "display": { "name": "📁 Repos Managed per Organization (by Visibility)", "description": "Number of GitHub repositories actively managed per organization, broken down by visibility (public, private, internal)." },
           "plugin": {
-            "kind": "BarChart",
-            "spec": {}
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                { "name": "github", "header": "GitHub" },
+                { "name": "organization", "header": "Organization" },
+                { "name": "visibility", "header": "Visibility" },
+                { "name": "value", "header": "Repos" },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
+              ]
+            }
           },
           "queries": [
             {
@@ -653,7 +567,7 @@
               "spec": {
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
-                  "spec": { "query": "sum by (organization, visibility) (repo_guard_githuborganization_managed_repos_total{github=~\"$github\", organization=~\"$org\"})", "seriesNameFormat": "{{organization}} / {{visibility}}" }
+                  "spec": { "query": "sum by (github, organization, visibility) (repo_guard_githuborganization_managed_repos_total{github=~\"$github\", organization=~\"$org\"})" }
                 }
               }
             }
@@ -663,10 +577,17 @@
       "managedMembers": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "👥 Managed Members" },
+          "display": { "name": "👥 Team Memberships per Organization (sum across teams)", "description": "Total managed team membership slots per organization, summed across all teams. Note: a user in multiple teams is counted once per team." },
           "plugin": {
-            "kind": "StatChart",
-            "spec": { "calculation": "last-number" }
+            "kind": "Table",
+            "spec": {
+              "columnSettings": [
+                { "name": "organization", "header": "Organization" },
+                { "name": "value", "header": "Members" },
+                { "name": "timestamp", "hide": true },
+                { "name": "Time", "hide": true }
+              ]
+            }
           },
           "queries": [
             {
@@ -674,7 +595,7 @@
               "spec": {
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
-                  "spec": { "query": "sum by (organization) (repo_guard_githubteam_managed_members_total{organization=~\"$org\"})", "seriesNameFormat": "{{organization}}" }
+                  "spec": { "query": "sum by (organization) (repo_guard_githubteam_managed_members_total{organization=~\"$org\"})" }
                 }
               }
             }
@@ -684,7 +605,10 @@
       "pendingOperationsTotal": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "⏳ Pending Operations Total" },
+          "display": {
+            "name": "⏳ Total Pending Operations Over Time",
+            "description": "How many changes are queued and waiting to be applied to GitHub, per organization over time. A sustained high value means the controller is falling behind."
+          },
           "plugin": {
             "kind": "TimeSeriesChart",
             "spec": { "legend": { "position": "bottom" } }
@@ -705,7 +629,10 @@
       "syncFailuresRate": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "🚫 Sync Failures Rate (org)" },
+          "display": {
+            "name": "🚫 Sync Failure Rate per Organization",
+            "description": "How often each organization's sync is failing, broken down by scope (overall, repos, owners). Any sustained non-zero value means repeated errors."
+          },
           "plugin": {
             "kind": "TimeSeriesChart",
             "spec": { "legend": { "position": "bottom" } }
@@ -726,7 +653,10 @@
       "rateLimitHits": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "🚦 Rate-Limit Hits" },
+          "display": {
+            "name": "🚦 GitHub Rate-Limit Hits Over Time",
+            "description": "How many times the controller was blocked by GitHub API rate limits, per controller type. Spikes indicate heavy API usage periods."
+          },
           "plugin": {
             "kind": "TimeSeriesChart",
             "spec": { "legend": { "position": "bottom" } }
@@ -747,11 +677,15 @@
       "rateLimitBackoffP95": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "⏱️ Rate-Limit Backoff p95" },
+          "display": {
+            "name": "⏱️ How Long Is the Controller Waiting After a Rate-Limit? (p95)",
+            "description": "95th percentile backoff duration after hitting GitHub API rate limits. Orange = >5 min wait, Red = >30 min wait."
+          },
           "plugin": {
             "kind": "StatChart",
             "spec": {
               "calculation": "last-number",
+              "format": { "unit": "seconds" },
               "thresholds": {
                 "steps": [
                   { "color": "green", "value": 0 },
@@ -789,146 +723,107 @@
             {
               "x": 0,
               "y": 0,
-              "width": 6,
+              "width": 5,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/orgFailures"
-              }
+              "content": { "$ref": "#/spec/panels/orgFailures" }
             },
             {
-              "x": 6,
+              "x": 5,
               "y": 0,
-              "width": 6,
+              "width": 5,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/orgPending"
-              }
+              "content": { "$ref": "#/spec/panels/orgPending" }
             },
             {
-              "x": 12,
+              "x": 10,
               "y": 0,
-              "width": 6,
+              "width": 5,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/teamFailures"
-              }
+              "content": { "$ref": "#/spec/panels/orgMemberPending" }
             },
             {
-              "x": 18,
+              "x": 15,
               "y": 0,
-              "width": 6,
+              "width": 5,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/teamPending"
-              }
+              "content": { "$ref": "#/spec/panels/teamFailures" }
+            },
+            {
+              "x": 20,
+              "y": 0,
+              "width": 4,
+              "height": 4,
+              "content": { "$ref": "#/spec/panels/teamPending" }
             },
             {
               "x": 0,
               "y": 4,
-              "width": 6,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/orgMemberPending"
-              }
+              "width": 12,
+              "height": 10,
+              "content": { "$ref": "#/spec/panels/orgsAttention" }
             },
             {
-              "x": 6,
+              "x": 12,
               "y": 4,
-              "width": 6,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/repoCollabPending"
-              }
+              "width": 12,
+              "height": 10,
+              "content": { "$ref": "#/spec/panels/teamsAttention" }
             },
             {
               "x": 0,
-              "y": 8,
+              "y": 14,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/orgsAttention"
-              }
+              "content": { "$ref": "#/spec/panels/peopleOps" }
             },
             {
               "x": 12,
-              "y": 8,
+              "y": 14,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/teamsAttention"
-              }
+              "content": { "$ref": "#/spec/panels/teamRepoOps" }
             },
             {
               "x": 0,
-              "y": 16,
-              "width": 12,
-              "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/peopleOps"
-              }
-            },
-            {
-              "x": 12,
-              "y": 16,
-              "width": 12,
-              "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/teamRepoOps"
-              }
-            },
-            {
-              "x": 0,
-              "y": 20,
+              "y": 22,
               "width": 6,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/apiAuthErrors"
-              }
+              "content": { "$ref": "#/spec/panels/apiAuthErrors" }
             },
             {
               "x": 6,
-              "y": 20,
+              "y": 22,
               "width": 6,
               "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/rateLimitStatus"
-              }
+              "content": { "$ref": "#/spec/panels/rateLimitStatus" }
             },
             {
               "x": 12,
-              "y": 20,
+              "y": 22,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/apiErrorRates"
-              }
+              "content": { "$ref": "#/spec/panels/apiErrorRates" }
             },
             {
               "x": 0,
-              "y": 24,
+              "y": 26,
               "width": 12,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/reconcileDuration"
-              }
+              "height": 8,
+              "content": { "$ref": "#/spec/panels/reconcileDuration" }
             },
             {
               "x": 0,
-              "y": 28,
+              "y": 34,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/orgsStatus"
-              }
+              "content": { "$ref": "#/spec/panels/orgsStatus" }
             },
             {
               "x": 12,
-              "y": 28,
+              "y": 34,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/teamsStatus"
-              }
+              "content": { "$ref": "#/spec/panels/teamsStatus" }
             }
           ]
         }
@@ -937,74 +832,60 @@
         "kind": "Grid",
         "spec": {
           "display": {
-            "title": "📊 Domain Metrics",
+            "title": "📦 Inventory — Managed Resources",
             "collapse": {
-              "open": true
+              "open": false
             }
           },
           "items": [
             {
               "x": 0,
               "y": 0,
-              "width": 6,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/managedTeams"
-              }
+              "width": 8,
+              "height": 8,
+              "content": { "$ref": "#/spec/panels/managedTeams" }
             },
             {
-              "x": 6,
+              "x": 8,
               "y": 0,
-              "width": 6,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/managedReposByVisibility"
-              }
+              "width": 8,
+              "height": 8,
+              "content": { "$ref": "#/spec/panels/managedReposByVisibility" }
             },
             {
-              "x": 12,
+              "x": 16,
               "y": 0,
-              "width": 6,
-              "height": 4,
-              "content": {
-                "$ref": "#/spec/panels/managedMembers"
-              }
+              "width": 8,
+              "height": 8,
+              "content": { "$ref": "#/spec/panels/managedMembers" }
             },
             {
               "x": 0,
-              "y": 4,
+              "y": 8,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/pendingOperationsTotal"
-              }
+              "content": { "$ref": "#/spec/panels/pendingOperationsTotal" }
             },
             {
               "x": 12,
-              "y": 4,
+              "y": 8,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/syncFailuresRate"
-              }
+              "content": { "$ref": "#/spec/panels/syncFailuresRate" }
             },
             {
               "x": 0,
-              "y": 12,
+              "y": 16,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/rateLimitHits"
-              }
+              "content": { "$ref": "#/spec/panels/rateLimitHits" }
             },
             {
               "x": 12,
-              "y": 12,
+              "y": 16,
               "width": 12,
               "height": 8,
-              "content": {
-                "$ref": "#/spec/panels/rateLimitBackoffP95"
-              }
+              "content": { "$ref": "#/spec/panels/rateLimitBackoffP95" }
             }
           ]
         }
