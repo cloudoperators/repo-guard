@@ -44,6 +44,7 @@ jobs:
           HELM_VERSION: v3.21.2
           KUBECTL_VERSION: v1.32.5
         run: |
+          set -o pipefail
           curl -sf "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" | TAG="${K3D_VERSION}" bash
           curl -sf "https://raw.githubusercontent.com/helm/helm/${HELM_VERSION}/scripts/get-helm-3" | DESIRED_VERSION="${HELM_VERSION}" bash
           curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
