@@ -15,6 +15,8 @@ on:
 jobs:
   cut-release:
     uses: cloudoperators/common/.github/workflows/shared-release.yaml@main
+    permissions:
+      contents: write
     with:
       bump: ${{ inputs.bump }}
       chart-path: charts/repo-guard/Chart.yaml
