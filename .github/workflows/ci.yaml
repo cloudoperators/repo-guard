@@ -48,6 +48,9 @@ jobs:
           curl -sf "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" | TAG="${K3D_VERSION}" bash
           curl -sf "https://raw.githubusercontent.com/helm/helm/${HELM_VERSION}/scripts/get-helm-3" | DESIRED_VERSION="${HELM_VERSION}" bash
           curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+          rm kubectl.sha256
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
           kubectl version --client
