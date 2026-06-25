@@ -39,16 +39,20 @@ jobs:
       - name: Install dependencies
         run: go mod download
       - name: Setup E2E Prerequisites (k3d, kubectl, helm, jq)
+        env:
+          K3D_VERSION: v5.9.0
+          HELM_VERSION: v3.21.2
+          KUBECTL_VERSION: v1.32.5
         run: |
-          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          curl -s "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" | TAG="${K3D_VERSION}" bash
+          curl -s "https://raw.githubusercontent.com/helm/helm/${HELM_VERSION}/scripts/get-helm-3" | DESIRED_VERSION="${HELM_VERSION}" bash
+          curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
           kubectl version --client
           helm version
           jq --version
-          echo "/usr/local/bin" >> $GITHUB_PATH
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
       - name: Run E2E Tests (mock GitHub)
         env:
           USE_MOCK_GITHUB: "true"
