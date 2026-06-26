@@ -20,6 +20,7 @@ jobs:
     with:
       bump: ${{ inputs.bump }}
       chart-path: charts/repo-guard/Chart.yaml
+      makefile-path: Makefile
       bump-make-version: true
       dispatch-greenhouse-extensions: true
       plugin-name: repo-guard
