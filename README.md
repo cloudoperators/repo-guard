@@ -1,6 +1,7 @@
 [![REUSE status](https://api.reuse.software/badge/github.com/cloudoperators/repo-guard)](https://api.reuse.software/info/github.com/cloudoperators/repo-guard)
 [![CI](https://github.com/cloudoperators/repo-guard/actions/workflows/ci.yaml/badge.svg)](https://github.com/cloudoperators/repo-guard/actions/workflows/ci.yaml)
 [![Nightly](https://github.com/cloudoperators/repo-guard/actions/workflows/nightly.yaml/badge.svg)](https://github.com/cloudoperators/repo-guard/actions/workflows/nightly.yaml)
+<!-- ci-validation -->
 # Repo Guard
 
 Repo Guard automates GitHub organization management using Kubernetes Custom Resources (CRDs).
