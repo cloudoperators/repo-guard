@@ -188,8 +188,8 @@ github.com/nmcclain/asn1-ber v0.0.0-20170104154839-2661553a0484 h1:D9EvfGQvlkKaD
 github.com/nmcclain/asn1-ber v0.0.0-20170104154839-2661553a0484/go.mod h1:O1EljZ+oHprtxDDPHiMWVo/5dBT6PlvWX5PSwj80aBA=
 github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba h1:DO8NFYdcRv1dnyAINJIBm6Bw2XibtLvQniNFGzf2W8E=
 github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba/go.mod h1:4S0XndRL8HNOaQBfdViJ2F/GPCgL524xlXRuXFH12/U=
-github.com/onsi/ginkgo/v2 v2.31.0 h1:GtuJos5DFUV9EerYJo8RhYxosYNGvOdDE5haKq6Grfs=
-github.com/onsi/ginkgo/v2 v2.31.0/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
+github.com/onsi/ginkgo/v2 v2.32.0 h1:Hw7s2pVrQo/8Yz5N77qdnpHaoc+c6cC9WIV1Jce+J6E=
+github.com/onsi/ginkgo/v2 v2.32.0/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.42.1 h1:iN1rCUX+44NZ1Dc97MPoeFYbFR0vh8zxoxMFwKdyZ6I=
 github.com/onsi/gomega v1.42.1/go.mod h1:REff/hsDsodHoKlWsP2mAPhu1+5/6hVYNf9rIEBpeSg=
 github.com/palantir/go-githubapp v0.45.0 h1:wVldKEz7ZNjbqcwlUUOuQW6SDTB4kyN1WaIOuMB8yaY=
