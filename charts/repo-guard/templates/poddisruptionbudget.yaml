@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+{{ if and .Values.manager.enabled .Values.manager.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "repo-guard.fullname" . }}-controller-manager
+  labels:
+    {{- include "repo-guard.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.manager.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      {{- include "repo-guard.selectorLabels" . | nindent 6 }}
+{{ end }}
