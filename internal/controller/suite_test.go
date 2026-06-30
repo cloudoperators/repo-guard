@@ -293,7 +293,7 @@ func startEnvtestWithRetry(env *envtest.Environment, attempts int, backoff time.
 	}
 
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for range attempts {
 		cfg, err := env.Start()
 		if err == nil && cfg != nil {
 			return cfg, nil

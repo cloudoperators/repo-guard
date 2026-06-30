@@ -38,12 +38,12 @@ func newTestTeamsProvider(t *testing.T) (*DefaultTeamsProvider, *http.ServeMux) 
 func TestTeamsProvider_List_EnterpriseFilter(t *testing.T) {
 	cases := []struct {
 		name      string
-		fixtures  []map[string]interface{}
+		fixtures  []map[string]any
 		wantTeams []string
 	}{
 		{
 			name: "enterprise team is excluded",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"id": 1, "name": "org-team", "slug": "org-team", "type": "organization"},
 				{"id": 2, "name": "enterprise-team", "slug": "enterprise-team", "type": "enterprise"},
 			},
@@ -51,14 +51,14 @@ func TestTeamsProvider_List_EnterpriseFilter(t *testing.T) {
 		},
 		{
 			name: "team without type field defaults to included",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"id": 1, "name": "regular-team", "slug": "regular-team"},
 			},
 			wantTeams: []string{"regular-team"},
 		},
 		{
 			name: "multiple enterprise teams are all excluded",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"id": 1, "name": "org-team-a", "slug": "org-team-a", "type": "organization"},
 				{"id": 2, "name": "ent-team-1", "slug": "ent-team-1", "type": "enterprise"},
 				{"id": 3, "name": "org-team-b", "slug": "org-team-b", "type": "organization"},
@@ -68,12 +68,12 @@ func TestTeamsProvider_List_EnterpriseFilter(t *testing.T) {
 		},
 		{
 			name:      "empty team list",
-			fixtures:  []map[string]interface{}{},
+			fixtures:  []map[string]any{},
 			wantTeams: []string{},
 		},
 		{
 			name: "all teams are enterprise — result is empty",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"id": 1, "name": "ent-only", "slug": "ent-only", "type": "enterprise"},
 			},
 			wantTeams: []string{},

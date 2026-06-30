@@ -154,7 +154,7 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 			Emails []githubv4.String `graphql:"organizationVerifiedDomainEmails(login: $org)"`
 		} `graphql:"user(login: $login)"`
 	}
-	vars := map[string]interface{}{
+	vars := map[string]any{
 		"login": githubv4.String(login),
 		"org":   githubv4.String(org),
 	}
