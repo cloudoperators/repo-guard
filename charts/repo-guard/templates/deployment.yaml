@@ -1,6 +1,9 @@
 # SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
+{{- if and .Values.manager.enabled (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection) }}
+  {{- fail "manager.leaderElection must be true when manager.replicas > 1 to prevent split-brain" }}
+{{- end }}
 {{ if .Values.manager.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -26,12 +29,18 @@ spec:
       annotations:
         kubectl.kubernetes.io/default-container: manager
     spec:
+      securityContext:
+        runAsNonRoot: true
       containers:
       - command:
         - /manager
         args:
         - --metrics-bind-address=:9443
         - --health-probe-bind-address=:8082
+        {{- if .Values.manager.leaderElection }}
+        - --leader-elect
+        - --leader-election-id={{ include "repo-guard.fullname" . }}
+        {{- end }}
         # - --namespace
         # - "$(NAMESPACE)"
         env:
@@ -63,6 +72,23 @@ spec:
           protocol: TCP
         resources: {{- toYaml .Values.manager.resources | nindent 10
           }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      {{- if .Values.manager.leaderElection }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  control-plane: controller-manager
+                  {{- include "repo-guard.selectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       serviceAccountName: {{ include "repo-guard.fullname" . }}-controller-manager
       terminationGracePeriodSeconds: 10
 {{ end }}

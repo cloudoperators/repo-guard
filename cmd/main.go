@@ -48,11 +48,15 @@ func main() {
 	var probeAddr string
 	var currentNamespace string
 	var maxConcurrentReconciles int
+	var leaderElect bool
+	var leaderElectionID string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8082", "The address the probe endpoint binds to.")
 	flag.StringVar(&currentNamespace, "namespace", "", "Current namespace so that manager will set as default namespace")
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 10, "The maximum number of concurrent Reconciles which can be run.")
+	flag.BoolVar(&leaderElect, "leader-elect", false, "Enable leader election for controller manager.")
+	flag.StringVar(&leaderElectionID, "leader-election-id", "repo-guard.cloudoperators.dev", "Name of the leader election Lease resource.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -76,7 +80,8 @@ func main() {
 		Metrics: server.Options{BindAddress: metricsAddr},
 
 		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         false,
+		LeaderElection:         leaderElect,
+		LeaderElectionID:       leaderElectionID,
 	}
 
 	if currentNamespace != "" {

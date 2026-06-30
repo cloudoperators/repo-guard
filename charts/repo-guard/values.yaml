@@ -5,6 +5,13 @@ manager:
   enabled: false
   image:
       repository: ghcr.io/cloudoperators/repo-guard
+  replicas: 1
+  # Enable leader election. Required when replicas > 1 to prevent race conditions.
+  leaderElection: false
+  # Resource recommendations based on typical load:
+  #   Single-org, low-churn:   requests: cpu=50m,  memory=256Mi  limits: cpu=500m,  memory=512Mi
+  #   Multi-org, active sync:  requests: cpu=100m, memory=512Mi  limits: cpu=1000m, memory=1Gi   (default)
+  #   High-load (>10 orgs):    requests: cpu=200m, memory=512Mi  limits: cpu=2000m, memory=2Gi
   resources:
     limits:
       cpu: 1000m
@@ -12,7 +19,10 @@ manager:
     requests:
       cpu: 100m
       memory: 512Mi
-  replicas: 1
+  # Pod Disruption Budget. Enable when replicas > 1 to protect availability during node maintenance.
+  pdb:
+    enabled: false
+    minAvailable: 1
 
 ## Global TTL defaults used by templates when org/team-specific overrides are not provided
 ttl:
