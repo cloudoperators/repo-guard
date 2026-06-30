@@ -13,6 +13,8 @@ concurrency:
 jobs:
   lint:
     uses: cloudoperators/common/.github/workflows/shared-go-lint.yaml@main
+    with:
+      enable-govulncheck: true
 
   test:
     uses: cloudoperators/common/.github/workflows/shared-go-test.yaml@main
