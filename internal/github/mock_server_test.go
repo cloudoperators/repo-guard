@@ -147,7 +147,7 @@ func TestMockResponseShapes(t *testing.T) {
 }
 
 // mustDecode is a test helper that decodes JSON into v, failing the test on error.
-func mustDecode(t *testing.T, raw string, v interface{}) {
+func mustDecode(t *testing.T, raw string, v any) {
 	t.Helper()
 	if err := json.NewDecoder(strings.NewReader(raw)).Decode(v); err != nil {
 		t.Fatalf("json decode into %T: %v", v, err)

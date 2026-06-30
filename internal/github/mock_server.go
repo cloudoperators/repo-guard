@@ -201,7 +201,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, map[string]interface{}{
+		writeJSON(w, map[string]any{
 			"login": org,
 			"id":    1,
 			"name":  org,
@@ -217,7 +217,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, map[string]interface{}{
+		writeJSON(w, map[string]any{
 			"id":   1,
 			"slug": "mock-app",
 			"name": "Mock GitHub App",
@@ -234,7 +234,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSONCreated(w, map[string]interface{}{
+		writeJSONCreated(w, map[string]any{
 			"token":      "mock-installation-token",
 			"expires_at": "2099-01-01T00:00:00Z",
 		})
@@ -278,7 +278,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			stateMu.Unlock()
 		}
-		result := make([]map[string]interface{}, 0, len(users))
+		result := make([]map[string]any, 0, len(users))
 		for _, u := range users {
 			result = append(result, userToMap(u))
 		}
@@ -320,7 +320,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, []interface{}{})
+		writeJSON(w, []any{})
 	})
 
 	// GET /api/v3/orgs/{org}/invitations  (pending org invitations)
@@ -329,7 +329,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, []interface{}{})
+		writeJSON(w, []any{})
 	})
 
 	// /api/v3/orgs/{org}/memberships/{user} — PUT to change role, GET to get membership
@@ -362,7 +362,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				orgMembers[strings.ToLower(username)] = u
 				stateMu.Unlock()
 			}
-			writeJSON(w, map[string]interface{}{"state": "active", "role": body.Role})
+			writeJSON(w, map[string]any{"state": "active", "role": body.Role})
 		case http.MethodGet:
 			stateMu.Lock()
 			_, isAdmin := orgAdmins[strings.ToLower(username)]
@@ -371,7 +371,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			if isAdmin {
 				role = "admin"
 			}
-			writeJSON(w, map[string]interface{}{"state": "active", "role": role})
+			writeJSON(w, map[string]any{"state": "active", "role": role})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -383,7 +383,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
+		writeJSON(w, map[string]any{"state": "active", "role": "member"})
 	})
 
 	// ---- teams ----
@@ -397,7 +397,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			snapshot := make([]MockTeam, len(teams))
 			copy(snapshot, teams)
 			stateMu.Unlock()
-			result := make([]map[string]interface{}, 0, len(snapshot))
+			result := make([]map[string]any, 0, len(snapshot))
 			for _, team := range snapshot {
 				result = append(result, teamToMap(team))
 			}
@@ -426,7 +426,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			nextTeamID++
 			teams = append(teams, MockTeam{ID: id, Name: body.Name, Slug: teamSlugNew})
 			stateMu.Unlock()
-			writeJSONCreated(w, map[string]interface{}{"id": id, "name": body.Name, "slug": teamSlugNew})
+			writeJSONCreated(w, map[string]any{"id": id, "name": body.Name, "slug": teamSlugNew})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -510,7 +510,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
-			result := make([]map[string]interface{}, 0, len(members))
+			result := make([]map[string]any, 0, len(members))
 			for _, u := range members {
 				result = append(result, userToMap(u))
 			}
@@ -532,7 +532,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				}
 				stateMu.Unlock()
 				if found {
-					writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
+					writeJSON(w, map[string]any{"state": "active", "role": "member"})
 				} else {
 					writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				}
@@ -556,7 +556,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					teamMembers[teamSlug] = append(teamMembers[teamSlug], u)
 				}
 				stateMu.Unlock()
-				writeJSON(w, map[string]interface{}{"state": "active", "role": "member"})
+				writeJSON(w, map[string]any{"state": "active", "role": "member"})
 			case http.MethodDelete:
 				stateMu.Lock()
 				var newList []MockUser
@@ -672,9 +672,9 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			snapshot := make([]MockRepo, len(repos))
 			copy(snapshot, repos)
 			stateMu.Unlock()
-			result := make([]map[string]interface{}, 0, len(snapshot))
+			result := make([]map[string]any, 0, len(snapshot))
 			for _, repo := range snapshot {
-				result = append(result, map[string]interface{}{
+				result = append(result, map[string]any{
 					"name":       repo.Name,
 					"private":    repo.repoVisibility() != "public",
 					"visibility": repo.repoVisibility(),
@@ -724,7 +724,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			}
 			repos = append(repos, MockRepo{Name: body.Name, Private: body.Private, Visibility: body.Visibility})
 			stateMu.Unlock()
-			writeJSONCreated(w, map[string]interface{}{
+			writeJSONCreated(w, map[string]any{
 				"name":       body.Name,
 				"private":    body.Private,
 				"visibility": body.Visibility,
@@ -762,7 +762,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
-			writeJSON(w, map[string]interface{}{
+			writeJSON(w, map[string]any{
 				"name":       repoSnapshot.Name,
 				"private":    repoSnapshot.repoVisibility() != "public",
 				"visibility": repoSnapshot.repoVisibility(),
@@ -795,9 +795,9 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			perms := make([]MockTeamWithPermission, len(teamRepoPerms[repoName]))
 			copy(perms, teamRepoPerms[repoName])
 			stateMu.Unlock()
-			result := make([]map[string]interface{}, 0, len(perms))
+			result := make([]map[string]any, 0, len(perms))
 			for _, tp := range perms {
-				result = append(result, map[string]interface{}{
+				result = append(result, map[string]any{
 					"id":         tp.ID,
 					"slug":       tp.Slug,
 					"name":       tp.Slug,
@@ -812,7 +812,7 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 				return
 			}
-			writeJSON(w, []interface{}{})
+			writeJSON(w, []any{})
 
 		// DELETE /api/v3/repos/{org}/{repo}/collaborators/{user}
 		case strings.HasPrefix(subPath, "collaborators/") && r.Method == http.MethodDelete:
@@ -884,8 +884,8 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 // userToMap converts a MockUser to a JSON-serialisable map with the field
 // shapes that go-github v85 expects.
-func userToMap(u MockUser) map[string]interface{} {
-	return map[string]interface{}{
+func userToMap(u MockUser) map[string]any {
+	return map[string]any{
 		"id":    u.ID,
 		"login": u.Login,
 		"type":  "User",
@@ -893,8 +893,8 @@ func userToMap(u MockUser) map[string]interface{} {
 }
 
 // teamToMap converts a MockTeam into the JSON map shape go-github expects.
-func teamToMap(team MockTeam) map[string]interface{} {
-	return map[string]interface{}{
+func teamToMap(team MockTeam) map[string]any {
+	return map[string]any{
 		"id":   team.ID,
 		"name": team.Name,
 		"slug": team.Slug,
@@ -912,7 +912,7 @@ func (r MockRepo) repoVisibility() string {
 	return "public"
 }
 
-func writeJSON(w http.ResponseWriter, v interface{}) {
+func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	// Encode errors are ignored: headers are already committed and we cannot
 	// send an error response at this point without corrupting the stream.
@@ -932,7 +932,7 @@ func writeJSONError(w http.ResponseWriter, body string, code int) {
 // Content-Type must be set before WriteHeader; this helper ensures correct ordering.
 // Encode errors are silently ignored because headers are already committed by the
 // time Encode writes the body and there is no way to signal the error to the client.
-func writeJSONCreated(w http.ResponseWriter, v interface{}) {
+func writeJSONCreated(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(v)

@@ -15,9 +15,9 @@ var OperatorNamespace = "repo-guard-greenhouse-system"
 
 type dummyAssert struct{}
 
-func (t dummyAssert) Errorf(string, ...interface{}) {}
+func (t dummyAssert) Errorf(string, ...any) {}
 
-func elementsMatch(listA, listB interface{}) bool {
+func elementsMatch(listA, listB any) bool {
 	return assert.ElementsMatch(dummyAssert{}, listA, listB)
 }
 

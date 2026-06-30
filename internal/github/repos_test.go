@@ -41,14 +41,14 @@ func newTestRepositoryProvider(t *testing.T) (*DefaultRepositoryProvider, *http.
 func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 	cases := []struct {
 		name         string
-		fixtures     []map[string]interface{}
+		fixtures     []map[string]any
 		wantPublic   []string
 		wantPrivate  []string
 		wantInternal []string
 	}{
 		{
 			name: "three-way split by visibility field",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "pub-repo", "private": false, "visibility": "public"},
 				{"name": "priv-repo", "private": true, "visibility": "private"},
 				{"name": "int-repo", "private": true, "visibility": "internal"},
@@ -59,7 +59,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name: "empty visibility falls back to private bool — private=true",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "legacy-private", "private": true, "visibility": ""},
 			},
 			wantPublic:   []string{},
@@ -68,7 +68,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name: "empty visibility falls back to private bool — private=false",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "legacy-public", "private": false, "visibility": ""},
 			},
 			wantPublic:   []string{"legacy-public"},
@@ -77,7 +77,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name: "unknown visibility skipped — not promoted to any bucket",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "mystery-repo", "private": false, "visibility": "unknown-future-value"},
 			},
 			wantPublic:   []string{},
@@ -86,7 +86,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name: "archived repo is excluded from all buckets",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "pub-repo", "private": false, "visibility": "public"},
 				{"name": "archived-repo", "private": false, "visibility": "public", "archived": true},
 			},
@@ -96,7 +96,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name: "disabled repo is excluded from all buckets",
-			fixtures: []map[string]interface{}{
+			fixtures: []map[string]any{
 				{"name": "priv-repo", "private": true, "visibility": "private"},
 				{"name": "disabled-repo", "private": true, "visibility": "private", "disabled": true},
 			},
@@ -106,7 +106,7 @@ func TestRepositoryProvider_List_VisibilityBuckets(t *testing.T) {
 		},
 		{
 			name:         "empty repo list",
-			fixtures:     []map[string]interface{}{},
+			fixtures:     []map[string]any{},
 			wantPublic:   []string{},
 			wantPrivate:  []string{},
 			wantInternal: []string{},
