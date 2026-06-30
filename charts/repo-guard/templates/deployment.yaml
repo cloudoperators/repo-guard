@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 # SPDX-License-Identifier: Apache-2.0
 
-{{- if and (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection) }}
+{{- if and .Values.manager.enabled (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection) }}
   {{- fail "manager.leaderElection must be true when manager.replicas > 1 to prevent split-brain" }}
 {{- end }}
 {{ if .Values.manager.enabled }}
