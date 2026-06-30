@@ -21,10 +21,17 @@ replacements = {
 # Optional multiline values written as heredoc blocks (e.g. PEM keys).
 # The existing placeholder line (KEY=...) is replaced with a heredoc so
 # gen-values.sh read_var_multiline can parse it correctly.
+def normalize_multiline(val):
+    """GitHub Actions injects multiline secrets with literal \\n sequences.
+    Normalize them to real newlines so PEM keys remain valid."""
+    if "\\n" in val:
+        val = val.replace("\\n", "\n")
+    return val.strip()
+
 multiline_replacements = {}
 private_key = os.environ.get("TEST_GITHUB_PRIVATE_KEY", "")
 if private_key:
-    multiline_replacements["GITHUB_PRIVATE_KEY"] = private_key
+    multiline_replacements["GITHUB_PRIVATE_KEY"] = normalize_multiline(private_key)
 
 lines = open(path).readlines()
 with open(path, "w") as f:
