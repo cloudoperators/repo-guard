@@ -46,17 +46,28 @@ jobs:
           HELM_VERSION: v3.21.2
           KUBECTL_VERSION: v1.32.5
         run: |
-          set -o pipefail
-          curl -sf "https://raw.githubusercontent.com/k3d-io/k3d/${K3D_VERSION}/install.sh" | TAG="${K3D_VERSION}" bash
-          curl -sf "https://raw.githubusercontent.com/helm/helm/${HELM_VERSION}/scripts/get-helm-3" | DESIRED_VERSION="${HELM_VERSION}" bash
+          set -euo pipefail
+          # k3d: download binary and verify checksum
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          echo "06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0  k3d-linux-amd64" | sha256sum --check
+          install k3d-linux-amd64 /usr/local/bin/k3d
+          rm k3d-linux-amd64
+          # Helm: download tarball and verify checksum
+          curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "0a745198de24545d0055cd8414bc8d2ba10363ef5f5d38369ea1b399671cc083  helm-${HELM_VERSION}-linux-amd64.tar.gz" | sha256sum --check
+          tar -zxf "helm-${HELM_VERSION}-linux-amd64.tar.gz" linux-amd64/helm
+          install linux-amd64/helm /usr/local/bin/helm
+          rm -rf "helm-${HELM_VERSION}-linux-amd64.tar.gz" linux-amd64
+          # kubectl: download binary and verify checksum
           curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
           curl -fLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
           echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
           rm kubectl.sha256
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
+          install kubectl /usr/local/bin/kubectl
+          rm kubectl
           kubectl version --client
           helm version
+          k3d version
           jq --version
           echo "/usr/local/bin" >> "$GITHUB_PATH"
       - name: Run E2E Tests (mock GitHub)
