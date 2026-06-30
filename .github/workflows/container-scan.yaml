@@ -4,7 +4,7 @@ on:
   release:
     types: [published]
   schedule:
-    # Run weekly on Monday at 03:00 UTC to catch new CVEs against the latest image
+    # Run weekly on Monday at 03:00 UTC to catch new CVEs against the current default branch source
     - cron: '0 3 * * 1'
   workflow_dispatch:
 
