@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Docs Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'internal/metrics/metrics.go'
+      - 'api/v1/**_types.go'
+      - 'charts/repo-guard/templates/prometheusrules.yaml'
+      - '.github/workflows/docs-lint.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'internal/metrics/metrics.go'
+      - 'api/v1/**_types.go'
+      - 'charts/repo-guard/templates/prometheusrules.yaml'
+      - '.github/workflows/docs-lint.yaml'
+
+jobs:
+  check-docs-coverage:
+    name: Docs coverage checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Check alert names are documented
+        run: |
+          set -euo pipefail
+          MISSING=0
+          while IFS= read -r alert; do
+            if ! grep -q "${alert}" docs/operations/metrics.md; then
+              echo "ERROR: Alert '${alert}' is defined in charts/repo-guard/templates/prometheusrules.yaml but missing from docs/operations/metrics.md"
+              MISSING=1
+            fi
+          done < <(grep 'alert:' charts/repo-guard/templates/prometheusrules.yaml | awk '/- alert:/{print $3}')
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "Add the missing alert(s) to docs/operations/metrics.md under the '## Alerting Rules' section."
+            exit 1
+          fi
+          echo "OK: all alert names are documented."
+
+      - name: Check metric names are documented
+        run: |
+          set -euo pipefail
+          MISSING=0
+          # Extract full metric names (namespace_subsystem_name) from metrics.go
+          while IFS= read -r metric; do
+            if ! grep -q "${metric}" docs/operations/metrics.md; then
+              echo "ERROR: Metric '${metric}' is registered in internal/metrics/metrics.go but missing from docs/operations/metrics.md"
+              MISSING=1
+            fi
+          done < <(python3 - <<'EOF'
+          import re
+          content = open("internal/metrics/metrics.go").read()
+          parts = re.findall(
+              r'Namespace:\s*"([^"]+)".*?Subsystem:\s*"([^"]+)".*?Name:\s*"([^"]+)"',
+              content, re.DOTALL
+          )
+          for ns, sub, name in parts:
+              print(f"{ns}_{sub}_{name}")
+          EOF
+          )
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "Add the missing metric(s) to docs/operations/metrics.md under '## Exported Metrics'."
+            exit 1
+          fi
+          echo "OK: all metric names are documented."
+
+      - name: Check GithubOrganizationSpec fields are documented
+        run: |
+          set -euo pipefail
+          MISSING=0
+          # Extract json field names from GithubOrganizationSpec (lines between the struct opening and first blank struct tag)
+          while IFS= read -r field; do
+            if ! grep -q "\`${field}\`" docs/crds/github-organization.md; then
+              echo "ERROR: GithubOrganizationSpec field '${field}' is defined in api/v1/githuborganization_types.go but missing from docs/crds/github-organization.md"
+              MISSING=1
+            fi
+          done < <(python3 - <<'EOF'
+          import re
+          content = open("api/v1/githuborganization_types.go").read()
+          # Extract json tag values from struct fields in GithubOrganizationSpec
+          spec_block = re.search(r'type GithubOrganizationSpec struct \{(.*?)\}', content, re.DOTALL)
+          if spec_block:
+              for m in re.finditer(r'json:"([^,"]+)', spec_block.group(1)):
+                  print(m.group(1))
+          EOF
+          )
+          if [ "$MISSING" -eq 1 ]; then
+            echo ""
+            echo "Add the missing field(s) to docs/crds/github-organization.md under '## Spec Fields'."
+            exit 1
+          fi
+          echo "OK: all GithubOrganizationSpec fields are documented."

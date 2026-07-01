@@ -107,6 +107,10 @@ This document provides context and guidelines for AI agents working on the `repo
 - [ ] Linting? `make lint` passes.
 - [ ] Testing? Added/updated unit tests and verified with `make controller-test`.
 - [ ] Commits? All commits are signed-off (`-s`).
+- [ ] Docs? If you changed any of the items below, update the corresponding doc page **in the same PR** or the `docs-lint` CI job will fail:
+  - `internal/metrics/metrics.go` (added/renamed metric) → update `docs/operations/metrics.md`
+  - `charts/repo-guard/templates/prometheusrules.yaml` (added/renamed alert) → update `docs/operations/metrics.md`
+  - `api/v1/githuborganization_types.go` `GithubOrganizationSpec` (added/renamed field) → update `docs/crds/github-organization.md`
 
 ## Key Directories
 
