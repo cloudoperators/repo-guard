@@ -7,11 +7,12 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ printf "%s-%s" $.Release.Name $path | replace ".json" "" | replace "/" "-" | trunc 63 }}
+  name: {{ printf "%s-%s" $.Release.Name $path | trimSuffix ".json" | replace "/" "-" | trunc 63 | trimSuffix "-" }}
   labels:
+    {{- include "repo-guard.labels" $ | nindent 4 }}
     perses.dev/resource: "true"
 data:
-{{ printf "%s: |-" $path | replace "/" "-" | indent 2 }}
+{{ printf "%s: |-" $path | replace "/" "-" | trimSuffix ".json" | indent 2 }}
 {{ printf "%s" $bytes | indent 4 }}
 {{- end }}
 {{- end }}
