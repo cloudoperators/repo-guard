@@ -191,7 +191,7 @@ var (
 			Name:      "graphql_calls_total",
 			Help:      "Total number of GitHub GraphQL API calls, by organization and result.",
 		},
-		[]string{"org", "result"},
+		[]string{"organization", "result"},
 	)
 
 	// ETag conditional-request counters (Track 2: #141)
@@ -202,7 +202,7 @@ var (
 			Name:      "etag_cache_hits_total",
 			Help:      "Total number of GitHub REST requests that returned HTTP 304 (ETag cache hit).",
 		},
-		[]string{"org", "endpoint"},
+		[]string{"organization", "endpoint"},
 	)
 
 	EtagCacheMissesTotal = prometheus.NewCounterVec(
@@ -212,7 +212,7 @@ var (
 			Name:      "etag_cache_misses_total",
 			Help:      "Total number of GitHub REST requests that returned HTTP 200 (ETag cache miss or first fetch).",
 		},
-		[]string{"org", "endpoint"},
+		[]string{"organization", "endpoint"},
 	)
 )
 
