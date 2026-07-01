@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/palantir/go-githubapp/githubapp"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -90,6 +91,7 @@ func (r *GithubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 	cfg := githubapp.Config{
 		WebURL:   github.Spec.WebURL,
 		V3APIURL: github.Spec.V3APIURL,
+		V4APIURL: deriveV4APIURL(github.Spec.V3APIURL),
 	}
 	cfg.App.IntegrationID = github.Spec.IntegrationID
 
@@ -165,4 +167,21 @@ func (r *GithubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&repoguardsapv1.Github{}).
 		Complete(r)
+}
+
+// deriveV4APIURL derives the GraphQL (v4) endpoint from the REST (v3) API URL.
+// For GHE:     https://ghe.example.com/api/v3/  → https://ghe.example.com/api/graphql
+// For github.com: https://api.github.com/        → https://api.github.com/graphql
+// Returns "" when v3 is empty so go-githubapp can apply its own defaults.
+func deriveV4APIURL(v3 string) string {
+	if v3 == "" {
+		return ""
+	}
+	if strings.HasSuffix(v3, "/api/v3/") {
+		return strings.TrimSuffix(v3, "/api/v3/") + "/api/graphql"
+	}
+	if strings.HasSuffix(v3, "/api/v3") {
+		return strings.TrimSuffix(v3, "/api/v3") + "/api/graphql"
+	}
+	return strings.TrimSuffix(v3, "/") + "/graphql"
 }

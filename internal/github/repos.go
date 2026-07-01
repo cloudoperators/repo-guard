@@ -7,16 +7,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	"github.com/google/go-github/v88/github"
 	"github.com/palantir/go-githubapp/githubapp"
+	githubv4 "github.com/shurcooL/githubv4"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	"github.com/google/go-github/v88/github"
+	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type RepositoryProvider interface {
 	List(ctx context.Context) ([]string, []string, []string, error)
 	ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
+	ExtendedListGraphQL(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error)
 	RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error)
 	RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error
 	RepositoryTeamRemove(ctx context.Context, repo, team string) error
@@ -29,10 +33,13 @@ type DefaultRepositoryProvider struct {
 	repositoryService github.RepositoriesService
 	teamsService      github.TeamsService
 	organization      string
+	githubName        string
+	graphqlClient     *githubv4.Client
+	cache             *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
-func NewRepositoryProvider(cc githubapp.ClientCreator, organization string, installationID int64) (RepositoryProvider, error) {
+func NewRepositoryProvider(cc githubapp.ClientCreator, githubName, organization string, installationID int64) (RepositoryProvider, error) {
 
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
@@ -49,7 +56,40 @@ func NewRepositoryProvider(cc githubapp.ClientCreator, organization string, inst
 	if organization == "" {
 		return nil, errors.New("organization name should not be empty")
 	}
-	return &DefaultRepositoryProvider{repositoryService: *client.Repositories, teamsService: *client.Teams, organization: organization}, nil
+
+	cache := getOrCreateOrgCache(githubName, organization)
+
+	// Build a cloned go-github client whose transport injects If-None-Match headers
+	// and captures ETag values from 200 responses for conditional GET caching.
+	baseHTTP := client.Client()
+	baseTransport := baseHTTP.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	etagHTTP := &http.Client{
+		Transport:     &etagTransport{wrapped: baseTransport, cache: cache, keyFn: urlCacheKey},
+		CheckRedirect: baseHTTP.CheckRedirect,
+		Jar:           baseHTTP.Jar,
+		Timeout:       baseHTTP.Timeout,
+	}
+	etagClient, err := client.Clone(github.WithHTTPClient(etagHTTP))
+	if err != nil {
+		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
+	}
+
+	gqlClient, err := cc.NewInstallationV4Client(installationID)
+	if err != nil {
+		return nil, fmt.Errorf("create installation v4 client: %w", err)
+	}
+
+	return &DefaultRepositoryProvider{
+		repositoryService: *etagClient.Repositories,
+		teamsService:      *client.Teams, // mutations don't benefit from ETag
+		organization:      organization,
+		githubName:        githubName,
+		graphqlClient:     gqlClient,
+		cache:             cache,
+	}, nil
 }
 
 func (t *DefaultRepositoryProvider) ExtendedList(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
@@ -164,12 +204,23 @@ type CollobaratorWithPermission struct {
 
 func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error) {
 
+	firstPageKey := fmt.Sprintf("/repos/%s/%s/teams?per_page=100", t.organization, repo)
 	opt := &github.ListOptions{PerPage: 100}
 
 	var allTeams []*github.Team
 	for {
 		teams, resp, err := t.repositoryService.ListTeams(ctx, t.organization, repo, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "repo-teams").Inc()
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]repoguardsapv1.GithubTeamWithPermission); ok {
+						return v, nil
+					}
+				}
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+			}
 			return nil, err
 		}
 		allTeams = append(allTeams, teams...)
@@ -193,6 +244,13 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 			perm = *t.Permission
 		}
 		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: slug, Permission: repoguardsapv1.GithubTeamPermission(perm)})
+	}
+
+	if t.cache != nil {
+		if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+			ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "repo-teams").Inc()
+			t.cache.set(firstPageKey, etag, teamWithPermissions)
+		}
 	}
 
 	return teamWithPermissions, nil
@@ -243,6 +301,11 @@ func (t *DefaultRepositoryProvider) RepositoryTeamRemove(ctx context.Context, re
 
 func (t *DefaultRepositoryProvider) RepositoryCollobarators(ctx context.Context, repo string) ([]string, error) {
 
+	// The ETag transport (injected at construction via NewRepositoryProvider) automatically
+	// injects If-None-Match on GETs and stores new ETags from 200 responses.
+	// On 304, go-github returns a non-nil *ErrorResponse; we retrieve the cached value.
+	firstPageKey := fmt.Sprintf("/repos/%s/%s/collaborators?per_page=100", t.organization, repo)
+
 	opt := &github.ListCollaboratorsOptions{
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
@@ -251,6 +314,16 @@ func (t *DefaultRepositoryProvider) RepositoryCollobarators(ctx context.Context,
 	for {
 		users, resp, err := t.repositoryService.ListCollaborators(ctx, t.organization, repo, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "repo-collaborators").Inc()
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]string); ok {
+						return v, nil
+					}
+				}
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+			}
 			return nil, err
 		}
 		allUsers = append(allUsers, users...)
@@ -273,14 +346,31 @@ func (t *DefaultRepositoryProvider) RepositoryCollobarators(ctx context.Context,
 		collobarators = append(collobarators, login)
 	}
 
+	// Store the parsed result under the first-page URL key so a future 304 can return it.
+	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "repo-collaborators").Inc()
+		t.cache.set(firstPageKey, etag, collobarators)
+	}
+
 	return collobarators, nil
 }
 
 func (t *DefaultRepositoryProvider) IsPrivate(ctx context.Context, repo string) (bool, error) {
 
-	r, response, err := t.repositoryService.Get(ctx, t.organization, repo)
+	repoKey := fmt.Sprintf("/repos/%s/%s", t.organization, repo)
 
+	r, response, err := t.repositoryService.Get(ctx, t.organization, repo)
 	if err != nil {
+		if response != nil && response.StatusCode == http.StatusNotModified {
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "repo-visibility").Inc()
+			if cached, ok := t.cache.getValue(repoKey); ok {
+				if v, ok := cached.(bool); ok {
+					return v, nil
+				}
+			}
+			t.cache.invalidate(repoKey)
+			return false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", repoKey)
+		}
 		return false, err
 	}
 	if response.StatusCode != 200 {
@@ -288,9 +378,12 @@ func (t *DefaultRepositoryProvider) IsPrivate(ctx context.Context, repo string) 
 	}
 
 	vis := r.GetVisibility()
-	if vis == "private" || vis == "internal" {
-		return true, nil
+	isPrivate := vis == "private" || vis == "internal"
+
+	if etag, ok := t.cache.getEtag(repoKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "repo-visibility").Inc()
+		t.cache.set(repoKey, etag, isPrivate)
 	}
 
-	return false, nil
+	return isPrivate, nil
 }

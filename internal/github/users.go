@@ -7,13 +7,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v88/github"
+	gogithub "github.com/google/go-github/v88/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
+
+	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type UsersProvider interface {
@@ -29,12 +32,15 @@ type UsersProvider interface {
 }
 
 type DefaultUsersProvider struct {
-	service github.UsersService
-	orgs    github.OrganizationsService
-	http    *github.Client // underlying go-github client to reuse its http.Client for GraphQL
+	service    gogithub.UsersService // ETag-wrapped: used by GithubUsernameByID / GithubIDByUsername
+	rawService gogithub.UsersService // plain client: used by IsMemberOfOrg / HasVerifiedEmailDomainForGithubUID
+	orgs       gogithub.OrganizationsService
+	http       *gogithub.Client // underlying go-github client to reuse its http.Client for GraphQL
+	githubName string
+	cache      *etagCache
 }
 
-func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersProvider, error) {
+func NewUsersProvider(cc githubapp.ClientCreator, githubName string, installationID int64) (UsersProvider, error) {
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
 		return nil, err
@@ -46,7 +52,35 @@ func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersPr
 		return nil, errors.New("empty organizations service")
 	}
 
-	return &DefaultUsersProvider{service: *client.Users, orgs: *client.Organizations, http: client}, nil
+	// Users lookups are not org-specific, but we still key the cache by GitHub instance
+	// so that separate GitHub instances (github.com vs GHE) never share ETags or user data.
+	cache := getOrCreateOrgCache(githubName, "__users__")
+
+	// Clone the client with an ETag transport for conditional GET caching.
+	baseHTTP := client.Client()
+	baseTransport := baseHTTP.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	etagHTTP := &http.Client{
+		Transport:     &etagTransport{wrapped: baseTransport, cache: cache, keyFn: urlCacheKey},
+		CheckRedirect: baseHTTP.CheckRedirect,
+		Jar:           baseHTTP.Jar,
+		Timeout:       baseHTTP.Timeout,
+	}
+	etagClient, err := client.Clone(gogithub.WithHTTPClient(etagHTTP))
+	if err != nil {
+		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
+	}
+
+	return &DefaultUsersProvider{
+		service:    *etagClient.Users,
+		rawService: *client.Users,
+		orgs:       *client.Organizations,
+		http:       client,
+		githubName: githubName,
+		cache:      cache,
+	}, nil
 }
 
 // GithubUsernameByID returns the GitHub login for a given GitHub user ID.
@@ -58,34 +92,68 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 		return "", false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", id, err)
 	}
 
+	userKey := fmt.Sprintf("/user/%s", id)
+
 	// fetch the user by ID
 	user, resp, err := u.service.GetByID(context.Background(), userID)
 	if err != nil {
-		// if not found, return found=false
 		if resp != nil && resp.StatusCode == 404 {
 			return "", false, nil
+		}
+		if resp != nil && resp.StatusCode == http.StatusNotModified {
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues(u.githubName, "__users__", "user-by-id").Inc()
+			if cached, ok := u.cache.getValue(userKey); ok {
+				if v, ok := cached.(string); ok {
+					return v, v != "", nil
+				}
+			}
+			u.cache.invalidate(userKey)
+			return "", false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", userKey)
 		}
 		return "", false, err
 	}
 
-	return user.GetLogin(), true, nil
+	login := user.GetLogin()
+	if etag, ok := u.cache.getEtag(userKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(u.githubName, "__users__", "user-by-id").Inc()
+		u.cache.set(userKey, etag, login)
+	}
+
+	return login, true, nil
 }
 
 // GithubIDByUsername returns the GitHub user ID string for a given login.
 // It returns (id, found, error).
 func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool, error) {
+	loginKey := fmt.Sprintf("/users/%s", username)
+
 	// fetch the user by login name
 	user, resp, err := u.service.Get(context.Background(), username)
 	if err != nil {
-		// if not found, return found=false
 		if resp != nil && resp.StatusCode == 404 {
 			return "", false, nil
+		}
+		if resp != nil && resp.StatusCode == http.StatusNotModified {
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues(u.githubName, "__users__", "user-by-login").Inc()
+			if cached, ok := u.cache.getValue(loginKey); ok {
+				if v, ok := cached.(string); ok {
+					return v, v != "", nil
+				}
+			}
+			u.cache.invalidate(loginKey)
+			return "", false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", loginKey)
 		}
 		return "", false, err
 	}
 
 	// convert numeric ID to string
-	return strconv.FormatInt(user.GetID(), 10), true, nil
+	idStr := strconv.FormatInt(user.GetID(), 10)
+	if etag, ok := u.cache.getEtag(loginKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(u.githubName, "__users__", "user-by-login").Inc()
+		u.cache.set(loginKey, etag, idStr)
+	}
+
+	return idStr, true, nil
 }
 
 func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, uid string) (bool, error) {
@@ -93,7 +161,7 @@ func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, ui
 	if err != nil {
 		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
-	user, resp, err := u.service.GetByID(ctx, userID)
+	user, resp, err := u.rawService.GetByID(ctx, userID)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return false, nil
@@ -130,7 +198,7 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 	if err != nil {
 		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
-	user, resp, err := u.service.GetByID(ctx, userID)
+	user, resp, err := u.rawService.GetByID(ctx, userID)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return false, nil

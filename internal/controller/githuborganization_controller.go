@@ -356,19 +356,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return reconcile.Result{RequeueAfter: time.Second}, nil
 	}
 
-	reposProvider, err := github.NewRepositoryProvider(githubClient, githubOrganizationName, githubOrganization.Spec.InstallationID)
+	reposProvider, err := github.NewRepositoryProvider(githubClient, githubName, githubOrganizationName, githubOrganization.Spec.InstallationID)
 	if err != nil {
 		l.Error(err, "error during creating the repository provider")
 		return reconcile.Result{}, err
 	}
 
-	organizationsProvider, err := github.NewOrganizationProvider(githubClient, githubOrganizationName, githubOrganization.Spec.InstallationID)
+	organizationsProvider, err := github.NewOrganizationProvider(githubClient, githubName, githubOrganizationName, githubOrganization.Spec.InstallationID)
 	if err != nil {
 		l.Error(err, "error during creating the organizations provider")
 		return reconcile.Result{}, err
 	}
 
-	teamsProvider, err := github.NewTeamsProvider(githubClient, githubOrganizationName, githubOrganization.Spec.InstallationID)
+	teamsProvider, err := github.NewTeamsProvider(githubClient, githubName, githubOrganizationName, githubOrganization.Spec.InstallationID)
 	if err != nil {
 		l.Error(err, "error during creating the teams provider")
 		return reconcile.Result{}, err
@@ -474,7 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, nil
 		}
 
-		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedList(ctx)
+		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedListGraphQL(ctx)
 		if err != nil {
 			l.Error(err, "error listing repositories from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {

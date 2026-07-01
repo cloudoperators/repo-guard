@@ -224,7 +224,7 @@ func main() {
 	}
 
 	// Create UsersProvider and run the check
-	usersProvider, err := ghusers.NewUsersProvider(cc, installationID)
+	usersProvider, err := ghusers.NewUsersProvider(cc, webURL, installationID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create users provider: %v\n", err)
 		os.Exit(6)

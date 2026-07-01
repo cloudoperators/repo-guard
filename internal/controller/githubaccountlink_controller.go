@@ -173,7 +173,7 @@ func (r *GithubAccountLinkReconciler) Reconcile(ctx context.Context, req ctrl.Re
 					minRequeueAfter = 10 * time.Second
 				}
 			} else {
-				usersProvider, err := github.NewUsersProvider(githubClient, installationID)
+				usersProvider, err := github.NewUsersProvider(githubClient, githubName, installationID)
 				if err != nil {
 					l.Error(err, "error during creating the users provider")
 					return ctrl.Result{}, err

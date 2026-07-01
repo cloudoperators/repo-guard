@@ -7,30 +7,34 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	gogithub "github.com/google/go-github/v88/github"
 	"github.com/palantir/go-githubapp/githubapp"
 
-	"github.com/google/go-github/v88/github"
+	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type OrganizationProvider interface {
 	Owners(ctx context.Context) ([]string, error)
 	OwnersExtended(ctx context.Context) ([]GithubMember, error)
 	Members(ctx context.Context) ([]string, error)
-	ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error)
+	ExtendedMembers(ctx context.Context) ([]*gogithub.User, []*gogithub.User, error)
 	ChangeToOwner(ctx context.Context, user string) error
 	ChangeToMember(ctx context.Context, user string) error
 	RemoveFromOrg(ctx context.Context, user string) error
 }
 
 type DefaultOrganizationProvider struct {
-	organizationService github.OrganizationsService
-	usersService        github.UsersService
+	organizationService gogithub.OrganizationsService
+	usersService        gogithub.UsersService
 	organization        string
+	githubName          string
+	cache               *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
-func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, installationID int64) (OrganizationProvider, error) {
+func NewOrganizationProvider(cc githubapp.ClientCreator, githubName, organization string, installationID int64) (OrganizationProvider, error) {
 
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
@@ -46,13 +50,41 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 	if organization == "" {
 		return nil, errors.New("organization name should not be empty")
 	}
-	return &DefaultOrganizationProvider{organizationService: *client.Organizations, usersService: *client.Users, organization: organization}, nil
+
+	cache := getOrCreateOrgCache(githubName, organization)
+
+	// Clone the client with an ETag transport for conditional GET caching.
+	baseHTTP := client.Client()
+	baseTransport := baseHTTP.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	etagHTTP := &http.Client{
+		Transport:     &etagTransport{wrapped: baseTransport, cache: cache, keyFn: urlCacheKey},
+		CheckRedirect: baseHTTP.CheckRedirect,
+		Jar:           baseHTTP.Jar,
+		Timeout:       baseHTTP.Timeout,
+	}
+	etagClient, err := client.Clone(gogithub.WithHTTPClient(etagHTTP))
+	if err != nil {
+		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
+	}
+
+	return &DefaultOrganizationProvider{
+		organizationService: *etagClient.Organizations,
+		usersService:        *client.Users, // user lookups use the original client
+		organization:        organization,
+		githubName:          githubName,
+		cache:               cache,
+	}, nil
 }
 
 func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) ([]string, error) {
 
-	opt := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	firstPageKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+
+	opt := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        role,
 	}
 
@@ -60,6 +92,16 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members").Inc()
+				if cached, ok := o.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]string); ok {
+						return v, nil
+					}
+				}
+				o.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+			}
 			return nil, err
 		}
 		for _, member := range users {
@@ -78,13 +120,24 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 		opt.Page = resp.NextPage
 	}
 
+	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members").Inc()
+		o.cache.set(firstPageKey, etag, memberList)
+	}
+
 	return memberList, nil
 }
 
 func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role string) ([]GithubMember, error) {
 
-	opt := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	// etagKey matches the URL used by the transport for If-None-Match injection.
+	// valueKey has a "#ext" suffix to avoid colliding with the members() cache entry
+	// for the same URL, which stores []string (different type).
+	etagKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+	valueKey := etagKey + "#ext"
+
+	opt := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        role,
 	}
 
@@ -92,6 +145,19 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-ext").Inc()
+				if cached, ok := o.cache.getValue(valueKey); ok {
+					if v, ok := cached.([]GithubMember); ok {
+						return v, nil
+					}
+				}
+				// Invalidate both the value key and the ETag key so the transport
+				// stops injecting If-None-Match and forces a fresh 200 on the next call.
+				o.cache.invalidate(valueKey)
+				o.cache.invalidate(etagKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", valueKey)
+			}
 			return nil, err
 		}
 		for _, m := range users {
@@ -104,6 +170,11 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 			break
 		}
 		opt.Page = resp.NextPage
+	}
+
+	if etag, ok := o.cache.getEtag(etagKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-ext").Inc()
+		o.cache.set(valueKey, etag, result)
 	}
 
 	return result, nil
@@ -130,7 +201,8 @@ func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]Git
 // ListMembers only returns active members, so without this, users whose invite is still pending
 // are invisible to OwnersExtended and get re-invited on every reconcile.
 func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) ([]GithubMember, error) {
-	opt := &github.ListOptions{PerPage: 100}
+	firstPageKey := fmt.Sprintf("/orgs/%s/invitations?per_page=100", o.organization)
+	opt := &gogithub.ListOptions{PerPage: 100}
 
 	result := make([]GithubMember, 0)
 	for {
@@ -140,6 +212,16 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 			// 404 as "no pending invitations" so reconciliation is not blocked.
 			if resp != nil && resp.StatusCode == 404 {
 				return result, nil
+			}
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-invitations").Inc()
+				if cached, ok := o.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]GithubMember); ok {
+						return v, nil
+					}
+				}
+				o.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -166,20 +248,39 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 		opt.Page = resp.NextPage
 	}
 
+	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-invitations").Inc()
+		o.cache.set(firstPageKey, etag, result)
+	}
+
 	return result, nil
 }
 
-func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error) {
+func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*gogithub.User, []*gogithub.User, error) {
 
-	optMfa := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	mfaKey := fmt.Sprintf("/orgs/%s/members?filter=2fa_disabled&per_page=100&role=all", o.organization)
+	allKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=all", o.organization)
+
+	optMfa := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        "all",
 		Filter:      "2fa_disabled",
 	}
-	mfadisabled := make([]*github.User, 0)
+	mfadisabled := make([]*gogithub.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optMfa)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-2fa").Inc()
+				if cached, ok := o.cache.getValue(mfaKey); ok {
+					if v, ok := cached.([]*gogithub.User); ok {
+						mfadisabled = v
+						break
+					}
+				}
+				o.cache.invalidate(mfaKey)
+				return nil, nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", mfaKey)
+			}
 			return nil, nil, err
 		}
 		mfadisabled = append(mfadisabled, users...)
@@ -188,15 +289,30 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		}
 		optMfa.Page = resp.NextPage
 	}
+	if etag, ok := o.cache.getEtag(mfaKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-2fa").Inc()
+		o.cache.set(mfaKey, etag, mfadisabled)
+	}
 
-	optAll := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	optAll := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        "all",
 	}
-	allMembers := make([]*github.User, 0)
+	allMembers := make([]*gogithub.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optAll)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-all").Inc()
+				if cached, ok := o.cache.getValue(allKey); ok {
+					if v, ok := cached.([]*gogithub.User); ok {
+						allMembers = v
+						break
+					}
+				}
+				o.cache.invalidate(allKey)
+				return nil, nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", allKey)
+			}
 			return nil, nil, err
 		}
 		allMembers = append(allMembers, users...)
@@ -204,6 +320,10 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 			break
 		}
 		optAll.Page = resp.NextPage
+	}
+	if etag, ok := o.cache.getEtag(allKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-all").Inc()
+		o.cache.set(allKey, etag, allMembers)
 	}
 
 	return allMembers, mfadisabled, nil
@@ -216,7 +336,7 @@ func (o *DefaultOrganizationProvider) Members(ctx context.Context) ([]string, er
 
 func (o *DefaultOrganizationProvider) changeRole(ctx context.Context, user string, role string) error {
 
-	membership := &github.Membership{}
+	membership := &gogithub.Membership{}
 	membership.Role = &role
 
 	_, response, err := o.organizationService.EditOrgMembership(ctx, user, o.organization, membership)
