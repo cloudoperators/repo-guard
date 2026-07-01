@@ -189,7 +189,7 @@ var (
 			Namespace: "repo_guard",
 			Subsystem: "github",
 			Name:      "graphql_calls_total",
-			Help:      "Total number of GitHub GraphQL API calls, by github instance, organization and result.",
+			Help:      "Total number of GitHub GraphQL API calls made by ExtendedListGraphQL (repo bulk fetch), by github instance, organization and result.",
 		},
 		[]string{"github", "organization", "result"},
 	)
@@ -210,7 +210,7 @@ var (
 			Namespace: "repo_guard",
 			Subsystem: "github",
 			Name:      "etag_cache_misses_total",
-			Help:      "Total number of GitHub REST requests that returned HTTP 200 (ETag cache miss or first fetch).",
+			Help:      "Total number of GitHub REST requests that returned HTTP 200 with a cacheable ETag (cache miss or first fetch).",
 		},
 		[]string{"github", "organization", "endpoint"},
 	)
