@@ -13,9 +13,56 @@ import (
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
-// orgReposWithTeamsQuery is the GraphQL query struct for fetching all organisation
-// repositories and their associated team permissions in a single paginated request.
-type orgReposWithTeamsQuery struct {
+// orgTeamsWithReposQuery is the GraphQL query struct for fetching all organisation
+// teams and their associated repository permissions. GitHub's GraphQL API does not
+// expose a `teams` field on the Repository type; the traversal must go the other
+// way: organisation → teams → repositories.
+type orgTeamsWithReposQuery struct {
+	Organization struct {
+		Teams struct {
+			PageInfo struct {
+				HasNextPage githubv4.Boolean
+				EndCursor   githubv4.String
+			}
+			Nodes []struct {
+				Slug         githubv4.String
+				Repositories struct {
+					PageInfo struct {
+						HasNextPage githubv4.Boolean
+						EndCursor   githubv4.String
+					}
+					Edges []struct {
+						Permission githubv4.String
+						Node       struct{ Name githubv4.String }
+					}
+				} `graphql:"repositories(first: 100, after: $repoCursor, orderBy: {field: NAME, direction: ASC})"`
+			}
+		} `graphql:"teams(first: 100, after: $teamCursor)"`
+	} `graphql:"organization(login: $org)"`
+}
+
+// teamReposQuery is the GraphQL query struct for fetching repositories of a
+// single team. Used as a fallback when a team has more than 100 repositories.
+type teamReposQuery struct {
+	Organization struct {
+		Team struct {
+			Repositories struct {
+				PageInfo struct {
+					HasNextPage githubv4.Boolean
+					EndCursor   githubv4.String
+				}
+				Edges []struct {
+					Permission githubv4.String
+					Node       struct{ Name githubv4.String }
+				}
+			} `graphql:"repositories(first: 100, after: $repoCursor, orderBy: {field: NAME, direction: ASC})"`
+		} `graphql:"team(slug: $teamSlug)"`
+	} `graphql:"organization(login: $org)"`
+}
+
+// orgReposQuery is the GraphQL query struct for fetching all organisation
+// repositories with their metadata (name, visibility, archived, disabled).
+type orgReposQuery struct {
 	Organization struct {
 		Repositories struct {
 			PageInfo struct {
@@ -27,16 +74,6 @@ type orgReposWithTeamsQuery struct {
 				Visibility githubv4.String
 				IsArchived githubv4.Boolean
 				IsDisabled githubv4.Boolean
-				Teams      struct {
-					PageInfo struct {
-						HasNextPage githubv4.Boolean
-						EndCursor   githubv4.String
-					}
-					Edges []struct {
-						Permission githubv4.String
-						Node       struct{ Slug githubv4.String }
-					}
-				} `graphql:"teams(first: 100, after: $teamCursor)"`
 			}
 		} `graphql:"repositories(first: 100, after: $repoCursor, orderBy: {field: NAME, direction: ASC})"`
 	} `graphql:"organization(login: $org)"`
@@ -63,26 +100,127 @@ func graphqlPermissionToTeamPermission(p string) repoguardsapv1.GithubTeamPermis
 	}
 }
 
+// buildRepoTeamsMap fetches all organisation teams and their repositories via
+// GraphQL and returns a map of repository name → team permissions.
+// Teams with more than 100 repositories fall back to a dedicated single-team
+// query so that the repoCursor is scoped to that team only.
+func (t *DefaultRepositoryProvider) buildRepoTeamsMap(ctx context.Context) (map[string][]repoguardsapv1.GithubTeamWithPermission, error) {
+	repoTeams := make(map[string][]repoguardsapv1.GithubTeamWithPermission)
+
+	var teamCursor *githubv4.String
+	for {
+		var query orgTeamsWithReposQuery
+		vars := map[string]any{
+			"org":        githubv4.String(t.organization),
+			"teamCursor": teamCursor,
+			"repoCursor": (*githubv4.String)(nil),
+		}
+
+		if err := t.graphqlClient.Query(ctx, &query, vars); err != nil {
+			ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "error").Inc()
+			return nil, err
+		}
+		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "success").Inc()
+
+		for _, team := range query.Organization.Teams.Nodes {
+			slug := string(team.Slug)
+			if slug == "" {
+				continue
+			}
+
+			for _, edge := range team.Repositories.Edges {
+				repoName := string(edge.Node.Name)
+				if repoName == "" {
+					continue
+				}
+				perm := graphqlPermissionToTeamPermission(string(edge.Permission))
+				repoTeams[repoName] = append(repoTeams[repoName], repoguardsapv1.GithubTeamWithPermission{
+					Team:       slug,
+					Permission: perm,
+				})
+			}
+
+			// Rare edge case: team has >100 repos. Use a dedicated single-team
+			// query so the repoCursor applies only to this team.
+			if bool(team.Repositories.PageInfo.HasNextPage) {
+				if err := t.fetchRemainingTeamRepos(ctx, slug, team.Repositories.PageInfo.EndCursor, repoTeams); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		if !bool(query.Organization.Teams.PageInfo.HasNextPage) {
+			break
+		}
+		cursor := query.Organization.Teams.PageInfo.EndCursor
+		teamCursor = &cursor
+	}
+
+	return repoTeams, nil
+}
+
+// fetchRemainingTeamRepos paginates through the remaining repositories for a
+// single team (slug) starting from afterCursor, appending results to repoTeams.
+func (t *DefaultRepositoryProvider) fetchRemainingTeamRepos(ctx context.Context, slug string, afterCursor githubv4.String, repoTeams map[string][]repoguardsapv1.GithubTeamWithPermission) error {
+	cursor := afterCursor
+	for {
+		var query teamReposQuery
+		vars := map[string]any{
+			"org":        githubv4.String(t.organization),
+			"teamSlug":   githubv4.String(slug),
+			"repoCursor": &cursor,
+		}
+		if err := t.graphqlClient.Query(ctx, &query, vars); err != nil {
+			ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "error").Inc()
+			return err
+		}
+		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "success").Inc()
+
+		for _, edge := range query.Organization.Team.Repositories.Edges {
+			repoName := string(edge.Node.Name)
+			if repoName == "" {
+				continue
+			}
+			perm := graphqlPermissionToTeamPermission(string(edge.Permission))
+			repoTeams[repoName] = append(repoTeams[repoName], repoguardsapv1.GithubTeamWithPermission{
+				Team:       slug,
+				Permission: perm,
+			})
+		}
+
+		if !bool(query.Organization.Team.Repositories.PageInfo.HasNextPage) {
+			break
+		}
+		cursor = query.Organization.Team.Repositories.PageInfo.EndCursor
+	}
+	return nil
+}
+
 // ExtendedListGraphQL fetches all organisation repositories and their team permissions
-// using a single paginated GraphQL query instead of N+1 REST calls.
-// For 300 repositories this reduces ~303 REST calls to 3–4 GraphQL calls per reconcile.
+// using GraphQL queries instead of N+1 REST calls.
+// For 300 repositories this significantly reduces REST API consumption per reconcile.
 //
 // Repos that are archived or disabled are excluded (same semantics as List/ExtendedList).
-// If a repository has more than 100 teams (extremely rare), the method falls back to a
-// REST call for that specific repository only.
+// Team permissions are gathered by traversing organisation → teams → repositories, since
+// GitHub's GraphQL API does not expose a `teams` field on the Repository type.
 func (t *DefaultRepositoryProvider) ExtendedListGraphQL(ctx context.Context) ([]repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, []repoguardsapv1.GithubRepository, error) {
+	// Step 1: build a map of repo name → teams from the teams side.
+	repoTeams, err := t.buildRepoTeamsMap(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	publicRepos := make([]repoguardsapv1.GithubRepository, 0)
 	privateRepos := make([]repoguardsapv1.GithubRepository, 0)
 	internalRepos := make([]repoguardsapv1.GithubRepository, 0)
 
-	var repoCursor *githubv4.String // nil = first page
-
+	// Step 2: list all repositories with their metadata.
+	var repoCursor *githubv4.String
 	for {
-		var query orgReposWithTeamsQuery
+		var query orgReposQuery
 		vars := map[string]any{
 			"org":        githubv4.String(t.organization),
 			"repoCursor": repoCursor,
-			"teamCursor": (*githubv4.String)(nil),
 		}
 
 		if err := t.graphqlClient.Query(ctx, &query, vars); err != nil {
@@ -100,27 +238,9 @@ func (t *DefaultRepositoryProvider) ExtendedListGraphQL(ctx context.Context) ([]
 				continue
 			}
 
-			var teams []repoguardsapv1.GithubTeamWithPermission
-			if bool(node.Teams.PageInfo.HasNextPage) {
-				// Rare edge case: repo has >100 teams. Fall back to REST for this repo.
-				var err error
-				teams, err = t.RepositoryTeams(ctx, name)
-				if err != nil {
-					return nil, nil, nil, err
-				}
-			} else {
-				teams = make([]repoguardsapv1.GithubTeamWithPermission, 0, len(node.Teams.Edges))
-				for _, edge := range node.Teams.Edges {
-					slug := string(edge.Node.Slug)
-					if slug == "" {
-						continue
-					}
-					perm := graphqlPermissionToTeamPermission(string(edge.Permission))
-					teams = append(teams, repoguardsapv1.GithubTeamWithPermission{
-						Team:       slug,
-						Permission: perm,
-					})
-				}
+			teams := repoTeams[name] // nil → empty slice is fine
+			if teams == nil {
+				teams = []repoguardsapv1.GithubTeamWithPermission{}
 			}
 
 			repo := repoguardsapv1.GithubRepository{Name: name, Teams: teams}
