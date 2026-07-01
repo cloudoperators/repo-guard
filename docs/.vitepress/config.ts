@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'Repo Guard',
   description: 'Kubernetes operator for automated GitHub organization management',
   base: '/repo-guard/',
@@ -59,4 +60,4 @@ export default defineConfig({
       copyright: 'Copyright © 2025 SAP SE or an SAP affiliate company and repo-guard contributors.',
     },
   },
-})
+}))
