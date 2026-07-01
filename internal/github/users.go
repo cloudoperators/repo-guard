@@ -52,7 +52,7 @@ func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersPr
 	}
 
 	// Users provider uses a shared cache keyed by "users" since it's not org-specific.
-	cache := getOrCreateOrgCache("__users__")
+	cache := getOrCreateOrgCache("__users__", "__users__")
 
 	// Clone the client with an ETag transport for conditional GET caching.
 	baseHTTP := client.Client()
@@ -98,7 +98,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "user-by-id").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "__users__", "user-by-id").Inc()
 			if cached, ok := u.cache.getValue(userKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -112,7 +112,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 
 	login := user.GetLogin()
 	if etag, ok := u.cache.getEtag(userKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "user-by-id").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "__users__", "user-by-id").Inc()
 		u.cache.set(userKey, etag, login)
 	}
 
@@ -131,7 +131,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "user-by-login").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "__users__", "user-by-login").Inc()
 			if cached, ok := u.cache.getValue(loginKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -146,7 +146,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 	// convert numeric ID to string
 	idStr := strconv.FormatInt(user.GetID(), 10)
 	if etag, ok := u.cache.getEtag(loginKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "user-by-login").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "__users__", "user-by-login").Inc()
 		u.cache.set(loginKey, etag, idStr)
 	}
 

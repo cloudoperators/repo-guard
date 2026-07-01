@@ -29,11 +29,12 @@ type DefaultOrganizationProvider struct {
 	organizationService gogithub.OrganizationsService
 	usersService        gogithub.UsersService
 	organization        string
+	githubName          string
 	cache               *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
-func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, installationID int64) (OrganizationProvider, error) {
+func NewOrganizationProvider(cc githubapp.ClientCreator, githubName, organization string, installationID int64) (OrganizationProvider, error) {
 
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
@@ -50,7 +51,7 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 		return nil, errors.New("organization name should not be empty")
 	}
 
-	cache := getOrCreateOrgCache(organization)
+	cache := getOrCreateOrgCache(githubName, organization)
 
 	// Clone the client with an ETag transport for conditional GET caching.
 	baseHTTP := client.Client()
@@ -73,6 +74,7 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 		organizationService: *etagClient.Organizations,
 		usersService:        *client.Users, // user lookups use the original client
 		organization:        organization,
+		githubName:          githubName,
 		cache:               cache,
 	}, nil
 }
@@ -91,7 +93,7 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members").Inc()
 				if cached, ok := o.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]string); ok {
 						return v, nil
@@ -119,7 +121,7 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 	}
 
 	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members").Inc()
 		o.cache.set(firstPageKey, etag, memberList)
 	}
 
@@ -144,13 +146,16 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-ext").Inc()
 				if cached, ok := o.cache.getValue(valueKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
 					}
 				}
+				// Invalidate both the value key and the ETag key so the transport
+				// stops injecting If-None-Match and forces a fresh 200 on the next call.
 				o.cache.invalidate(valueKey)
+				o.cache.invalidate(etagKey)
 				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", valueKey)
 			}
 			return nil, err
@@ -168,7 +173,7 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 	}
 
 	if etag, ok := o.cache.getEtag(etagKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-ext").Inc()
 		o.cache.set(valueKey, etag, result)
 	}
 
@@ -209,7 +214,7 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 				return result, nil
 			}
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-invitations").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-invitations").Inc()
 				if cached, ok := o.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
@@ -244,7 +249,7 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 	}
 
 	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-invitations").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-invitations").Inc()
 		o.cache.set(firstPageKey, etag, result)
 	}
 
@@ -266,7 +271,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optMfa)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-2fa").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-2fa").Inc()
 				if cached, ok := o.cache.getValue(mfaKey); ok {
 					if v, ok := cached.([]*gogithub.User); ok {
 						mfadisabled = v
@@ -285,7 +290,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		optMfa.Page = resp.NextPage
 	}
 	if etag, ok := o.cache.getEtag(mfaKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-2fa").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-2fa").Inc()
 		o.cache.set(mfaKey, etag, mfadisabled)
 	}
 
@@ -298,7 +303,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optAll)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-all").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.githubName, o.organization, "org-members-all").Inc()
 				if cached, ok := o.cache.getValue(allKey); ok {
 					if v, ok := cached.([]*gogithub.User); ok {
 						allMembers = v
@@ -317,7 +322,7 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		optAll.Page = resp.NextPage
 	}
 	if etag, ok := o.cache.getEtag(allKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-all").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.githubName, o.organization, "org-members-all").Inc()
 		o.cache.set(allKey, etag, allMembers)
 	}
 

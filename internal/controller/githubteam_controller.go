@@ -442,7 +442,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	teamsProvider, err := github.NewTeamsProvider(githubClient, githubOrgName, githubOrganization.Spec.InstallationID)
+	teamsProvider, err := github.NewTeamsProvider(githubClient, githubName, githubOrgName, githubOrganization.Spec.InstallationID)
 	if err != nil {
 		l.Error(err, "error during creating the teams provider")
 		return reconcile.Result{}, err

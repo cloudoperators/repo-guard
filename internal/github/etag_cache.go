@@ -21,9 +21,12 @@ type etagCache struct {
 // It survives across reconcile cycles since providers are re-created on every Reconcile.
 var orgCaches sync.Map // key: string, value: *etagCache
 
-// getOrCreateOrgCache returns the *etagCache for the given org, creating it if necessary.
-func getOrCreateOrgCache(org string) *etagCache {
-	v, _ := orgCaches.LoadOrStore(org, &etagCache{entries: make(map[string]etagEntry)})
+// getOrCreateOrgCache returns the *etagCache for the given github+org pair, creating it if necessary.
+// The key is "<github>|<org>" to avoid collisions when multiple GitHub instances manage
+// organisations with the same name.
+func getOrCreateOrgCache(githubName, org string) *etagCache {
+	key := githubName + "|" + org
+	v, _ := orgCaches.LoadOrStore(key, &etagCache{entries: make(map[string]etagEntry)})
 	return v.(*etagCache) //nolint:forcetypeassert
 }
 

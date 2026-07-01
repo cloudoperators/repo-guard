@@ -34,11 +34,12 @@ type GithubMember struct {
 type DefaultTeamsProvider struct {
 	service      gogithub.TeamsService
 	organization string
+	githubName   string
 	cache        *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
-func NewTeamsProvider(cc githubapp.ClientCreator, organization string, installationID int64) (TeamsProvider, error) {
+func NewTeamsProvider(cc githubapp.ClientCreator, githubName, organization string, installationID int64) (TeamsProvider, error) {
 
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
@@ -51,7 +52,7 @@ func NewTeamsProvider(cc githubapp.ClientCreator, organization string, installat
 		return nil, errors.New("organization name should not be empty")
 	}
 
-	cache := getOrCreateOrgCache(organization)
+	cache := getOrCreateOrgCache(githubName, organization)
 
 	// Clone the client with an ETag transport for conditional GET caching.
 	baseHTTP := client.Client()
@@ -70,7 +71,7 @@ func NewTeamsProvider(cc githubapp.ClientCreator, organization string, installat
 		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
 	}
 
-	return &DefaultTeamsProvider{service: *etagClient.Teams, organization: organization, cache: cache}, nil
+	return &DefaultTeamsProvider{service: *etagClient.Teams, organization: organization, githubName: githubName, cache: cache}, nil
 }
 
 func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
@@ -86,7 +87,7 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 		teams, response, err := t.service.ListTeams(ctx, t.organization, opt)
 		if err != nil {
 			if response != nil && response.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "teams-list").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "teams-list").Inc()
 				if cached, ok := t.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]string); ok {
 						return v, nil
@@ -119,7 +120,7 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 	}
 
 	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "teams-list").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "teams-list").Inc()
 		t.cache.set(firstPageKey, etag, teamList)
 	}
 
@@ -144,13 +145,16 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, teamSlug, opt)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "team-members-ext").Inc()
 				if cached, ok := t.cache.getValue(valueKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
 					}
 				}
+				// Invalidate both the value key and the ETag key so the transport
+				// stops injecting If-None-Match and forces a fresh 200 on the next call.
 				t.cache.invalidate(valueKey)
+				t.cache.invalidate(etagKey)
 				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", valueKey)
 			}
 			return nil, err
@@ -168,7 +172,7 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 	}
 
 	if etag, ok := t.cache.getEtag(etagKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "team-members-ext").Inc()
 		t.cache.set(valueKey, etag, userList)
 	}
 
@@ -189,7 +193,7 @@ func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]strin
 		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, teamSlug, opt)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
-				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "team-members").Inc()
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.githubName, t.organization, "team-members").Inc()
 				if cached, ok := t.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]string); ok {
 						return v, nil
@@ -217,7 +221,7 @@ func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]strin
 	}
 
 	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "team-members").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.githubName, t.organization, "team-members").Inc()
 		t.cache.set(firstPageKey, etag, userList)
 	}
 

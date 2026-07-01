@@ -1317,7 +1317,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "increase(repo_guard_github_graphql_calls_total{organization=~\"$org\"}[1h])",
+          "expr": "increase(repo_guard_github_graphql_calls_total{github=~\"$github\",organization=~\"$org\"}[1h])",
           "legendFormat": "{{organization}} / {{result}}",
           "refId": "A"
         }
@@ -1345,12 +1345,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])",
+          "expr": "increase(repo_guard_github_etag_cache_hits_total{github=~\"$github\",organization=~\"$org\"}[1h])",
           "legendFormat": "hit \u00b7 {{organization}} / {{endpoint}}",
           "refId": "A"
         },
         {
-          "expr": "increase(repo_guard_github_etag_cache_misses_total{organization=~\"$org\"}[1h])",
+          "expr": "increase(repo_guard_github_etag_cache_misses_total{github=~\"$github\",organization=~\"$org\"}[1h])",
           "legendFormat": "miss \u00b7 {{organization}} / {{endpoint}}",
           "refId": "B"
         }
@@ -1407,7 +1407,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) / clamp_min(sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) + sum(increase(repo_guard_github_etag_cache_misses_total{organization=~\"$org\"}[1h])), 1)",
+          "expr": "sum(increase(repo_guard_github_etag_cache_hits_total{github=~\"$github\",organization=~\"$org\"}[1h])) / clamp_min(sum(increase(repo_guard_github_etag_cache_hits_total{github=~\"$github\",organization=~\"$org\"}[1h])) + sum(increase(repo_guard_github_etag_cache_misses_total{github=~\"$github\",organization=~\"$org\"}[1h])), 1)",
           "legendFormat": "hit ratio",
           "refId": "A"
         }

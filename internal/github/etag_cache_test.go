@@ -67,18 +67,27 @@ func TestEtagCache_ConcurrentAccess(t *testing.T) {
 }
 
 func TestGetOrCreateOrgCache_SameInstance(t *testing.T) {
-	// Two calls for the same org must return the same pointer.
-	a := getOrCreateOrgCache("org-cache-test")
-	b := getOrCreateOrgCache("org-cache-test")
+	// Two calls for the same github+org must return the same pointer.
+	a := getOrCreateOrgCache("gh1", "org-cache-test")
+	b := getOrCreateOrgCache("gh1", "org-cache-test")
 	if a != b {
-		t.Error("expected same *etagCache for same org")
+		t.Error("expected same *etagCache for same github+org")
 	}
 }
 
 func TestGetOrCreateOrgCache_DifferentOrgs(t *testing.T) {
-	a := getOrCreateOrgCache("org-cache-test-alpha")
-	b := getOrCreateOrgCache("org-cache-test-beta")
+	a := getOrCreateOrgCache("gh1", "org-cache-test-alpha")
+	b := getOrCreateOrgCache("gh1", "org-cache-test-beta")
 	if a == b {
 		t.Error("expected different *etagCache for different orgs")
+	}
+}
+
+func TestGetOrCreateOrgCache_DifferentGithubInstances(t *testing.T) {
+	// Same org name under different GitHub instances must not share cache.
+	a := getOrCreateOrgCache("gh-instance-a", "shared-org")
+	b := getOrCreateOrgCache("gh-instance-b", "shared-org")
+	if a == b {
+		t.Error("expected different *etagCache for same org on different github instances")
 	}
 }

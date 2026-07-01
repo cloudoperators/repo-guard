@@ -86,10 +86,10 @@ func (t *DefaultRepositoryProvider) ExtendedListGraphQL(ctx context.Context) ([]
 		}
 
 		if err := t.graphqlClient.Query(ctx, &query, vars); err != nil {
-			ghmetrics.GraphQLCallsTotal.WithLabelValues(t.organization, "error").Inc()
+			ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "error").Inc()
 			return nil, nil, nil, err
 		}
-		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.organization, "success").Inc()
+		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "success").Inc()
 
 		for _, node := range query.Organization.Repositories.Nodes {
 			if bool(node.IsArchived) || bool(node.IsDisabled) {
