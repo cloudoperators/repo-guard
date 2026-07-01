@@ -273,6 +273,9 @@ func (t DefaultTeamsProvider) AddUser(ctx context.Context, team, user string) (b
 			if response.StatusCode == 404 {
 				return false, fmt.Errorf("user not found in github")
 			}
+			if response.StatusCode == 422 {
+				return false, fmt.Errorf("user is suspended or unprocessable in github")
+			}
 			if response.StatusCode != 200 {
 				return true, fmt.Errorf("adding user to team response code: %d", response.StatusCode)
 			}
