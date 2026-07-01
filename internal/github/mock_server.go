@@ -883,53 +883,142 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 
 	// ---- GraphQL ----
 
-	// POST /api/graphql  — serves the orgReposWithTeamsQuery used by ExtendedListGraphQL.
-	// The mock returns all repos in a single page (no pagination) with their team permissions.
+	// POST /api/graphql  — serves the two-query pattern used by ExtendedListGraphQL:
+	//   1. orgTeamsWithReposQuery  (variables contain "teamCursor")  → organization.teams shape
+	//   2. teamReposQuery          (variables contain "teamSlug")    → organization.team shape
+	//   3. orgReposQuery           (neither above)                   → organization.repositories shape
 	mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		// Decode the request to inspect the variables map.
+		var req struct {
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
 		stateMu.Lock()
-		snapshot := make([]MockRepo, len(repos))
-		copy(snapshot, repos)
+		reposSnap := make([]MockRepo, len(repos))
+		copy(reposSnap, repos)
+		teamsSnap := make([]MockTeam, len(teams))
+		copy(teamsSnap, teams)
+		permsSnap := make(map[string][]MockTeamWithPermission, len(teamRepoPerms))
+		for k, v := range teamRepoPerms {
+			cp := make([]MockTeamWithPermission, len(v))
+			copy(cp, v)
+			permsSnap[k] = cp
+		}
 		stateMu.Unlock()
 
-		nodes := make([]map[string]any, 0, len(snapshot))
-		for _, repo := range snapshot {
-			// Archived and disabled repos are included in the response;
-			// ExtendedListGraphQL itself filters them out (same as REST path).
-			teamEdges := make([]map[string]any, 0, len(repo.Teams))
-			for _, tp := range repo.Teams {
-				teamEdges = append(teamEdges, map[string]any{
-					"permission": restPermissionToGraphQL(tp.Permission),
-					"node":       map[string]any{"slug": tp.Slug},
-				})
-			}
-			nodes = append(nodes, map[string]any{
-				"name":       repo.Name,
-				"visibility": strings.ToUpper(repo.repoVisibility()),
-				"isArchived": repo.Archived,
-				"isDisabled": repo.Disabled,
-				"teams": map[string]any{
-					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
-					"edges":    teamEdges,
-				},
-			})
-		}
+		_, hasTeamCursor := req.Variables["teamCursor"]
+		_, hasTeamSlug := req.Variables["teamSlug"]
 
-		resp := map[string]any{
-			"data": map[string]any{
-				"organization": map[string]any{
-					"repositories": map[string]any{
-						"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
-						"nodes":    nodes,
+		switch {
+		case hasTeamSlug:
+			// teamReposQuery — single-team overflow pagination. Return an empty page;
+			// the mock never seeds teams with >100 repos so this path is not exercised
+			// in controller tests.
+			resp := map[string]any{
+				"data": map[string]any{
+					"organization": map[string]any{
+						"team": map[string]any{
+							"repositories": map[string]any{
+								"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+								"edges":    []any{},
+							},
+						},
 					},
 				},
-			},
+			}
+			writeJSON(w, resp)
+
+		case hasTeamCursor:
+			// orgTeamsWithReposQuery — build a team → repo edges map from teamRepoPerms.
+			// Invert permsSnap (repoName→teams) into teamSlug→[]repoEdge.
+			teamRepoEdges := make(map[string][]map[string]any)
+			for repoName, perms := range permsSnap {
+				for _, tp := range perms {
+					teamRepoEdges[tp.Slug] = append(teamRepoEdges[tp.Slug], map[string]any{
+						"permission": restPermissionToGraphQL(tp.Permission),
+						"node":       map[string]any{"name": repoName},
+					})
+				}
+			}
+			// Build nodes — one entry per known team slug (union of seeded teams + perms).
+			seen := make(map[string]bool)
+			teamNodes := []map[string]any{}
+			for _, t := range teamsSnap {
+				if seen[t.Slug] {
+					continue
+				}
+				seen[t.Slug] = true
+				edges := teamRepoEdges[t.Slug]
+				if edges == nil {
+					edges = []map[string]any{}
+				}
+				teamNodes = append(teamNodes, map[string]any{
+					"slug": t.Slug,
+					"repositories": map[string]any{
+						"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						"edges":    edges,
+					},
+				})
+			}
+			// Also emit nodes for team slugs that appear only in teamRepoPerms
+			// (e.g. teams created dynamically via REST and not seeded in cfg.Teams).
+			for slug, edges := range teamRepoEdges {
+				if seen[slug] {
+					continue
+				}
+				seen[slug] = true
+				teamNodes = append(teamNodes, map[string]any{
+					"slug": slug,
+					"repositories": map[string]any{
+						"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						"edges":    edges,
+					},
+				})
+			}
+			resp := map[string]any{
+				"data": map[string]any{
+					"organization": map[string]any{
+						"teams": map[string]any{
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+							"nodes":    teamNodes,
+						},
+					},
+				},
+			}
+			writeJSON(w, resp)
+
+		default:
+			// orgReposQuery — metadata only, no teams field.
+			nodes := make([]map[string]any, 0, len(reposSnap))
+			for _, repo := range reposSnap {
+				nodes = append(nodes, map[string]any{
+					"name":       repo.Name,
+					"visibility": strings.ToUpper(repo.repoVisibility()),
+					"isArchived": repo.Archived,
+					"isDisabled": repo.Disabled,
+				})
+			}
+			resp := map[string]any{
+				"data": map[string]any{
+					"organization": map[string]any{
+						"repositories": map[string]any{
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+							"nodes":    nodes,
+						},
+					},
+				},
+			}
+			writeJSON(w, resp)
 		}
-		writeJSON(w, resp)
 	})
 }
 

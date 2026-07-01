@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	gogithub "github.com/google/go-github/v88/github"
@@ -54,8 +55,25 @@ func newTestRepositoryProviderWithGraphQL(t *testing.T, graphqlHandler http.Hand
 	}
 }
 
-// buildOrgReposGraphQLResponse builds the JSON response body for a single-page
-// GraphQL query returning the given repos.
+// buildTeamsGraphQLResponse builds the JSON body for a teams-with-repos GraphQL query.
+func buildTeamsGraphQLResponse(teams []map[string]any, hasNextPage bool, endCursor string) string {
+	data := map[string]any{
+		"organization": map[string]any{
+			"teams": map[string]any{
+				"pageInfo": map[string]any{
+					"hasNextPage": hasNextPage,
+					"endCursor":   endCursor,
+				},
+				"nodes": teams,
+			},
+		},
+	}
+	b, _ := json.Marshal(graphqlResponse{Data: data})
+	return string(b)
+}
+
+// buildOrgReposGraphQLResponse builds the JSON response body for a repos-only
+// GraphQL query (no teams field).
 func buildOrgReposGraphQLResponse(nodes []map[string]any, hasNextPage bool, endCursor string) string {
 	data := map[string]any{
 		"organization": map[string]any{
@@ -72,28 +90,37 @@ func buildOrgReposGraphQLResponse(nodes []map[string]any, hasNextPage bool, endC
 	return string(b)
 }
 
-// buildRepoNode builds a single repository node for a GraphQL fixture.
-func buildRepoNode(name, visibility string, archived, disabled bool, teams []map[string]any, teamsHasNextPage bool) map[string]any {
+// buildRepoMetaNode builds a repository metadata node (no teams) for fixtures.
+func buildRepoMetaNode(name, visibility string, archived, disabled bool) map[string]any {
 	return map[string]any{
 		"name":       name,
 		"visibility": visibility,
 		"isArchived": archived,
 		"isDisabled": disabled,
-		"teams": map[string]any{
+	}
+}
+
+// buildTeamNode builds a team node with repository edges for GraphQL fixtures.
+// endCursor should be a non-empty string when reposHasNextPage is true so that
+// fetchRemainingTeamRepos receives a real cursor and pagination is exercised correctly.
+func buildTeamNode(slug string, repoEdges []map[string]any, reposHasNextPage bool, endCursor string) map[string]any {
+	return map[string]any{
+		"slug": slug,
+		"repositories": map[string]any{
 			"pageInfo": map[string]any{
-				"hasNextPage": teamsHasNextPage,
-				"endCursor":   "",
+				"hasNextPage": reposHasNextPage,
+				"endCursor":   endCursor,
 			},
-			"edges": teams,
+			"edges": repoEdges,
 		},
 	}
 }
 
-// buildTeamEdge builds a single team edge (permission + slug) for a GraphQL fixture.
-func buildTeamEdge(slug, permission string) map[string]any {
+// buildTeamRepoEdge builds a team→repo edge (permission + repo name) for GraphQL fixtures.
+func buildTeamRepoEdge(repoName, permission string) map[string]any {
 	return map[string]any{
 		"permission": permission,
-		"node":       map[string]any{"slug": slug},
+		"node":       map[string]any{"name": repoName},
 	}
 }
 
@@ -120,24 +147,30 @@ func TestGraphqlPermissionToTeamPermission(t *testing.T) {
 }
 
 func TestExtendedListGraphQL_Basic(t *testing.T) {
-	// One page, three repos across all visibility buckets.
-	nodes := []map[string]any{
-		buildRepoNode("pub-repo", "PUBLIC", false, false, []map[string]any{
-			buildTeamEdge("devs", "WRITE"),
-		}, false),
-		buildRepoNode("priv-repo", "PRIVATE", false, false, []map[string]any{
-			buildTeamEdge("ops", "ADMIN"),
-		}, false),
-		buildRepoNode("int-repo", "INTERNAL", false, false, []map[string]any{
-			buildTeamEdge("security", "READ"),
-		}, false),
-	}
-	respBody := buildOrgReposGraphQLResponse(nodes, false, "")
+	// Teams query: devs→pub-repo(WRITE), ops→priv-repo(ADMIN), security→int-repo(READ).
+	teamsBody := buildTeamsGraphQLResponse([]map[string]any{
+		buildTeamNode("devs", []map[string]any{buildTeamRepoEdge("pub-repo", "WRITE")}, false, ""),
+		buildTeamNode("ops", []map[string]any{buildTeamRepoEdge("priv-repo", "ADMIN")}, false, ""),
+		buildTeamNode("security", []map[string]any{buildTeamRepoEdge("int-repo", "READ")}, false, ""),
+	}, false, "")
 
+	// Repos query: three repos across all visibility buckets.
+	reposBody := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("pub-repo", "PUBLIC", false, false),
+		buildRepoMetaNode("priv-repo", "PRIVATE", false, false),
+		buildRepoMetaNode("int-repo", "INTERNAL", false, false),
+	}, false, "")
+
+	var callCount int32
 	provider := newTestRepositoryProviderWithGraphQL(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(respBody)) //nolint:errcheck
+		n := atomic.AddInt32(&callCount, 1)
+		if n == 1 {
+			w.Write([]byte(teamsBody)) //nolint:errcheck
+		} else {
+			w.Write([]byte(reposBody)) //nolint:errcheck
+		}
 	})
 
 	pub, priv, internal, err := provider.ExtendedListGraphQL(t.Context())
@@ -168,34 +201,38 @@ func TestExtendedListGraphQL_Basic(t *testing.T) {
 }
 
 func TestExtendedListGraphQL_Pagination(t *testing.T) {
-	// Two pages: first returns has_next_page=true, second returns false.
-	page1Nodes := []map[string]any{
-		buildRepoNode("repo-a", "PUBLIC", false, false, nil, false),
-	}
-	page2Nodes := []map[string]any{
-		buildRepoNode("repo-b", "PRIVATE", false, false, nil, false),
-	}
+	// Teams query returns single page (no teams for simplicity).
+	teamsBody := buildTeamsGraphQLResponse(nil, false, "")
 
-	callCount := 0
+	// Repos query: two pages.
+	page1Body := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("repo-a", "PUBLIC", false, false),
+	}, true, "cursor-abc")
+	page2Body := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("repo-b", "PRIVATE", false, false),
+	}, false, "")
+
+	var callCount int32
 	provider := newTestRepositoryProviderWithGraphQL(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		callCount++
-		var body string
-		if callCount == 1 {
-			body = buildOrgReposGraphQLResponse(page1Nodes, true, "cursor-abc")
-		} else {
-			body = buildOrgReposGraphQLResponse(page2Nodes, false, "")
-		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(body)) //nolint:errcheck
+		n := atomic.AddInt32(&callCount, 1)
+		switch n {
+		case 1: // teams query
+			w.Write([]byte(teamsBody)) //nolint:errcheck
+		case 2: // repos page 1
+			w.Write([]byte(page1Body)) //nolint:errcheck
+		default: // repos page 2+
+			w.Write([]byte(page2Body)) //nolint:errcheck
+		}
 	})
 
 	pub, priv, _, err := provider.ExtendedListGraphQL(t.Context())
 	if err != nil {
 		t.Fatalf("ExtendedListGraphQL: unexpected error: %v", err)
 	}
-	if callCount != 2 {
-		t.Errorf("expected 2 GraphQL calls, got %d", callCount)
+	if atomic.LoadInt32(&callCount) != 3 {
+		t.Errorf("expected 3 GraphQL calls (1 teams + 2 repos pages), got %d", callCount)
 	}
 	if len(pub) != 1 || pub[0].Name != "repo-a" {
 		t.Errorf("public repos: got %v", pub)
@@ -206,18 +243,26 @@ func TestExtendedListGraphQL_Pagination(t *testing.T) {
 }
 
 func TestExtendedListGraphQL_ArchivedFiltered(t *testing.T) {
-	// Archived and disabled repos must be excluded.
-	nodes := []map[string]any{
-		buildRepoNode("active-repo", "PUBLIC", false, false, nil, false),
-		buildRepoNode("archived-repo", "PUBLIC", true, false, nil, false),
-		buildRepoNode("disabled-repo", "PRIVATE", false, true, nil, false),
-	}
-	respBody := buildOrgReposGraphQLResponse(nodes, false, "")
+	// Teams query: no teams.
+	teamsBody := buildTeamsGraphQLResponse(nil, false, "")
 
+	// Repos query: archived and disabled repos must be excluded.
+	reposBody := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("active-repo", "PUBLIC", false, false),
+		buildRepoMetaNode("archived-repo", "PUBLIC", true, false),
+		buildRepoMetaNode("disabled-repo", "PRIVATE", false, true),
+	}, false, "")
+
+	var callCount int32
 	provider := newTestRepositoryProviderWithGraphQL(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(respBody)) //nolint:errcheck
+		n := atomic.AddInt32(&callCount, 1)
+		if n == 1 {
+			w.Write([]byte(teamsBody)) //nolint:errcheck
+		} else {
+			w.Write([]byte(reposBody)) //nolint:errcheck
+		}
 	})
 
 	pub, priv, _, err := provider.ExtendedListGraphQL(t.Context())
@@ -232,67 +277,140 @@ func TestExtendedListGraphQL_ArchivedFiltered(t *testing.T) {
 	}
 }
 
-func TestExtendedListGraphQL_TeamOverflow(t *testing.T) {
-	// A repo with teamsHasNextPage=true must fall back to the REST RepositoryTeams endpoint.
-	nodes := []map[string]any{
-		buildRepoNode("overflow-repo", "PRIVATE", false, false, []map[string]any{
-			buildTeamEdge("team-gql", "READ"),
-		}, true), // HasNextPage=true triggers REST fallback
-	}
-	respBody := buildOrgReposGraphQLResponse(nodes, false, "")
+func TestExtendedListGraphQL_TeamsPagination(t *testing.T) {
+	// Teams query: two pages of teams. Page 1 has team-a, page 2 has team-b.
+	teamsPage1 := buildTeamsGraphQLResponse([]map[string]any{
+		buildTeamNode("team-a", []map[string]any{buildTeamRepoEdge("repo-x", "WRITE")}, false, ""),
+	}, true, "team-cursor-1")
+	teamsPage2 := buildTeamsGraphQLResponse([]map[string]any{
+		buildTeamNode("team-b", []map[string]any{buildTeamRepoEdge("repo-x", "READ")}, false, ""),
+	}, false, "")
 
-	restTeamsFixture := []map[string]any{
-		{"id": 1, "slug": "team-rest", "name": "team-rest", "permission": "push"},
-	}
+	// Repos query: single repo.
+	reposBody := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("repo-x", "PRIVATE", false, false),
+	}, false, "")
 
-	callCount := 0
+	var callCount int32
 	provider := newTestRepositoryProviderWithGraphQL(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(respBody)) //nolint:errcheck
+		n := atomic.AddInt32(&callCount, 1)
+		switch n {
+		case 1:
+			w.Write([]byte(teamsPage1)) //nolint:errcheck
+		case 2:
+			w.Write([]byte(teamsPage2)) //nolint:errcheck
+		default:
+			w.Write([]byte(reposBody)) //nolint:errcheck
+		}
 	})
-
-	// Register the REST fallback handler for RepositoryTeams.
-	// We reconstruct the mux by creating a separate provider using the existing REST approach.
-	// Since newTestRepositoryProviderWithGraphQL routes / to the graphqlHandler,
-	// we need to also register REST handlers on the same mux.
-	// Instead, create a separate REST server for the fallback.
-	restMux := http.NewServeMux()
-	restSrv := httptest.NewServer(restMux)
-	t.Cleanup(restSrv.Close)
-
-	restMux.HandleFunc("/api/v3/repos/test-org/overflow-repo/teams", func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(restTeamsFixture) //nolint:errcheck
-	})
-
-	restClient, err := gogithub.NewClient(
-		gogithub.WithHTTPClient(restSrv.Client()),
-		gogithub.WithAuthToken("test-token"),
-		gogithub.WithEnterpriseURLs(restSrv.URL+"/api/v3/", restSrv.URL+"/"),
-	)
-	if err != nil {
-		t.Fatalf("create rest client: %v", err)
-	}
-	// Override the REST services on the provider.
-	provider.repositoryService = *restClient.Repositories
-	provider.teamsService = *restClient.Teams
 
 	_, priv, _, err := provider.ExtendedListGraphQL(t.Context())
 	if err != nil {
 		t.Fatalf("ExtendedListGraphQL: unexpected error: %v", err)
 	}
-
-	if callCount != 1 {
-		t.Errorf("expected 1 REST fallback call, got %d", callCount)
-	}
 	if len(priv) != 1 {
 		t.Fatalf("expected 1 private repo, got %v", priv)
 	}
-	// Teams should come from REST fallback, not GraphQL partial result.
-	if len(priv[0].Teams) != 1 || priv[0].Teams[0].Team != "team-rest" {
-		t.Errorf("expected REST-sourced team, got %v", priv[0].Teams)
+	// repo-x should have both team-a (push) and team-b (pull) permissions.
+	if len(priv[0].Teams) != 2 {
+		t.Errorf("expected 2 teams on repo-x, got %v", priv[0].Teams)
+	}
+	// Verify exact slug names and permission mappings (order-independent).
+	bySlug := map[string]repoguardsapv1.GithubTeamPermission{}
+	for _, tp := range priv[0].Teams {
+		bySlug[tp.Team] = tp.Permission
+	}
+	if bySlug["team-a"] != "push" {
+		t.Errorf("team-a: expected push, got %q", bySlug["team-a"])
+	}
+	if bySlug["team-b"] != "pull" {
+		t.Errorf("team-b: expected pull, got %q", bySlug["team-b"])
+	}
+}
+
+// buildTeamReposGraphQLResponse builds the JSON body for a single-team repos query
+// (teamReposQuery struct) used in the >100-repos overflow fallback.
+func buildTeamReposGraphQLResponse(repoEdges []map[string]any, hasNextPage bool, endCursor string) string {
+	data := map[string]any{
+		"organization": map[string]any{
+			"team": map[string]any{
+				"repositories": map[string]any{
+					"pageInfo": map[string]any{
+						"hasNextPage": hasNextPage,
+						"endCursor":   endCursor,
+					},
+					"edges": repoEdges,
+				},
+			},
+		},
+	}
+	b, _ := json.Marshal(graphqlResponse{Data: data})
+	return string(b)
+}
+
+func TestExtendedListGraphQL_TeamRepoOverflow(t *testing.T) {
+	// Team "big-team" has reposHasNextPage=true in the first teams query page,
+	// triggering a dedicated teamReposQuery for the remaining repos.
+	// A real endCursor is provided so fetchRemainingTeamRepos receives it correctly.
+	teamsBody := buildTeamsGraphQLResponse([]map[string]any{
+		buildTeamNode("big-team", []map[string]any{
+			buildTeamRepoEdge("repo-1", "WRITE"),
+		}, true, "repo-cursor-overflow"), // HasNextPage=true + real cursor triggers fetchRemainingTeamRepos
+	}, false, "")
+
+	// The overflow query returns the second page of repos for big-team.
+	overflowBody := buildTeamReposGraphQLResponse([]map[string]any{
+		buildTeamRepoEdge("repo-2", "ADMIN"),
+	}, false, "")
+
+	// Repos metadata query.
+	reposBody := buildOrgReposGraphQLResponse([]map[string]any{
+		buildRepoMetaNode("repo-1", "PRIVATE", false, false),
+		buildRepoMetaNode("repo-2", "PRIVATE", false, false),
+	}, false, "")
+
+	var callCount int32
+	provider := newTestRepositoryProviderWithGraphQL(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		n := atomic.AddInt32(&callCount, 1)
+		switch n {
+		case 1: // teams query
+			w.Write([]byte(teamsBody)) //nolint:errcheck
+		case 2: // overflow single-team query
+			w.Write([]byte(overflowBody)) //nolint:errcheck
+		default: // repos metadata query
+			w.Write([]byte(reposBody)) //nolint:errcheck
+		}
+	})
+
+	_, priv, _, err := provider.ExtendedListGraphQL(t.Context())
+	if err != nil {
+		t.Fatalf("ExtendedListGraphQL: unexpected error: %v", err)
+	}
+	if atomic.LoadInt32(&callCount) != 3 {
+		t.Errorf("expected 3 GraphQL calls (teams + overflow + repos), got %d", callCount)
+	}
+	if len(priv) != 2 {
+		t.Fatalf("expected 2 private repos, got %v", priv)
+	}
+	// Both repos should be associated with big-team.
+	for _, repo := range priv {
+		if len(repo.Teams) != 1 || repo.Teams[0].Team != "big-team" {
+			t.Errorf("repo %q: expected big-team, got %v", repo.Name, repo.Teams)
+		}
+	}
+	// Assert per-repo permissions: repo-1 from first page (WRITE→push), repo-2 from overflow (ADMIN→admin).
+	wantPerm := map[string]repoguardsapv1.GithubTeamPermission{
+		"repo-1": "push",
+		"repo-2": "admin",
+	}
+	for _, repo := range priv {
+		got := repo.Teams[0].Permission
+		if want := wantPerm[repo.Name]; got != want {
+			t.Errorf("repo %q: expected permission %q, got %q", repo.Name, want, got)
+		}
 	}
 }
