@@ -129,7 +129,11 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) ([]GithubMember, error) {
 
 	teamSlug := slug.Make(team)
-	firstPageKey := fmt.Sprintf("/orgs/%s/teams/%s/members?per_page=100", t.organization, teamSlug)
+	// etagKey matches the URL used by the transport for If-None-Match injection.
+	// valueKey has a "#ext" suffix to avoid colliding with the Members() cache entry
+	// for the same URL, which stores []string (different type).
+	etagKey := fmt.Sprintf("/orgs/%s/teams/%s/members?per_page=100", t.organization, teamSlug)
+	valueKey := etagKey + "#ext"
 
 	opt := &gogithub.TeamListTeamMembersOptions{
 		ListOptions: gogithub.ListOptions{PerPage: 100},
@@ -141,13 +145,13 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
 				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
-				if cached, ok := t.cache.getValue(firstPageKey); ok {
+				if cached, ok := t.cache.getValue(valueKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
 					}
 				}
-				t.cache.invalidate(firstPageKey)
-				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+				t.cache.invalidate(valueKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", valueKey)
 			}
 			return nil, err
 		}
@@ -163,9 +167,9 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 		opt.Page = resp.NextPage
 	}
 
-	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+	if etag, ok := t.cache.getEtag(etagKey); ok && etag != "" {
 		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
-		t.cache.set(firstPageKey, etag, userList)
+		t.cache.set(valueKey, etag, userList)
 	}
 
 	return userList, nil

@@ -128,7 +128,11 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 
 func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role string) ([]GithubMember, error) {
 
-	firstPageKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+	// etagKey matches the URL used by the transport for If-None-Match injection.
+	// valueKey has a "#ext" suffix to avoid colliding with the members() cache entry
+	// for the same URL, which stores []string (different type).
+	etagKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+	valueKey := etagKey + "#ext"
 
 	opt := &gogithub.ListMembersOptions{
 		ListOptions: gogithub.ListOptions{PerPage: 100},
@@ -141,13 +145,13 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
 				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
-				if cached, ok := o.cache.getValue(firstPageKey); ok {
+				if cached, ok := o.cache.getValue(valueKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
 					}
 				}
-				o.cache.invalidate(firstPageKey)
-				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+				o.cache.invalidate(valueKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", valueKey)
 			}
 			return nil, err
 		}
@@ -163,9 +167,9 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 		opt.Page = resp.NextPage
 	}
 
-	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+	if etag, ok := o.cache.getEtag(etagKey); ok && etag != "" {
 		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
-		o.cache.set(firstPageKey, etag, result)
+		o.cache.set(valueKey, etag, result)
 	}
 
 	return result, nil
