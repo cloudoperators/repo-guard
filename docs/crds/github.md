@@ -23,7 +23,7 @@ spec:
 |---|---|---|---|
 | `webURL` | string | Yes | Base URL for the GitHub web UI (e.g. `https://github.com` or your GHES URL). |
 | `v3APIURL` | string | Yes | GitHub REST API v3 base URL. |
-| `integrationID` | integer | Yes | GitHub App installation ID. |
+| `integrationID` | integer | Yes | GitHub App ID (the numeric ID of the App itself, found on the App's settings page). Not to be confused with the per-org installation ID, which lives in `GithubOrganization.spec.installationID`. |
 | `clientUserAgent` | string | No | User-agent string sent with API requests. |
 | `secret` | string | Yes | Name of the Kubernetes Secret (in the operator's namespace) containing the GitHub App private key. |
 

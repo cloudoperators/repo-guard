@@ -1,6 +1,6 @@
 # Metrics & Monitoring
 
-Repo Guard exposes Prometheus metrics under the `repo_guard_*` namespace, a `ServiceMonitor` for Prometheus Operator, and bundled alerting rules.
+Repo Guard exposes Prometheus metrics under the `repo_guard_*` namespace, a `PodMonitor` for Prometheus Operator, and bundled alerting rules.
 
 ## Exported Metrics
 
@@ -66,10 +66,10 @@ Bundled alerting rules are in `config/prometheus/rules.yaml`. They cover:
 - **ExternalAPIHighErrorRate** — external provider API error rate above threshold.
 - **ExternalAPISlowLatency** — external provider p95 latency exceeds SLO.
 
-## ServiceMonitor
+## PodMonitor
 
-The Helm chart ships a `ServiceMonitor` that Prometheus Operator will pick up automatically when `serviceMonitor.enabled: true` is set in the Helm values.
+The Helm chart ships a `PodMonitor` that Prometheus Operator will pick up automatically when `monitoring.podMonitor.enabled: true` is set in the Helm values.
 
 ## Perses Dashboard
 
-A Perses dashboard is deployed via the Helm chart as a `ConfigMap` when `persesDashboard.enabled: true`. Import it into your Perses instance to get pre-built panels for all the metrics above.
+A Perses dashboard is deployed via the Helm chart as a `ConfigMap` when `perses.enabled: true`. Import it into your Perses instance to get pre-built panels for all the metrics above.
