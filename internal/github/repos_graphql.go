@@ -159,6 +159,11 @@ func (t *DefaultRepositoryProvider) buildRepoTeamsMap(ctx context.Context) (map[
 			break
 		}
 		cursor := query.Organization.Teams.PageInfo.EndCursor
+		if cursor == "" {
+			// Guard: malformed response with HasNextPage=true but empty cursor;
+			// stop to avoid repeating the same page indefinitely.
+			break
+		}
 		teamCursor = &cursor
 	}
 
@@ -203,7 +208,13 @@ func (t *DefaultRepositoryProvider) fetchRemainingTeamRepos(ctx context.Context,
 		if !bool(query.Organization.Team.Repositories.PageInfo.HasNextPage) {
 			break
 		}
-		cursor = query.Organization.Team.Repositories.PageInfo.EndCursor
+		nextCursor := query.Organization.Team.Repositories.PageInfo.EndCursor
+		if nextCursor == "" {
+			// Guard: malformed response with HasNextPage=true but empty cursor;
+			// stop to avoid re-fetching the same page and duplicating results.
+			break
+		}
+		cursor = nextCursor
 	}
 	return nil
 }
