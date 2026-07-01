@@ -28,6 +28,12 @@ func TestTeamsProvider_AddUser(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name:       "success — 201 (membership created) returns found=true, no error",
+			statusCode: http.StatusCreated,
+			wantFound:  true,
+			wantErr:    false,
+		},
+		{
 			name:            "404 — user not found returns found=false",
 			statusCode:      http.StatusNotFound,
 			wantFound:       false,
@@ -56,7 +62,7 @@ func TestTeamsProvider_AddUser(t *testing.T) {
 
 			mux.HandleFunc("/api/v3/orgs/test-org/teams/my-team/memberships/alice",
 				func(w http.ResponseWriter, r *http.Request) {
-					if tc.statusCode == http.StatusOK {
+					if tc.statusCode == http.StatusOK || tc.statusCode == http.StatusCreated {
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(tc.statusCode)
 						_ = json.NewEncoder(w).Encode(map[string]any{"state": "pending", "role": "member"})
