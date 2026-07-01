@@ -36,8 +36,9 @@ func (t *etagTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	if resp.StatusCode == http.StatusOK {
 		if etag := resp.Header.Get("ETag"); etag != "" {
-			// Store the ETag only; the provider stores the parsed value on 200.
-			t.cache.set(key, etag, nil)
+			// Update the ETag while preserving any previously cached parsed value.
+			// The provider layer will overwrite the value on 200 via cache.set().
+			t.cache.setEtagOnly(key, etag)
 		}
 	}
 	return resp, nil

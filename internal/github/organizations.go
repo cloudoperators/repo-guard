@@ -192,6 +192,7 @@ func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]Git
 // ListMembers only returns active members, so without this, users whose invite is still pending
 // are invisible to OwnersExtended and get re-invited on every reconcile.
 func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) ([]GithubMember, error) {
+	firstPageKey := fmt.Sprintf("/orgs/%s/invitations?per_page=100", o.organization)
 	opt := &gogithub.ListOptions{PerPage: 100}
 
 	result := make([]GithubMember, 0)
@@ -202,6 +203,15 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 			// 404 as "no pending invitations" so reconciliation is not blocked.
 			if resp != nil && resp.StatusCode == 404 {
 				return result, nil
+			}
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				if cached, ok := o.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]GithubMember); ok {
+						return v, nil
+					}
+				}
+				o.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -226,6 +236,10 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 			break
 		}
 		opt.Page = resp.NextPage
+	}
+
+	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		o.cache.set(firstPageKey, etag, result)
 	}
 
 	return result, nil

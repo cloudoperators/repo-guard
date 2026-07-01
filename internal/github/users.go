@@ -32,10 +32,11 @@ type UsersProvider interface {
 }
 
 type DefaultUsersProvider struct {
-	service gogithub.UsersService
-	orgs    gogithub.OrganizationsService
-	http    *gogithub.Client // underlying go-github client to reuse its http.Client for GraphQL
-	cache   *etagCache
+	service    gogithub.UsersService // ETag-wrapped: used by GithubUsernameByID / GithubIDByUsername
+	rawService gogithub.UsersService // plain client: used by IsMemberOfOrg / HasVerifiedEmailDomainForGithubUID
+	orgs       gogithub.OrganizationsService
+	http       *gogithub.Client // underlying go-github client to reuse its http.Client for GraphQL
+	cache      *etagCache
 }
 
 func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersProvider, error) {
@@ -71,10 +72,11 @@ func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersPr
 	}
 
 	return &DefaultUsersProvider{
-		service: *etagClient.Users,
-		orgs:    *client.Organizations,
-		http:    client,
-		cache:   cache,
+		service:    *etagClient.Users,
+		rawService: *client.Users,
+		orgs:       *client.Organizations,
+		http:       client,
+		cache:      cache,
 	}, nil
 }
 
@@ -96,7 +98,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("", "user-by-id").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "user-by-id").Inc()
 			if cached, ok := u.cache.getValue(userKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -110,7 +112,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 
 	login := user.GetLogin()
 	if etag, ok := u.cache.getEtag(userKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("", "user-by-id").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "user-by-id").Inc()
 		u.cache.set(userKey, etag, login)
 	}
 
@@ -129,7 +131,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("", "user-by-login").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "user-by-login").Inc()
 			if cached, ok := u.cache.getValue(loginKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -144,7 +146,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 	// convert numeric ID to string
 	idStr := strconv.FormatInt(user.GetID(), 10)
 	if etag, ok := u.cache.getEtag(loginKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("", "user-by-login").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "user-by-login").Inc()
 		u.cache.set(loginKey, etag, idStr)
 	}
 
@@ -156,7 +158,7 @@ func (u *DefaultUsersProvider) IsMemberOfOrg(ctx context.Context, org string, ui
 	if err != nil {
 		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
-	user, resp, err := u.service.GetByID(ctx, userID)
+	user, resp, err := u.rawService.GetByID(ctx, userID)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return false, nil
@@ -193,7 +195,7 @@ func (u *DefaultUsersProvider) HasVerifiedEmailDomainForGithubUID(ctx context.Co
 	if err != nil {
 		return false, fmt.Errorf("invalid GitHub user ID: %q (expected numeric ID): %w", uid, err)
 	}
-	user, resp, err := u.service.GetByID(ctx, userID)
+	user, resp, err := u.rawService.GetByID(ctx, userID)
 	if err != nil {
 		if resp != nil && resp.StatusCode == 404 {
 			return false, nil

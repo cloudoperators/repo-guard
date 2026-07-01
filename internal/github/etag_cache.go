@@ -56,6 +56,18 @@ func (c *etagCache) set(key string, etag string, value any) {
 	c.entries[key] = etagEntry{etag: etag, value: value}
 }
 
+// setEtagOnly updates the ETag for the given cache key while preserving any
+// previously cached parsed value. This is used by the transport layer on 200
+// responses so that a provider-cached value is not lost before the provider
+// has a chance to re-store it.
+func (c *etagCache) setEtagOnly(key string, etag string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e := c.entries[key]
+	e.etag = etag
+	c.entries[key] = e
+}
+
 // invalidate removes the entry for the given cache key.
 func (c *etagCache) invalidate(key string) {
 	c.mu.Lock()

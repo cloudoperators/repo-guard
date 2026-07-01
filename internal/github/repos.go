@@ -202,12 +202,22 @@ type CollobaratorWithPermission struct {
 
 func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo string) ([]repoguardsapv1.GithubTeamWithPermission, error) {
 
+	firstPageKey := fmt.Sprintf("/repos/%s/%s/teams?per_page=100", t.organization, repo)
 	opt := &github.ListOptions{PerPage: 100}
 
 	var allTeams []*github.Team
 	for {
 		teams, resp, err := t.repositoryService.ListTeams(ctx, t.organization, repo, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]repoguardsapv1.GithubTeamWithPermission); ok {
+						return v, nil
+					}
+				}
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
+			}
 			return nil, err
 		}
 		allTeams = append(allTeams, teams...)
@@ -231,6 +241,10 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 			perm = *t.Permission
 		}
 		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: slug, Permission: repoguardsapv1.GithubTeamPermission(perm)})
+	}
+
+	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+		t.cache.set(firstPageKey, etag, teamWithPermissions)
 	}
 
 	return teamWithPermissions, nil
