@@ -25,11 +25,11 @@ spec:
 | `v3APIURL` | string | Yes | GitHub REST API v3 base URL. |
 | `integrationID` | integer | Yes | GitHub App ID (the numeric ID of the App itself, found on the App's settings page). Not to be confused with the per-org installation ID, which lives in `GithubOrganization.spec.installationID`. |
 | `clientUserAgent` | string | No | User-agent string sent with API requests. |
-| `secret` | string | Yes | Name of the Kubernetes Secret (in the operator's namespace) containing the GitHub App private key. |
+| `secret` | string | Yes | Name of the Kubernetes Secret (in the operator's namespace) containing the GitHub App credentials (`privateKey`, `clientID`, `clientSecret`). |
 
 ## Secret Format
 
-The referenced Secret must contain the GitHub App private key:
+The referenced Secret must contain three keys read by the controller:
 
 ```yaml
 apiVersion: v1
@@ -42,6 +42,8 @@ stringData:
     -----BEGIN RSA PRIVATE KEY-----
     ...
     -----END RSA PRIVATE KEY-----
+  clientID: "Iv1.xxxxxxxxxxxx"
+  clientSecret: "your-oauth-client-secret"
 ```
 
 ## GitHub Enterprise

@@ -15,7 +15,7 @@ Install Repo Guard using the Helm chart published to GHCR:
 helm install repo-guard oci://ghcr.io/cloudoperators/charts/repo-guard \
   --namespace repo-guard \
   --create-namespace \
-  --set github.secret=github-com-secret
+  --set manager.enabled=true
 ```
 
 Create the GitHub App secret in the operator namespace before (or alongside) the install:
@@ -31,6 +31,8 @@ stringData:
     -----BEGIN RSA PRIVATE KEY-----
     ...
     -----END RSA PRIVATE KEY-----
+  clientID: "Iv1.xxxxxxxxxxxx"
+  clientSecret: "your-oauth-client-secret"
 ```
 
 ## Quick Start
