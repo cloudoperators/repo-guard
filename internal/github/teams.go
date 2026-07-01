@@ -92,7 +92,8 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 						return v, nil
 					}
 				}
-				return []string{}, nil
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -145,7 +146,8 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 						return v, nil
 					}
 				}
-				return []GithubMember{}, nil
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -189,7 +191,8 @@ func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]strin
 						return v, nil
 					}
 				}
-				return []string{}, nil
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}

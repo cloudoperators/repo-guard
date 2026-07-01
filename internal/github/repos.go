@@ -301,7 +301,8 @@ func (t *DefaultRepositoryProvider) RepositoryCollobarators(ctx context.Context,
 						return v, nil
 					}
 				}
-				return []string{}, nil
+				t.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -347,7 +348,8 @@ func (t *DefaultRepositoryProvider) IsPrivate(ctx context.Context, repo string) 
 					return v, nil
 				}
 			}
-			return false, nil
+			t.cache.invalidate(repoKey)
+			return false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", repoKey)
 		}
 		return false, err
 	}

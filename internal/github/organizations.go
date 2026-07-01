@@ -97,7 +97,8 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 						return v, nil
 					}
 				}
-				return []string{}, nil
+				o.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -145,7 +146,8 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 						return v, nil
 					}
 				}
-				return []GithubMember{}, nil
+				o.cache.invalidate(firstPageKey)
+				return nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", firstPageKey)
 			}
 			return nil, err
 		}
@@ -248,9 +250,11 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 				if cached, ok := o.cache.getValue(mfaKey); ok {
 					if v, ok := cached.([]*gogithub.User); ok {
 						mfadisabled = v
+						break
 					}
 				}
-				break
+				o.cache.invalidate(mfaKey)
+				return nil, nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", mfaKey)
 			}
 			return nil, nil, err
 		}
@@ -278,9 +282,11 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 				if cached, ok := o.cache.getValue(allKey); ok {
 					if v, ok := cached.([]*gogithub.User); ok {
 						allMembers = v
+						break
 					}
 				}
-				break
+				o.cache.invalidate(allKey)
+				return nil, nil, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", allKey)
 			}
 			return nil, nil, err
 		}

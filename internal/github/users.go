@@ -102,7 +102,8 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 					return v, v != "", nil
 				}
 			}
-			return "", false, nil
+			u.cache.invalidate(userKey)
+			return "", false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", userKey)
 		}
 		return "", false, err
 	}
@@ -134,7 +135,8 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 					return v, v != "", nil
 				}
 			}
-			return "", false, nil
+			u.cache.invalidate(loginKey)
+			return "", false, fmt.Errorf("etag cache inconsistency for %s: 304 received but no valid cached value", loginKey)
 		}
 		return "", false, err
 	}

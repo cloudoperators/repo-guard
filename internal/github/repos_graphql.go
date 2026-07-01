@@ -6,7 +6,6 @@ package github
 import (
 	"context"
 	"strings"
-	"time"
 
 	githubv4 "github.com/shurcooL/githubv4"
 
@@ -86,13 +85,11 @@ func (t *DefaultRepositoryProvider) ExtendedListGraphQL(ctx context.Context) ([]
 			"teamCursor": (*githubv4.String)(nil),
 		}
 
-		started := time.Now()
 		if err := t.graphqlClient.Query(ctx, &query, vars); err != nil {
 			ghmetrics.GraphQLCallsTotal.WithLabelValues(t.organization, "error").Inc()
 			return nil, nil, nil, err
 		}
 		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.organization, "success").Inc()
-		_ = started // duration tracking can be added later via ghmetrics.ObserveExternalRequest
 
 		for _, node := range query.Organization.Repositories.Nodes {
 			if bool(node.IsArchived) || bool(node.IsDisabled) {
