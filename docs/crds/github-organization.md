@@ -37,6 +37,9 @@ spec:
       permission: push
     - team: private-admin-team
       permission: admin
+  defaultInternalRepositoryTeams:
+    - team: internal-pull-team
+      permission: pull
   installationID: 43715277
 ```
 
@@ -50,6 +53,7 @@ spec:
 | `organizationOwnerTeams` | []string | No | List of GitHub team slugs whose members should be organization owners. |
 | `defaultPublicRepositoryTeams` | []TeamPermission | No | Default team permissions applied to every public repository. |
 | `defaultPrivateRepositoryTeams` | []TeamPermission | No | Default team permissions applied to every private repository. |
+| `defaultInternalRepositoryTeams` | []TeamPermission | No | Default team permissions applied to every internal repository. |
 | `protectedMembers` | []string | No | GitHub logins exempt from `removeOrganizationMember` and `removeRepositoryDirectCollaborator`. |
 
 ### TeamPermission

@@ -96,12 +96,12 @@ sum by (controller) (increase(repo_guard_controller_reconcile_total[30m]))
 
 Bundled alerting rules are in `config/prometheus/rules.yaml`. They cover:
 
-- **HighReconcileErrorRate** — error rate above threshold for a controller.
-- **VeryHighReconcileErrorRate** — elevated error rate.
-- **SlowReconciles** — p95 reconcile duration exceeds SLO.
-- **NoReconcileActivity** — no reconciliations observed in a window (potential controller liveness issue).
-- **ExternalAPIHighErrorRate** — external provider API error rate above threshold.
-- **ExternalAPISlowLatency** — external provider p95 latency exceeds SLO.
+- **`GithubGuardControllerHighErrorRate`** — error rate above 5% for a controller over 10 minutes.
+- **`GithubGuardControllerVeryHighErrorRate`** — error rate above 15% for a controller over 10 minutes.
+- **`GithubGuardControllerSlowReconcileP95`** — p95 reconcile duration exceeds 10 s over 15 minutes.
+- **`GithubGuardControllerNoReconciles`** — no reconciliations observed in 30 minutes (potential controller liveness issue).
+- **`GithubGuardExternalAPIHighErrorRate`** — external provider API error rate above 10% over 10 minutes.
+- **`GithubGuardExternalAPISlowP95`** — external provider p95 latency exceeds 5 s over 15 minutes.
 
 ## PodMonitor
 
