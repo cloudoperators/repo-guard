@@ -82,7 +82,7 @@ spec:
   externalMemberProvider:
     genericHTTP:
       provider: http-eng
-      group: results
+      group: eng-members  # provider-specific group/path identifier, not related to resultsField
 ```
 
 ### Option F — Cluster-scoped HTTP
@@ -93,7 +93,7 @@ spec:
     genericHTTP:
       kind: ClusterGenericExternalMemberProvider
       provider: global-http
-      group: results
+      group: global-members  # provider-specific group/path identifier, not related to resultsField
 ```
 
 ### Option G — Greenhouse

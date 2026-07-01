@@ -47,7 +47,7 @@ The controller writes results to `repo-guard.cloudoperators.dev/email-check-resu
 }
 ```
 
-Possible `status` values: `verified`, `not-part-of-org`, `no`.
+Possible `status` values: `verified`, `not-part-of-org`, `no`, `skipped`.
 
 ### Single-organization (Legacy)
 

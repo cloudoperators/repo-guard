@@ -128,9 +128,9 @@ spec:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `endpoint` | string | Yes | Full URL of the HTTP API endpoint. |
-| `secret` | string | Yes | Secret containing auth credentials (`username`/`password` for Basic or OAuth2). |
-| `resultsField` | string | Yes | JSON field name in the response that contains the array of member objects. |
-| `idField` | string | Yes | JSON field name within each member object that holds the user identifier. |
+| `secret` | string | Yes | Secret containing auth credentials. Supported keys: `username`/`password` (Basic Auth), `token` (Bearer Token), or `username`/`password`/`client_id`/`client_secret` (OAuth2 password grant). |
+| `resultsField` | string | No | JSON field name in the response that contains the array of member objects. Omit when the endpoint returns a flat `[]string` of user identifiers. |
+| `idField` | string | No | JSON field name within each member object that holds the user identifier. Defaults to `id` when omitted. |
 | `paginated` | bool | No | Set to `true` to enable pagination support. |
 | `totalPagesField` | string | No | JSON field name that contains the total page count (required when `paginated: true`). |
 | `pageParam` | string | No | Query parameter name used to specify the page number (required when `paginated: true`). |
