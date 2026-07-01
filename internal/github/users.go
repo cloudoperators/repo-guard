@@ -36,10 +36,11 @@ type DefaultUsersProvider struct {
 	rawService gogithub.UsersService // plain client: used by IsMemberOfOrg / HasVerifiedEmailDomainForGithubUID
 	orgs       gogithub.OrganizationsService
 	http       *gogithub.Client // underlying go-github client to reuse its http.Client for GraphQL
+	githubName string
 	cache      *etagCache
 }
 
-func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersProvider, error) {
+func NewUsersProvider(cc githubapp.ClientCreator, githubName string, installationID int64) (UsersProvider, error) {
 	client, err := cc.NewInstallationClient(installationID)
 	if err != nil {
 		return nil, err
@@ -51,8 +52,9 @@ func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersPr
 		return nil, errors.New("empty organizations service")
 	}
 
-	// Users provider uses a shared cache keyed by "users" since it's not org-specific.
-	cache := getOrCreateOrgCache("__users__", "__users__")
+	// Users lookups are not org-specific, but we still key the cache by GitHub instance
+	// so that separate GitHub instances (github.com vs GHE) never share ETags or user data.
+	cache := getOrCreateOrgCache(githubName, "__users__")
 
 	// Clone the client with an ETag transport for conditional GET caching.
 	baseHTTP := client.Client()
@@ -76,6 +78,7 @@ func NewUsersProvider(cc githubapp.ClientCreator, installationID int64) (UsersPr
 		rawService: *client.Users,
 		orgs:       *client.Organizations,
 		http:       client,
+		githubName: githubName,
 		cache:      cache,
 	}, nil
 }
@@ -98,7 +101,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "__users__", "user-by-id").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues(u.githubName, "__users__", "user-by-id").Inc()
 			if cached, ok := u.cache.getValue(userKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -112,7 +115,7 @@ func (u *DefaultUsersProvider) GithubUsernameByID(id string) (string, bool, erro
 
 	login := user.GetLogin()
 	if etag, ok := u.cache.getEtag(userKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "__users__", "user-by-id").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(u.githubName, "__users__", "user-by-id").Inc()
 		u.cache.set(userKey, etag, login)
 	}
 
@@ -131,7 +134,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 			return "", false, nil
 		}
 		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			ghmetrics.EtagCacheHitsTotal.WithLabelValues("__users__", "__users__", "user-by-login").Inc()
+			ghmetrics.EtagCacheHitsTotal.WithLabelValues(u.githubName, "__users__", "user-by-login").Inc()
 			if cached, ok := u.cache.getValue(loginKey); ok {
 				if v, ok := cached.(string); ok {
 					return v, v != "", nil
@@ -146,7 +149,7 @@ func (u *DefaultUsersProvider) GithubIDByUsername(username string) (string, bool
 	// convert numeric ID to string
 	idStr := strconv.FormatInt(user.GetID(), 10)
 	if etag, ok := u.cache.getEtag(loginKey); ok && etag != "" {
-		ghmetrics.EtagCacheMissesTotal.WithLabelValues("__users__", "__users__", "user-by-login").Inc()
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(u.githubName, "__users__", "user-by-login").Inc()
 		u.cache.set(loginKey, etag, idStr)
 	}
 
