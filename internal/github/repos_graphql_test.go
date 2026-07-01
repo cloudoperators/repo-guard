@@ -402,4 +402,15 @@ func TestExtendedListGraphQL_TeamRepoOverflow(t *testing.T) {
 			t.Errorf("repo %q: expected big-team, got %v", repo.Name, repo.Teams)
 		}
 	}
+	// Assert per-repo permissions: repo-1 from first page (WRITE→push), repo-2 from overflow (ADMIN→admin).
+	wantPerm := map[string]repoguardsapv1.GithubTeamPermission{
+		"repo-1": "push",
+		"repo-2": "admin",
+	}
+	for _, repo := range priv {
+		got := repo.Teams[0].Permission
+		if want := wantPerm[repo.Name]; got != want {
+			t.Errorf("repo %q: expected permission %q, got %q", repo.Name, want, got)
+		}
+	}
 }
