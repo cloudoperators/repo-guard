@@ -43,9 +43,12 @@ type orgTeamsWithReposQuery struct {
 
 // teamReposQuery is the GraphQL query struct for fetching repositories of a
 // single team. Used as a fallback when a team has more than 100 repositories.
+// Team is a pointer because organization.team(slug:) is a nullable GraphQL
+// field — the team may have been renamed or deleted between the initial
+// orgTeamsWithReposQuery page and this overflow call.
 type teamReposQuery struct {
 	Organization struct {
-		Team struct {
+		Team *struct {
 			Repositories struct {
 				PageInfo struct {
 					HasNextPage githubv4.Boolean
@@ -142,7 +145,10 @@ func (t *DefaultRepositoryProvider) buildRepoTeamsMap(ctx context.Context) (map[
 
 			// Rare edge case: team has >100 repos. Use a dedicated single-team
 			// query so the repoCursor applies only to this team.
-			if bool(team.Repositories.PageInfo.HasNextPage) {
+			// Guard against an empty EndCursor: if HasNextPage is true but
+			// EndCursor is empty the API response is malformed; skip the
+			// overflow query rather than looping on after:"".
+			if bool(team.Repositories.PageInfo.HasNextPage) && team.Repositories.PageInfo.EndCursor != "" {
 				if err := t.fetchRemainingTeamRepos(ctx, slug, team.Repositories.PageInfo.EndCursor, repoTeams); err != nil {
 					return nil, err
 				}
@@ -175,6 +181,12 @@ func (t *DefaultRepositoryProvider) fetchRemainingTeamRepos(ctx context.Context,
 			return err
 		}
 		ghmetrics.GraphQLCallsTotal.WithLabelValues(t.githubName, t.organization, "success").Inc()
+
+		// Team is nullable: the team may have been deleted/renamed between the
+		// initial teams query and this overflow call. Treat nil as an empty result.
+		if query.Organization.Team == nil {
+			break
+		}
 
 		for _, edge := range query.Organization.Team.Repositories.Edges {
 			repoName := string(edge.Node.Name)
