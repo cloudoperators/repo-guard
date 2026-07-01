@@ -32,16 +32,17 @@ func TestGithubTeamChangeCalculator(t *testing.T) {
 			wantOpsLen:      0,
 		},
 		{
-			name: "desired member has existing failed add op — skipped, no new op",
+			name: "desired member has existing failed add op — retryable, new pending op queued",
 			existingOps: []GithubUserOperation{
 				{User: "bob", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateFailed},
 			},
 			desiredMembers: []Member{{GithubUsername: "bob"}},
-			wantChanged:    false,
-			wantOpsLen:     1, // existing op preserved, no new one added
+			wantChanged:    true,
+			wantOpsLen:     2, // existing failed op preserved + new pending op added
+			wantAddUsers:   []string{"bob"},
 		},
 		{
-			name: "desired member has existing notfound add op — skipped, no new op",
+			name: "desired member has existing notfound add op — terminal, no new op",
 			existingOps: []GithubUserOperation{
 				{User: "carol", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateNotFound},
 			},
@@ -59,9 +60,9 @@ func TestGithubTeamChangeCalculator(t *testing.T) {
 			wantOpsLen:     1,
 		},
 		{
-			name: "case-insensitive: failed op stored as uppercase — still skipped",
+			name: "case-insensitive: notfound op stored as uppercase — still skipped",
 			existingOps: []GithubUserOperation{
-				{User: "Eve", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateFailed},
+				{User: "Eve", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateNotFound},
 			},
 			desiredMembers: []Member{{GithubUsername: "eve"}},
 			wantChanged:    false,
@@ -75,16 +76,16 @@ func TestGithubTeamChangeCalculator(t *testing.T) {
 			wantOpsLen:      1,
 		},
 		{
-			name: "multiple desired: one failed, one new — only new gets add op",
+			name: "multiple desired: one notfound (terminal), one new — only new gets add op",
 			existingOps: []GithubUserOperation{
-				{User: "grace", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateFailed},
+				{User: "grace", Operation: GithubUserOperationTypeAdd, State: GithubUserOperationStateNotFound},
 			},
 			desiredMembers: []Member{
 				{GithubUsername: "grace"},
 				{GithubUsername: "henry"},
 			},
 			wantChanged:  true,
-			wantOpsLen:   2, // grace's failed op + henry's new pending op
+			wantOpsLen:   2, // grace's notfound op + henry's new pending op
 			wantAddUsers: []string{"henry"},
 		},
 	}

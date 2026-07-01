@@ -145,9 +145,8 @@ func (github GithubTeam) ChangeCalculator(desiredMembers []Member) (bool, *Githu
 	// Process desired members to identify additions
 	for _, desiredMember := range desiredMembers {
 		lowerGithubUsername := strings.ToLower(desiredMember.GithubUsername)
-		// Skip users marked as NotFound or Failed (terminal states — no retry)
-		if userOpStateMap[lowerGithubUsername] == GithubUserOperationStateNotFound ||
-			userOpStateMap[lowerGithubUsername] == GithubUserOperationStateFailed {
+		// Skip users marked as NotFound (terminal state — no retry)
+		if userOpStateMap[lowerGithubUsername] == GithubUserOperationStateNotFound {
 			continue
 		}
 
@@ -160,7 +159,6 @@ func (github GithubTeam) ChangeCalculator(desiredMembers []Member) (bool, *Githu
 					(op.State == GithubUserOperationStatePending ||
 						op.State == GithubUserOperationStateComplete ||
 						op.State == GithubUserOperationStateSkipped ||
-						op.State == GithubUserOperationStateFailed ||
 						op.State == GithubUserOperationStateNotFound) {
 					operationExists = true
 					break

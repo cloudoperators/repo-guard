@@ -1068,8 +1068,8 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					} else {
 						userFound, err := teamsProvider.AddUser(ctx, githubTeamName, userOperation.User)
 						if !userFound {
-							l.Info("user cannot be added to team: marking operation as failed", "user", userOperation.User, "error", err)
-							newStatus.Operations[i].State = v1.GithubUserOperationStateFailed
+							l.Info("user cannot be added to team: marking operation as notfound", "user", userOperation.User, "error", err)
+							newStatus.Operations[i].State = v1.GithubUserOperationStateNotFound
 							newStatus.Operations[i].Error = err.Error()
 							newStatus.Operations[i].Timestamp = metav1.Now()
 							statusChanged = true
