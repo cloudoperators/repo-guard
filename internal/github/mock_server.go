@@ -969,6 +969,21 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 					},
 				})
 			}
+			// Also emit nodes for team slugs that appear only in teamRepoPerms
+			// (e.g. teams created dynamically via REST and not seeded in cfg.Teams).
+			for slug, edges := range teamRepoEdges {
+				if seen[slug] {
+					continue
+				}
+				seen[slug] = true
+				teamNodes = append(teamNodes, map[string]any{
+					"slug": slug,
+					"repositories": map[string]any{
+						"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						"edges":    edges,
+					},
+				})
+			}
 			resp := map[string]any{
 				"data": map[string]any{
 					"organization": map[string]any{

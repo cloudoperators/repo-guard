@@ -317,6 +317,17 @@ func TestExtendedListGraphQL_TeamsPagination(t *testing.T) {
 	if len(priv[0].Teams) != 2 {
 		t.Errorf("expected 2 teams on repo-x, got %v", priv[0].Teams)
 	}
+	// Verify exact slug names and permission mappings (order-independent).
+	bySlug := map[string]repoguardsapv1.GithubTeamPermission{}
+	for _, tp := range priv[0].Teams {
+		bySlug[tp.Team] = tp.Permission
+	}
+	if bySlug["team-a"] != "push" {
+		t.Errorf("team-a: expected push, got %q", bySlug["team-a"])
+	}
+	if bySlug["team-b"] != "pull" {
+		t.Errorf("team-b: expected pull, got %q", bySlug["team-b"])
+	}
 }
 
 // buildTeamReposGraphQLResponse builds the JSON body for a single-team repos query
