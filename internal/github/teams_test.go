@@ -31,6 +31,7 @@ func newTestTeamsProvider(t *testing.T) (*DefaultTeamsProvider, *http.ServeMux) 
 	provider := &DefaultTeamsProvider{
 		service:      *client.Teams,
 		organization: "test-org",
+		cache:        &etagCache{entries: make(map[string]etagEntry)},
 	}
 	return provider, mux
 }

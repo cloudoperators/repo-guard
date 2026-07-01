@@ -474,7 +474,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, nil
 		}
 
-		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedList(ctx)
+		publicRepos, privateRepos, internalRepos, err := reposProvider.ExtendedListGraphQL(ctx)
 		if err != nil {
 			l.Error(err, "error listing repositories from github")
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {

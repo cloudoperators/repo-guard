@@ -33,6 +33,9 @@ func elementsMatch(listA, listB any) bool {
 //   - Invitation rate limit (no timestamp): "exceeded the organization invitation rate limit …"
 //     → returns a synthetic backoff of now+1h (the API does not provide a reset time for this case).
 //
+//   - GraphQL secondary rate limit: "You have exceeded a secondary rate limit" / "API rate limit exceeded for installation ID"
+//     → treated as a rate-limit error and returns now+1h as a conservative backoff.
+//
 // Returns the retry-after time in UTC and true if the error is a recognisable rate-limit error;
 // otherwise returns zero time and false.
 func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
@@ -57,6 +60,11 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 		return time.Now().UTC(), true
 	}
 	if !strings.Contains(lowered, "until ") {
+		// GraphQL secondary rate limit strings (no timestamp): treat as rate-limited with 1h backoff.
+		if strings.Contains(lowered, "secondary rate limit") ||
+			strings.Contains(lowered, "api rate limit exceeded for installation") {
+			return time.Now().UTC().Add(time.Hour), true
+		}
 		return time.Time{}, false
 	}
 	// Format 1: extract the future reset timestamp after "until ".

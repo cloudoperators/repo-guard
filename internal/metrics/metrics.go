@@ -182,6 +182,38 @@ var (
 		},
 		[]string{"github", "organization"},
 	)
+
+	// GraphQL bulk fetch counters (Track 1: #149)
+	GraphQLCallsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "github",
+			Name:      "graphql_calls_total",
+			Help:      "Total number of GitHub GraphQL API calls, by organization and result.",
+		},
+		[]string{"org", "result"},
+	)
+
+	// ETag conditional-request counters (Track 2: #141)
+	EtagCacheHitsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "github",
+			Name:      "etag_cache_hits_total",
+			Help:      "Total number of GitHub REST requests that returned HTTP 304 (ETag cache hit).",
+		},
+		[]string{"org", "endpoint"},
+	)
+
+	EtagCacheMissesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "github",
+			Name:      "etag_cache_misses_total",
+			Help:      "Total number of GitHub REST requests that returned HTTP 200 (ETag cache miss or first fetch).",
+		},
+		[]string{"org", "endpoint"},
+	)
 )
 
 func init() {
@@ -202,6 +234,9 @@ func init() {
 		RateLimitHitsTotal,
 		RateLimitBackoffSeconds,
 		PendingOperationsTotal,
+		GraphQLCallsTotal,
+		EtagCacheHitsTotal,
+		EtagCacheMissesTotal,
 	)
 }
 

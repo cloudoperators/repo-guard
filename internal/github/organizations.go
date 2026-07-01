@@ -7,26 +7,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	gogithub "github.com/google/go-github/v88/github"
 	"github.com/palantir/go-githubapp/githubapp"
 
-	"github.com/google/go-github/v88/github"
+	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type OrganizationProvider interface {
 	Owners(ctx context.Context) ([]string, error)
 	OwnersExtended(ctx context.Context) ([]GithubMember, error)
 	Members(ctx context.Context) ([]string, error)
-	ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error)
+	ExtendedMembers(ctx context.Context) ([]*gogithub.User, []*gogithub.User, error)
 	ChangeToOwner(ctx context.Context, user string) error
 	ChangeToMember(ctx context.Context, user string) error
 	RemoveFromOrg(ctx context.Context, user string) error
 }
 
 type DefaultOrganizationProvider struct {
-	organizationService github.OrganizationsService
-	usersService        github.UsersService
+	organizationService gogithub.OrganizationsService
+	usersService        gogithub.UsersService
 	organization        string
+	cache               *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
@@ -46,13 +49,40 @@ func NewOrganizationProvider(cc githubapp.ClientCreator, organization string, in
 	if organization == "" {
 		return nil, errors.New("organization name should not be empty")
 	}
-	return &DefaultOrganizationProvider{organizationService: *client.Organizations, usersService: *client.Users, organization: organization}, nil
+
+	cache := getOrCreateOrgCache(organization)
+
+	// Clone the client with an ETag transport for conditional GET caching.
+	baseHTTP := client.Client()
+	baseTransport := baseHTTP.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	etagHTTP := &http.Client{
+		Transport:     &etagTransport{wrapped: baseTransport, cache: cache, keyFn: urlCacheKey},
+		CheckRedirect: baseHTTP.CheckRedirect,
+		Jar:           baseHTTP.Jar,
+		Timeout:       baseHTTP.Timeout,
+	}
+	etagClient, err := client.Clone(gogithub.WithHTTPClient(etagHTTP))
+	if err != nil {
+		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
+	}
+
+	return &DefaultOrganizationProvider{
+		organizationService: *etagClient.Organizations,
+		usersService:        *client.Users, // user lookups use the original client
+		organization:        organization,
+		cache:               cache,
+	}, nil
 }
 
 func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) ([]string, error) {
 
-	opt := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	firstPageKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+
+	opt := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        role,
 	}
 
@@ -60,6 +90,15 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members").Inc()
+				if cached, ok := o.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]string); ok {
+						return v, nil
+					}
+				}
+				return []string{}, nil
+			}
 			return nil, err
 		}
 		for _, member := range users {
@@ -78,13 +117,20 @@ func (o *DefaultOrganizationProvider) members(ctx context.Context, role string) 
 		opt.Page = resp.NextPage
 	}
 
+	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members").Inc()
+		o.cache.set(firstPageKey, etag, memberList)
+	}
+
 	return memberList, nil
 }
 
 func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role string) ([]GithubMember, error) {
 
-	opt := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	firstPageKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=%s", o.organization, role)
+
+	opt := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        role,
 	}
 
@@ -92,6 +138,15 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
+				if cached, ok := o.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]GithubMember); ok {
+						return v, nil
+					}
+				}
+				return []GithubMember{}, nil
+			}
 			return nil, err
 		}
 		for _, m := range users {
@@ -104,6 +159,11 @@ func (o *DefaultOrganizationProvider) membersExtended(ctx context.Context, role 
 			break
 		}
 		opt.Page = resp.NextPage
+	}
+
+	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-ext").Inc()
+		o.cache.set(firstPageKey, etag, result)
 	}
 
 	return result, nil
@@ -130,7 +190,7 @@ func (o *DefaultOrganizationProvider) OwnersExtended(ctx context.Context) ([]Git
 // ListMembers only returns active members, so without this, users whose invite is still pending
 // are invisible to OwnersExtended and get re-invited on every reconcile.
 func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) ([]GithubMember, error) {
-	opt := &github.ListOptions{PerPage: 100}
+	opt := &gogithub.ListOptions{PerPage: 100}
 
 	result := make([]GithubMember, 0)
 	for {
@@ -169,17 +229,29 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 	return result, nil
 }
 
-func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*github.User, []*github.User, error) {
+func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*gogithub.User, []*gogithub.User, error) {
 
-	optMfa := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	mfaKey := fmt.Sprintf("/orgs/%s/members?filter=2fa_disabled&per_page=100&role=all", o.organization)
+	allKey := fmt.Sprintf("/orgs/%s/members?per_page=100&role=all", o.organization)
+
+	optMfa := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        "all",
 		Filter:      "2fa_disabled",
 	}
-	mfadisabled := make([]*github.User, 0)
+	mfadisabled := make([]*gogithub.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optMfa)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-2fa").Inc()
+				if cached, ok := o.cache.getValue(mfaKey); ok {
+					if v, ok := cached.([]*gogithub.User); ok {
+						mfadisabled = v
+					}
+				}
+				break
+			}
 			return nil, nil, err
 		}
 		mfadisabled = append(mfadisabled, users...)
@@ -188,15 +260,28 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 		}
 		optMfa.Page = resp.NextPage
 	}
+	if etag, ok := o.cache.getEtag(mfaKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-2fa").Inc()
+		o.cache.set(mfaKey, etag, mfadisabled)
+	}
 
-	optAll := &github.ListMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	optAll := &gogithub.ListMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 		Role:        "all",
 	}
-	allMembers := make([]*github.User, 0)
+	allMembers := make([]*gogithub.User, 0)
 	for {
 		users, resp, err := o.organizationService.ListMembers(ctx, o.organization, optAll)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-members-all").Inc()
+				if cached, ok := o.cache.getValue(allKey); ok {
+					if v, ok := cached.([]*gogithub.User); ok {
+						allMembers = v
+					}
+				}
+				break
+			}
 			return nil, nil, err
 		}
 		allMembers = append(allMembers, users...)
@@ -204,6 +289,10 @@ func (o *DefaultOrganizationProvider) ExtendedMembers(ctx context.Context) ([]*g
 			break
 		}
 		optAll.Page = resp.NextPage
+	}
+	if etag, ok := o.cache.getEtag(allKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-members-all").Inc()
+		o.cache.set(allKey, etag, allMembers)
 	}
 
 	return allMembers, mfadisabled, nil
@@ -216,7 +305,7 @@ func (o *DefaultOrganizationProvider) Members(ctx context.Context) ([]string, er
 
 func (o *DefaultOrganizationProvider) changeRole(ctx context.Context, user string, role string) error {
 
-	membership := &github.Membership{}
+	membership := &gogithub.Membership{}
 	membership.Role = &role
 
 	_, response, err := o.organizationService.EditOrgMembership(ctx, user, o.organization, membership)

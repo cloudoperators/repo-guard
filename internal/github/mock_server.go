@@ -880,6 +880,76 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		}
 		writeJSONError(w, `{"message":"Not Found"}`, http.StatusNotFound)
 	})
+
+	// ---- GraphQL ----
+
+	// POST /api/graphql  — serves the orgReposWithTeamsQuery used by ExtendedListGraphQL.
+	// The mock returns all repos in a single page (no pagination) with their team permissions.
+	mux.HandleFunc("/api/graphql", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		stateMu.Lock()
+		snapshot := make([]MockRepo, len(repos))
+		copy(snapshot, repos)
+		stateMu.Unlock()
+
+		nodes := make([]map[string]any, 0, len(snapshot))
+		for _, repo := range snapshot {
+			// Archived and disabled repos are included in the response;
+			// ExtendedListGraphQL itself filters them out (same as REST path).
+			teamEdges := make([]map[string]any, 0, len(repo.Teams))
+			for _, tp := range repo.Teams {
+				teamEdges = append(teamEdges, map[string]any{
+					"permission": restPermissionToGraphQL(tp.Permission),
+					"node":       map[string]any{"slug": tp.Slug},
+				})
+			}
+			nodes = append(nodes, map[string]any{
+				"name":       repo.Name,
+				"visibility": strings.ToUpper(repo.repoVisibility()),
+				"isArchived": repo.Archived,
+				"isDisabled": repo.Disabled,
+				"teams": map[string]any{
+					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+					"edges":    teamEdges,
+				},
+			})
+		}
+
+		resp := map[string]any{
+			"data": map[string]any{
+				"organization": map[string]any{
+					"repositories": map[string]any{
+						"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						"nodes":    nodes,
+					},
+				},
+			},
+		}
+		writeJSON(w, resp)
+	})
+}
+
+// restPermissionToGraphQL converts a REST permission string (push, pull, admin, maintain, triage)
+// to the GraphQL RepositoryPermission enum value (WRITE, READ, ADMIN, MAINTAIN, TRIAGE).
+func restPermissionToGraphQL(p string) string {
+	switch p {
+	case "push":
+		return "WRITE"
+	case "pull":
+		return "READ"
+	case "admin":
+		return "ADMIN"
+	case "maintain":
+		return "MAINTAIN"
+	case "triage":
+		return "TRIAGE"
+	default:
+		return strings.ToUpper(p)
+	}
 }
 
 // userToMap converts a MockUser to a JSON-serialisable map with the field

@@ -34,6 +34,7 @@ func newTestRepositoryProvider(t *testing.T) (*DefaultRepositoryProvider, *http.
 		repositoryService: *client.Repositories,
 		teamsService:      *client.Teams,
 		organization:      "test-org",
+		cache:             &etagCache{entries: make(map[string]etagEntry)},
 	}
 	return provider, mux
 }

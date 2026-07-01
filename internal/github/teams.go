@@ -7,12 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	gogithub "github.com/google/go-github/v88/github"
+	"github.com/gosimple/slug"
 	"github.com/palantir/go-githubapp/githubapp"
 
-	"github.com/gosimple/slug"
-
-	"github.com/google/go-github/v88/github"
+	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
 )
 
 type TeamsProvider interface {
@@ -31,8 +32,9 @@ type GithubMember struct {
 }
 
 type DefaultTeamsProvider struct {
-	service      github.TeamsService
+	service      gogithub.TeamsService
 	organization string
+	cache        *etagCache
 }
 
 // installationID can be found at Organizations - Settings - Installed Github Apps and check the URL
@@ -49,12 +51,33 @@ func NewTeamsProvider(cc githubapp.ClientCreator, organization string, installat
 		return nil, errors.New("organization name should not be empty")
 	}
 
-	return &DefaultTeamsProvider{service: *client.Teams, organization: organization}, nil
+	cache := getOrCreateOrgCache(organization)
+
+	// Clone the client with an ETag transport for conditional GET caching.
+	baseHTTP := client.Client()
+	baseTransport := baseHTTP.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	etagHTTP := &http.Client{
+		Transport:     &etagTransport{wrapped: baseTransport, cache: cache, keyFn: urlCacheKey},
+		CheckRedirect: baseHTTP.CheckRedirect,
+		Jar:           baseHTTP.Jar,
+		Timeout:       baseHTTP.Timeout,
+	}
+	etagClient, err := client.Clone(gogithub.WithHTTPClient(etagHTTP))
+	if err != nil {
+		return nil, fmt.Errorf("clone github client with etag transport: %w", err)
+	}
+
+	return &DefaultTeamsProvider{service: *etagClient.Teams, organization: organization, cache: cache}, nil
 }
 
 func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 
-	opt := &github.ListOptions{
+	firstPageKey := fmt.Sprintf("/orgs/%s/teams?per_page=100", t.organization)
+
+	opt := &gogithub.ListOptions{
 		PerPage: 100,
 	}
 
@@ -62,6 +85,15 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 	for {
 		teams, response, err := t.service.ListTeams(ctx, t.organization, opt)
 		if err != nil {
+			if response != nil && response.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "teams-list").Inc()
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]string); ok {
+						return v, nil
+					}
+				}
+				return []string{}, nil
+			}
 			return nil, err
 		}
 		for _, team := range teams {
@@ -85,20 +117,36 @@ func (t *DefaultTeamsProvider) List(ctx context.Context) ([]string, error) {
 		opt.Page = response.NextPage
 	}
 
-	return teamList, nil
+	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "teams-list").Inc()
+		t.cache.set(firstPageKey, etag, teamList)
+	}
 
+	return teamList, nil
 }
 
 func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) ([]GithubMember, error) {
 
-	opt := &github.TeamListTeamMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	teamSlug := slug.Make(team)
+	firstPageKey := fmt.Sprintf("/orgs/%s/teams/%s/members?per_page=100", t.organization, teamSlug)
+
+	opt := &gogithub.TeamListTeamMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 	}
 
 	userList := make([]GithubMember, 0)
 	for {
-		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, slug.Make(team), opt)
+		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, teamSlug, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]GithubMember); ok {
+						return v, nil
+					}
+				}
+				return []GithubMember{}, nil
+			}
 			return nil, err
 		}
 		for _, user := range users {
@@ -113,19 +161,36 @@ func (t DefaultTeamsProvider) MembersExtended(ctx context.Context, team string) 
 		opt.Page = resp.NextPage
 	}
 
+	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "team-members-ext").Inc()
+		t.cache.set(firstPageKey, etag, userList)
+	}
+
 	return userList, nil
 }
 
 func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]string, error) {
 
-	opt := &github.TeamListTeamMembersOptions{
-		ListOptions: github.ListOptions{PerPage: 100},
+	teamSlug := slug.Make(team)
+	firstPageKey := fmt.Sprintf("/orgs/%s/teams/%s/members?per_page=100", t.organization, teamSlug)
+
+	opt := &gogithub.TeamListTeamMembersOptions{
+		ListOptions: gogithub.ListOptions{PerPage: 100},
 	}
 
 	userList := make([]string, 0)
 	for {
-		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, slug.Make(team), opt)
+		users, resp, err := t.service.ListTeamMembersBySlug(ctx, t.organization, teamSlug, opt)
 		if err != nil {
+			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "team-members").Inc()
+				if cached, ok := t.cache.getValue(firstPageKey); ok {
+					if v, ok := cached.([]string); ok {
+						return v, nil
+					}
+				}
+				return []string{}, nil
+			}
 			return nil, err
 		}
 		for _, user := range users {
@@ -144,6 +209,11 @@ func (t DefaultTeamsProvider) Members(ctx context.Context, team string) ([]strin
 		opt.Page = resp.NextPage
 	}
 
+	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "team-members").Inc()
+		t.cache.set(firstPageKey, etag, userList)
+	}
+
 	return userList, nil
 }
 
@@ -152,7 +222,7 @@ func (t DefaultTeamsProvider) AddTeam(ctx context.Context, team string) error {
 	privacyLevel := "closed"
 	description := "membership to this team is managed by github-guard"
 
-	_, response, err := t.service.CreateTeam(ctx, t.organization, github.NewTeam{Name: team, Privacy: &privacyLevel, Description: &description})
+	_, response, err := t.service.CreateTeam(ctx, t.organization, gogithub.NewTeam{Name: team, Privacy: &privacyLevel, Description: &description})
 	if err != nil {
 		// Treat 422 "Name must be unique for this org" as success (team already exists)
 		if response != nil && response.StatusCode == 422 {

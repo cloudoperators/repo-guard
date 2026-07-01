@@ -34,6 +34,7 @@ func newTestOrganizationProvider(t *testing.T) (*DefaultOrganizationProvider, *h
 		organizationService: *client.Organizations,
 		usersService:        *client.Users,
 		organization:        "test-org",
+		cache:               &etagCache{entries: make(map[string]etagEntry)},
 	}
 	return provider, mux
 }

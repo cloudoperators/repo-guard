@@ -94,6 +94,8 @@ func startMockGitHubServer() {
 
 	// Override V3 API URL so the GithubReconciler points go-githubapp at the mock.
 	TEST_ENV["GITHUB_V3_API_URL"] = mockGitHubServer.URL + "/api/v3/"
+	// Override V4 (GraphQL) API URL so ExtendedListGraphQL hits the mock server.
+	TEST_ENV["GITHUB_V4_API_URL"] = mockGitHubServer.URL + "/api/graphql"
 	// Generate a throwaway private key so go-githubapp can build valid JWTs.
 	// The mock server accepts requests without validating the JWT signature.
 	TEST_ENV["GITHUB_PRIVATE_KEY"] = generateMockPrivateKey()

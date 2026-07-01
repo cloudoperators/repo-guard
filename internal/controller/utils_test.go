@@ -64,4 +64,29 @@ func TestParseGitHubRateLimitReset(t *testing.T) {
 			t.Fatal("expected ok=false for empty string")
 		}
 	})
+
+	t.Run("graphql secondary rate limit returns conservative backoff", func(t *testing.T) {
+		errStr := "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."
+		before := time.Now().UTC()
+		got, ok := parseGitHubRateLimitReset(errStr)
+		if !ok {
+			t.Fatal("expected ok=true for GraphQL secondary rate limit, got false")
+		}
+		if !got.After(before) {
+			t.Fatalf("expected future backoff time, got %v (before=%v)", got, before)
+		}
+	})
+
+	t.Run("graphql installation rate limit without timestamp returns backoff", func(t *testing.T) {
+		// GraphQL errors: no "until" timestamp, just a generic installation rate limit.
+		errStr := "API rate limit exceeded for installation ID 99999."
+		before := time.Now().UTC()
+		got, ok := parseGitHubRateLimitReset(errStr)
+		if !ok {
+			t.Fatal("expected ok=true for GraphQL installation rate limit, got false")
+		}
+		if !got.After(before) {
+			t.Fatalf("expected future backoff time, got %v (before=%v)", got, before)
+		}
+	})
 }
