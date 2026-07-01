@@ -94,14 +94,27 @@ sum by (controller) (increase(repo_guard_controller_reconcile_total[30m]))
 
 ## Alerting Rules
 
-Bundled alerting rules are in `config/prometheus/rules.yaml`. They cover:
+Bundled alerting rules are deployed via the Helm chart (`charts/repo-guard/templates/prometheusrules.yaml`). The kustomize equivalent lives in `config/prometheus/rules.yaml`. The shipped alerts are:
+
+**Controller alerts**
 
 - **`GithubGuardControllerHighErrorRate`** — error rate above 5% for a controller over 10 minutes.
 - **`GithubGuardControllerVeryHighErrorRate`** — error rate above 15% for a controller over 10 minutes.
 - **`GithubGuardControllerSlowReconcileP95`** — p95 reconcile duration exceeds 10 s over 15 minutes.
 - **`GithubGuardControllerNoReconciles`** — no reconciliations observed in 30 minutes (potential controller liveness issue).
+
+**External provider alerts**
+
 - **`GithubGuardExternalAPIHighErrorRate`** — external provider API error rate above 10% over 10 minutes.
 - **`GithubGuardExternalAPISlowP95`** — external provider p95 latency exceeds 5 s over 15 minutes.
+
+**Domain alerts**
+
+- **`GithubGuardOrgRateLimited`** — an organization has been in rate-limited state for more than 5 minutes.
+- **`GithubGuardHighPendingOperations`** — an organization has more than 50 pending operations for over 30 minutes.
+- **`GithubGuardOrgSyncFailureSpike`** — an organization has failed reconciliation more than 5 times in 30 minutes.
+- **`GithubGuardTeamSyncFailureSpike`** — a team has failed reconciliation more than 5 times in 30 minutes.
+- **`GithubGuardRateLimitFrequent`** — more than 10 GitHub rate-limit hits in 1 hour.
 
 ## PodMonitor
 
