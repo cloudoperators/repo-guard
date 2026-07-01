@@ -205,6 +205,7 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 				return result, nil
 			}
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(o.organization, "org-invitations").Inc()
 				if cached, ok := o.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]GithubMember); ok {
 						return v, nil
@@ -239,6 +240,7 @@ func (o *DefaultOrganizationProvider) pendingAdminMembers(ctx context.Context) (
 	}
 
 	if etag, ok := o.cache.getEtag(firstPageKey); ok && etag != "" {
+		ghmetrics.EtagCacheMissesTotal.WithLabelValues(o.organization, "org-invitations").Inc()
 		o.cache.set(firstPageKey, etag, result)
 	}
 

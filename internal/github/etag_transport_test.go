@@ -111,6 +111,9 @@ func TestUrlCacheKey(t *testing.T) {
 	}{
 		{"http://example.com/orgs/myorg/members", "/orgs/myorg/members"},
 		{"http://example.com/orgs/myorg/members?role=admin&per_page=100", "/orgs/myorg/members?role=admin&per_page=100"},
+		// GitHub Enterprise paths include /api/v3 prefix; keys must be normalized.
+		{"https://ghe.example.com/api/v3/orgs/myorg/members", "/orgs/myorg/members"},
+		{"https://ghe.example.com/api/v3/repos/myorg/myrepo/teams?per_page=100", "/repos/myorg/myrepo/teams?per_page=100"},
 	}
 	for _, tc := range cases {
 		req, _ := http.NewRequest(http.MethodGet, tc.url, nil)

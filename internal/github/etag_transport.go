@@ -5,6 +5,7 @@ package github
 
 import (
 	"net/http"
+	"strings"
 )
 
 // etagTransport is an http.RoundTripper that injects If-None-Match headers on
@@ -44,11 +45,20 @@ func (t *etagTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// urlCacheKey returns a stable string derived from the request URL path and raw query.
+// urlCacheKey returns a stable cache key derived from the request URL path and raw query.
+// It strips the GitHub Enterprise REST prefix ("/api/v3") so that cache keys are
+// consistent with provider-side keys (e.g. "/orgs/...") regardless of whether the
+// target is github.com or a GHE instance.
 // This is used as the default keyFn for etagTransport.
 func urlCacheKey(req *http.Request) string {
-	if req.URL.RawQuery != "" {
-		return req.URL.Path + "?" + req.URL.RawQuery
+	path := req.URL.Path
+	// Normalize GHE paths: strip leading "/api/v3" prefix so cache keys match
+	// provider-constructed keys which always start with "/orgs/", "/repos/", etc.
+	if after, ok := strings.CutPrefix(path, "/api/v3"); ok {
+		path = after
 	}
-	return req.URL.Path
+	if req.URL.RawQuery != "" {
+		return path + "?" + req.URL.RawQuery
+	}
+	return path
 }

@@ -210,6 +210,7 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 		teams, resp, err := t.repositoryService.ListTeams(ctx, t.organization, repo, opt)
 		if err != nil {
 			if resp != nil && resp.StatusCode == http.StatusNotModified {
+				ghmetrics.EtagCacheHitsTotal.WithLabelValues(t.organization, "repo-teams").Inc()
 				if cached, ok := t.cache.getValue(firstPageKey); ok {
 					if v, ok := cached.([]repoguardsapv1.GithubTeamWithPermission); ok {
 						return v, nil
@@ -243,8 +244,11 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 		teamWithPermissions = append(teamWithPermissions, repoguardsapv1.GithubTeamWithPermission{Team: slug, Permission: repoguardsapv1.GithubTeamPermission(perm)})
 	}
 
-	if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
-		t.cache.set(firstPageKey, etag, teamWithPermissions)
+	if t.cache != nil {
+		if etag, ok := t.cache.getEtag(firstPageKey); ok && etag != "" {
+			ghmetrics.EtagCacheMissesTotal.WithLabelValues(t.organization, "repo-teams").Inc()
+			t.cache.set(firstPageKey, etag, teamWithPermissions)
+		}
 	}
 
 	return teamWithPermissions, nil

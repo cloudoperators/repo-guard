@@ -1047,7 +1047,7 @@
                 "plugin": {
                   "kind": "PrometheusTimeSeriesQuery",
                   "spec": {
-                    "query": "100 * sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) / (sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) + sum(increase(repo_guard_github_etag_cache_misses_total{organization=~\"$org\"}[1h])))"
+                    "query": "100 * sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) / clamp_min(sum(increase(repo_guard_github_etag_cache_hits_total{organization=~\"$org\"}[1h])) + sum(increase(repo_guard_github_etag_cache_misses_total{organization=~\"$org\"}[1h])), 1)"
                   }
                 }
               }
