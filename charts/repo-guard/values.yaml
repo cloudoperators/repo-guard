@@ -50,6 +50,11 @@ monitoring:
     additionalLabels:
       plugin: kube-monitoring
 
+perses:
+  # When enabled, deploy Perses dashboard definitions as ConfigMaps.
+  # Perses discovers dashboards via the perses.dev/resource: "true" label.
+  enabled: false
+
 ## Resources to be managed by the plugin
 
 # ldaps:
