@@ -101,13 +101,15 @@ func buildRepoMetaNode(name, visibility string, archived, disabled bool) map[str
 }
 
 // buildTeamNode builds a team node with repository edges for GraphQL fixtures.
-func buildTeamNode(slug string, repoEdges []map[string]any, reposHasNextPage bool) map[string]any {
+// endCursor should be a non-empty string when reposHasNextPage is true so that
+// fetchRemainingTeamRepos receives a real cursor and pagination is exercised correctly.
+func buildTeamNode(slug string, repoEdges []map[string]any, reposHasNextPage bool, endCursor string) map[string]any {
 	return map[string]any{
 		"slug": slug,
 		"repositories": map[string]any{
 			"pageInfo": map[string]any{
 				"hasNextPage": reposHasNextPage,
-				"endCursor":   "",
+				"endCursor":   endCursor,
 			},
 			"edges": repoEdges,
 		},
@@ -147,9 +149,9 @@ func TestGraphqlPermissionToTeamPermission(t *testing.T) {
 func TestExtendedListGraphQL_Basic(t *testing.T) {
 	// Teams query: devs→pub-repo(WRITE), ops→priv-repo(ADMIN), security→int-repo(READ).
 	teamsBody := buildTeamsGraphQLResponse([]map[string]any{
-		buildTeamNode("devs", []map[string]any{buildTeamRepoEdge("pub-repo", "WRITE")}, false),
-		buildTeamNode("ops", []map[string]any{buildTeamRepoEdge("priv-repo", "ADMIN")}, false),
-		buildTeamNode("security", []map[string]any{buildTeamRepoEdge("int-repo", "READ")}, false),
+		buildTeamNode("devs", []map[string]any{buildTeamRepoEdge("pub-repo", "WRITE")}, false, ""),
+		buildTeamNode("ops", []map[string]any{buildTeamRepoEdge("priv-repo", "ADMIN")}, false, ""),
+		buildTeamNode("security", []map[string]any{buildTeamRepoEdge("int-repo", "READ")}, false, ""),
 	}, false, "")
 
 	// Repos query: three repos across all visibility buckets.
@@ -278,10 +280,10 @@ func TestExtendedListGraphQL_ArchivedFiltered(t *testing.T) {
 func TestExtendedListGraphQL_TeamsPagination(t *testing.T) {
 	// Teams query: two pages of teams. Page 1 has team-a, page 2 has team-b.
 	teamsPage1 := buildTeamsGraphQLResponse([]map[string]any{
-		buildTeamNode("team-a", []map[string]any{buildTeamRepoEdge("repo-x", "WRITE")}, false),
+		buildTeamNode("team-a", []map[string]any{buildTeamRepoEdge("repo-x", "WRITE")}, false, ""),
 	}, true, "team-cursor-1")
 	teamsPage2 := buildTeamsGraphQLResponse([]map[string]any{
-		buildTeamNode("team-b", []map[string]any{buildTeamRepoEdge("repo-x", "READ")}, false),
+		buildTeamNode("team-b", []map[string]any{buildTeamRepoEdge("repo-x", "READ")}, false, ""),
 	}, false, "")
 
 	// Repos query: single repo.
@@ -340,10 +342,11 @@ func buildTeamReposGraphQLResponse(repoEdges []map[string]any, hasNextPage bool,
 func TestExtendedListGraphQL_TeamRepoOverflow(t *testing.T) {
 	// Team "big-team" has reposHasNextPage=true in the first teams query page,
 	// triggering a dedicated teamReposQuery for the remaining repos.
+	// A real endCursor is provided so fetchRemainingTeamRepos receives it correctly.
 	teamsBody := buildTeamsGraphQLResponse([]map[string]any{
 		buildTeamNode("big-team", []map[string]any{
 			buildTeamRepoEdge("repo-1", "WRITE"),
-		}, true), // HasNextPage=true triggers fetchRemainingTeamRepos
+		}, true, "repo-cursor-overflow"), // HasNextPage=true + real cursor triggers fetchRemainingTeamRepos
 	}, false, "")
 
 	// The overflow query returns the second page of repos for big-team.
