@@ -46,14 +46,11 @@ Labels control the behavior of Repo Guard controllers. All labels live under `me
 
 ---
 
-## GithubAccountLink Labels & Annotations
+## GithubAccountLink Annotations
 
-| Key | Kind | Allowed Values | Description | Default |
-|---|---|---|---|---|
-| `repo-guard.cloudoperators.dev/require-verified-domain-email` | Label | `<domain>` | Legacy single-org: request email verification for this domain. | Not set |
-| `repo-guard.cloudoperators.dev/check-email-status` | Label | `true` / `false` | Controller-managed: whether the user satisfied the email requirement. | Controller-managed |
-| `repo-guard.cloudoperators.dev/email-check-config` | Annotation | JSON object | Multi-org email check configuration. | Not set |
-| `repo-guard.cloudoperators.dev/email-check-results` | Annotation | JSON object | Controller-managed multi-org email check results. | Controller-managed |
-| `repo-guard.cloudoperators.dev/check-email-timestamp` | Annotation | RFC3339 | Last email verification check time. | Controller-managed |
-| `repo-guard.cloudoperators.dev/check-email-ttl` | Annotation | Go duration | How long the email verification result stays valid. | Not set |
-| `repo-guard.cloudoperators.dev/skippedTTL` | Annotation | Go duration | How long a skipped user operation remains in status. | Not set |
+`GithubAccountLink` uses annotations (not labels) for the email-check mechanism. The two annotation keys defined in the API types are:
+
+| Key | Kind | Description |
+|---|---|---|
+| `repo-guard.cloudoperators.dev/email-check-config` | Annotation | Multi-org email check configuration — a JSON object mapping org name to `{"domain": "...", "enabled": true, "ttl": "24h"}`. Set by the user. |
+| `repo-guard.cloudoperators.dev/email-check-results` | Annotation | Controller-managed multi-org email check results — a JSON object written by the controller after performing the verification. |

@@ -51,19 +51,14 @@ Possible `status` values: `verified`, `not-part-of-org`, `no`.
 
 ### Single-organization (Legacy)
 
-Use the `repo-guard.cloudoperators.dev/require-verified-domain-email: <domain>` label on the `GithubAccountLink` for single-org verification.
+The `repo-guard.cloudoperators.dev/require-verified-domain-email` label is supported on `GithubTeam` (not on `GithubAccountLink` itself) to enforce an email-domain requirement for team membership. See [GithubTeam labels](./github-team#labels).
 
-## Labels & Annotations
+## Annotations
 
-| Key | Kind | Allowed Values | Description |
-|---|---|---|---|
-| `repo-guard.cloudoperators.dev/require-verified-domain-email` | Label | `<domain>` | Legacy single-org: request email verification for this domain. |
-| `repo-guard.cloudoperators.dev/check-email-status` | Label | `true`/`false` | Controller-managed: whether the user passed the email requirement. |
-| `repo-guard.cloudoperators.dev/email-check-config` | Annotation | JSON object | Multi-org email check configuration (see above). |
-| `repo-guard.cloudoperators.dev/email-check-results` | Annotation | JSON object | Controller-managed multi-org email check results. |
-| `repo-guard.cloudoperators.dev/check-email-timestamp` | Annotation | RFC3339 | Last email verification check time. |
-| `repo-guard.cloudoperators.dev/check-email-ttl` | Annotation | Go duration | How long the email verification result stays valid. |
-| `repo-guard.cloudoperators.dev/skippedTTL` | Annotation | Go duration | How long a skipped user operation remains in status. |
+| Key | Description |
+|---|---|
+| `repo-guard.cloudoperators.dev/email-check-config` | Multi-org email check configuration. JSON object mapping org name to `{"domain": "...", "enabled": true, "ttl": "24h"}`. Set by the user. |
+| `repo-guard.cloudoperators.dev/email-check-results` | Controller-managed multi-org email check results written after verification. |
 
 ## Enforcing Email Verification on a Team
 
