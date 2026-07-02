@@ -1342,8 +1342,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
 			}
 			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing organization members is in dry-run mode: operation skipped", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
@@ -1430,8 +1434,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
 			}
 			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing repository direct collaborators is in dry-run mode: operation skipped", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
@@ -1505,21 +1513,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// status changed check & reflect on Kubernetes
-		// If no op actually mutated anything but some ops are intentionally left pending
-		// (dry-run mode), we still need to write status once so the top-level state
-		// transitions from "pending" to "dry-run" and the reconcile loop stops.
-		if !statusChanged && !failed && newStatus.PendingOperationsFound() {
-			statusChanged = true
-		}
 		if statusChanged {
 
 			if failed {
 				newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
-			} else if newStatus.PendingOperationsFound() {
-				// Some operations are intentionally left pending (dry-run mode for member/collaborator removal).
-				// Use the dry-run state so the resource does not stay in "pending" forever.
-				newStatus.OrganizationStatus = v1.GithubOrganizationStateDryRun
-				newStatus.OrganizationStatusError = ""
 			} else {
 				newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
 				newStatus.OrganizationStatusError = ""
