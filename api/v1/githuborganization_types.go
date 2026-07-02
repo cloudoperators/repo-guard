@@ -619,32 +619,32 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 	return newOperations
 }
 
-func (g GithubOrganization) PendingOperationsFound() bool {
+func (s GithubOrganizationStatus) PendingOperationsFound() bool {
 
-	for _, op := range g.Status.Operations.OrganizationOwnerOperations {
+	for _, op := range s.Operations.OrganizationOwnerOperations {
 		if op.State == GithubUserOperationStatePending {
 			return true
 		}
 	}
 
-	for _, op := range g.Status.Operations.OrganizationMemberOperations {
+	for _, op := range s.Operations.OrganizationMemberOperations {
 		if op.State == GithubUserOperationStatePending {
 			return true
 		}
 	}
 
-	for _, op := range g.Status.Operations.RepositoryTeamOperations {
+	for _, op := range s.Operations.RepositoryTeamOperations {
 		if op.State == GithubRepoTeamOperationStatePending {
 			return true
 		}
 	}
-	for _, op := range g.Status.Operations.GithubTeamOperations {
+	for _, op := range s.Operations.GithubTeamOperations {
 		if op.State == GithubTeamOperationStatePending {
 			return true
 		}
 	}
 
-	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
+	for _, op := range s.Operations.RepositoryCollaboratorOperations {
 		if op.State == GithubRepoUserOperationStatePending {
 			return true
 		}
@@ -652,6 +652,10 @@ func (g GithubOrganization) PendingOperationsFound() bool {
 
 	return false
 
+}
+
+func (g GithubOrganization) PendingOperationsFound() bool {
+	return g.Status.PendingOperationsFound()
 }
 
 func (g GithubOrganization) FailedOperationsFound() bool {

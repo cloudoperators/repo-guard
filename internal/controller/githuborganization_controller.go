@@ -1344,6 +1344,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
 				// dry-run: keep op pending so operators can inspect who would be removed
 				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				statusChanged = true
 				continue
 			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
@@ -1432,6 +1433,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
 				// dry-run: keep op pending so operators can inspect who would be removed
 				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				statusChanged = true
 				continue
 			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
@@ -1509,6 +1511,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 			if failed {
 				newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
+			} else if newStatus.PendingOperationsFound() {
+				// Some operations are intentionally left pending (dry-run mode for member/collaborator removal).
+				// Use the dry-run state so the resource does not stay in "pending" forever.
+				newStatus.OrganizationStatus = v1.GithubOrganizationStateDryRun
+				newStatus.OrganizationStatusError = ""
 			} else {
 				newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
 				newStatus.OrganizationStatusError = ""
