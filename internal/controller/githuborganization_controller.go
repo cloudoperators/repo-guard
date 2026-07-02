@@ -1344,7 +1344,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
 				// dry-run: keep op pending so operators can inspect who would be removed
 				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
-				statusChanged = true
 				continue
 			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
@@ -1433,7 +1432,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
 				// dry-run: keep op pending so operators can inspect who would be removed
 				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
-				statusChanged = true
 				continue
 			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
@@ -1507,6 +1505,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		// status changed check & reflect on Kubernetes
+		// If no op actually mutated anything but some ops are intentionally left pending
+		// (dry-run mode), we still need to write status once so the top-level state
+		// transitions from "pending" to "dry-run" and the reconcile loop stops.
+		if !statusChanged && !failed && newStatus.PendingOperationsFound() {
+			statusChanged = true
+		}
 		if statusChanged {
 
 			if failed {
