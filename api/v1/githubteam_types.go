@@ -145,7 +145,7 @@ func (github GithubTeam) ChangeCalculator(desiredMembers []Member) (bool, *Githu
 	// Process desired members to identify additions
 	for _, desiredMember := range desiredMembers {
 		lowerGithubUsername := strings.ToLower(desiredMember.GithubUsername)
-		// Skip users marked as NotFound
+		// Skip users marked as NotFound (terminal state — no retry)
 		if userOpStateMap[lowerGithubUsername] == GithubUserOperationStateNotFound {
 			continue
 		}
