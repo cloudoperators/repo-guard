@@ -240,13 +240,13 @@ var _ = Describe("Github Organization controller - repository team assignments",
 
 		// Wait for the reconcile to settle — Complete is expected because locked ops
 		// do not count as failures.
-		Eventually(func() repoguardsapv1.GithubOrganizationState {
+		Eventually(func() bool {
 			cur := &repoguardsapv1.GithubOrganization{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
-				return ""
+				return false
 			}
-			return cur.Status.OrganizationStatus
-		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationStateComplete))
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete
+		}, 3*timeout, interval).Should(BeTrue())
 
 		cur := &repoguardsapv1.GithubOrganization{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur)).To(Succeed())
@@ -254,7 +254,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		// All ops referencing the locked repo must be Skipped, never Failed.
 		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
 			if op.Repo == TEST_LOCKED_REPO {
-				Expect(op.State).To(Equal(repoguardsapv1.GithubRepoTeamOperationStateSkipped),
+				Expect(op.State).To(BeEquivalentTo(repoguardsapv1.GithubRepoTeamOperationStateSkipped),
 					"locked-repo operations must be skipped, not failed")
 				Expect(op.Error).To(ContainSubstring("locked"),
 					"locked-repo skipped op must preserve the error message for auditability")
