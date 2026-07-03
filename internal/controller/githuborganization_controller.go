@@ -1333,6 +1333,18 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
 		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.OrganizationMemberOperations {
+				if op.State == v1.GithubUserOperationStateSkipped && op.Operation == v1.GithubUserOperationTypeRemove {
+					l.Info("reviving skipped org-member remove op to pending (label switched to enabled)", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStatePending
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
+		}
 		for i, op := range newStatus.Operations.OrganizationMemberOperations {
 			if op.State != v1.GithubUserOperationStatePending {
 				continue
@@ -1424,6 +1436,18 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		repoCollabProtectedSet := make(map[string]struct{}, len(githubOrganization.Spec.ProtectedMembers))
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
+		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
+				if op.State == v1.GithubRepoUserOperationStateSkipped && op.Operation == v1.GithubRepoUserOperationTypeRemove {
+					l.Info("reviving skipped repo-collab remove op to pending (label switched to enabled)", "repo", op.Repo, "user", op.User)
+					newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStatePending
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
 		}
 		for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
 			if op.State != v1.GithubRepoUserOperationStatePending {
