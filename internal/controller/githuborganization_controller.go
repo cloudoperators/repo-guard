@@ -802,6 +802,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							teamMembersRateLimitErr = merr.Error()
 							break
 						}
+						if isEtagCacheInconsistency(merr) {
+							// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+							teamMembersRateLimitResult = &reconcile.Result{Requeue: true}
+							teamMembersRateLimitErr = merr.Error()
+							break
+						}
 						// Non-rate-limit error: treat as hard stop to avoid false-positive
 						// org-member removals from an incomplete team-member union.
 						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
