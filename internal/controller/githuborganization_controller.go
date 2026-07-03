@@ -788,6 +788,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				teamObservationsCount := 0
 				var teamMembersRateLimitResult *reconcile.Result
 				var teamMembersRateLimitErr string
+				var teamMembersEtagRequeue bool
 				for _, team := range teamsList {
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
@@ -802,6 +803,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							teamMembersRateLimitErr = merr.Error()
 							break
 						}
+						if isEtagCacheInconsistency(merr) {
+							// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+							// Do not set rate-limit state; this is a transient condition, not a rate limit.
+							teamMembersEtagRequeue = true
+							break
+						}
 						// Non-rate-limit error: treat as hard stop to avoid false-positive
 						// org-member removals from an incomplete team-member union.
 						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
@@ -812,6 +819,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						teamMembersUnion[strings.ToLower(m)] = struct{}{}
 					}
 					teamObservationsCount++
+				}
+				if teamMembersEtagRequeue {
+					// Etag cache inconsistency is a transient condition; requeue without updating status.
+					return reconcile.Result{Requeue: true}, nil
 				}
 				if teamMembersRateLimitResult != nil {
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
@@ -1282,12 +1293,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					} else {
 						err := reposProvider.RepositoryTeamAdd(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
 						if err != nil {
-							l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
-							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
-							newStatus.Operations.RepositoryTeamOperations[i].Error = err.Error()
-							newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
-							statusChanged = true
-							failed = true
+							errMsg := err.Error()
+							// 422 "This repository is locked and cannot be modified." — skip permanently;
+							// retrying will never succeed and only bloats the status.
+							if strings.Contains(errMsg, "422") && strings.Contains(errMsg, "This repository is locked") {
+								l.Info("adding repository&team skipped: repository is locked", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
+								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateSkipped
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
+								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+								statusChanged = true
+							} else {
+								l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
+								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
+								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+								statusChanged = true
+								failed = true
+							}
 						} else {
 							l.Info("repository&team is added", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateComplete
@@ -1333,6 +1355,22 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
 		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		// Skip revival for protected members to avoid a pending↔skipped flap.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.OrganizationMemberOperations {
+				if op.State == v1.GithubUserOperationStateSkipped && op.Operation == v1.GithubUserOperationTypeRemove {
+					if _, isProt := orgMemberProtectedSet[strings.ToLower(op.User)]; isProt {
+						continue
+					}
+					l.Info("reviving skipped org-member remove op to pending (label switched to enabled)", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStatePending
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
+		}
 		for i, op := range newStatus.Operations.OrganizationMemberOperations {
 			if op.State != v1.GithubUserOperationStatePending {
 				continue
@@ -1342,8 +1380,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
 			}
 			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing organization members is in dry-run mode: operation skipped", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
@@ -1421,6 +1463,22 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
 		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		// Skip revival for protected members to avoid a pending↔skipped flap.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
+				if op.State == v1.GithubRepoUserOperationStateSkipped && op.Operation == v1.GithubRepoUserOperationTypeRemove {
+					if _, isProt := repoCollabProtectedSet[strings.ToLower(op.User)]; isProt {
+						continue
+					}
+					l.Info("reviving skipped repo-collab remove op to pending (label switched to enabled)", "repo", op.Repo, "user", op.User)
+					newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStatePending
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
+		}
 		for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
 			if op.State != v1.GithubRepoUserOperationStatePending {
 				continue
@@ -1430,8 +1488,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
 			}
 			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing repository direct collaborators is in dry-run mode: operation skipped", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {

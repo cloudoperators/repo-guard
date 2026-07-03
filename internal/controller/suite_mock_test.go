@@ -87,6 +87,9 @@ func startMockGitHubServer() {
 			// Archived repo — should be silently filtered by List() and never
 			// trigger repository-team operations.
 			{Name: TEST_ARCHIVED_REPO, Private: false, Archived: true},
+			// Locked repo — GitHub returns 422 "This repository is locked and cannot
+			// be modified." for team-add; the controller must skip, not fail.
+			{Name: TEST_LOCKED_REPO, Private: false, Locked: true},
 		},
 	}
 

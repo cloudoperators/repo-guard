@@ -76,6 +76,7 @@ const (
 
 	TEST_ENTERPRISE_TEAM = "enterprise-team"
 	TEST_ARCHIVED_REPO   = "archived-repo"
+	TEST_LOCKED_REPO     = "locked-repo"
 )
 
 func loadTestEnv() map[string]string {
