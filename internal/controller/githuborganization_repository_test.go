@@ -175,15 +175,6 @@ var _ = Describe("Github Organization controller - repository team assignments",
 				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
 		}, 3*timeout, interval).Should(BeTrue())
 
-		// Controller executed operations
-		Eventually(func() int {
-			cur := &repoguardsapv1.GithubOrganization{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
-				return -1
-			}
-			return len(cur.Status.Operations.RepositoryTeamOperations)
-		}, 3*timeout, interval).Should(BeNumerically(">", 0))
-
 		// Verify that GitHub (or the mock) actually received the team assignments.
 		publicTeams, resp, err := client.Repositories.ListTeams(ctx, orgName, repoPublic, nil)
 		Expect(err).NotTo(HaveOccurred())

@@ -904,7 +904,7 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	}
 
 	if changed {
-		// If we only pruned completed/skipped ops and added no new ones, derive
+		// If we only pruned complete ops and added no new ones, derive
 		// the top-level status from remaining operations rather than forcing
 		// the org back to pending.
 		if pruneOnly {

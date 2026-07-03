@@ -556,13 +556,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		if updateRequired {
-			newStatus := githubOrganization.Status
+			// Only update the metadata fields (OrganizationOwners, Teams) that
+			// triggered the updateRequired flag. Fetch the latest version first and
+			// patch only those fields so we never overwrite operations (e.g.
+			// RepositoryTeamOperations) that a concurrent reconcile just wrote.
+			updatedOwners := githubOrganization.Status.OrganizationOwners
+			updatedTeams := githubOrganization.Status.Teams
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganization{}
 				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 					return err
 				}
-				latest.Status = newStatus
+				latest.Status.OrganizationOwners = updatedOwners
+				latest.Status.Teams = updatedTeams
 				return r.Client.Status().Update(ctx, latest)
 			})
 			if err != nil {
