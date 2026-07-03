@@ -1068,12 +1068,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					} else {
 						userFound, err := teamsProvider.AddUser(ctx, githubTeamName, userOperation.User)
 						if !userFound {
-							l.Info("user not found on GitHub: marking operation as notfound", "user", userOperation.User)
+							l.Info("user cannot be added to team: marking operation as notfound", "user", userOperation.User, "error", err)
 							newStatus.Operations[i].State = v1.GithubUserOperationStateNotFound
-							newStatus.Operations[i].Error = "user not found on GitHub"
+							newStatus.Operations[i].Error = err.Error()
 							newStatus.Operations[i].Timestamp = metav1.Now()
 							statusChanged = true
-							// Don't set 'failed' to true because this is a terminal state
+							// Don't set 'failed' to true — this is a terminal state, no retry
 						} else if err != nil {
 							l.Error(err, "error during adding user to the team", "user", userOperation.User, "team", githubTeamName)
 							newStatus.Operations[i].State = v1.GithubUserOperationStateFailed
