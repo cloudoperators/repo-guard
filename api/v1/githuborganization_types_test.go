@@ -135,6 +135,132 @@ func TestRepoChangeCalculatorMethod(t *testing.T) {
 	}
 }
 
+// TestRepoChangeCalculatorPruning verifies the pruning behaviour inside
+// RepoChangeCalculator: complete ops are removed; skipped and failed ops are
+// retained. It also verifies that a repo present in both private and public
+// visibility lists does not produce duplicate pending ops.
+func TestRepoChangeCalculatorPruning(t *testing.T) {
+	team := GithubTeamWithPermission{Team: "guard-team", Permission: GithubTeamPermissionPull}
+
+	tests := []struct {
+		name         string
+		privateTeams []GithubTeamWithPermission
+		publicTeams  []GithubTeamWithPermission
+		privateRepos []GithubRepository
+		publicRepos  []GithubRepository
+		seedOps      []GithubRepoTeamOperation
+		// wantOpsContain lists (team, repo, state) tuples that must be present.
+		wantOpsContain []GithubRepoTeamOperation
+		// wantOpsExclude lists (team, repo, state) tuples that must NOT be present.
+		wantOpsExclude []GithubRepoTeamOperation
+		wantOpsLen     int
+	}{
+		{
+			// A complete op must be pruned so the status does not grow without bound.
+			name:         "complete ops are pruned",
+			privateTeams: []GithubTeamWithPermission{team},
+			privateRepos: []GithubRepository{{Name: "repo1", Teams: []GithubTeamWithPermission{{Team: "guard-team", Permission: GithubTeamPermissionPull}}}},
+			seedOps: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", Operation: GithubRepoTeamOperationTypeAdd, State: GithubRepoTeamOperationStateComplete},
+			},
+			wantOpsLen: 0,
+			wantOpsExclude: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", State: GithubRepoTeamOperationStateComplete},
+			},
+		},
+		{
+			// A skipped op must be retained so the de-dup check in
+			// repoChangeCalculator prevents re-creating the same op on the next
+			// reconcile when the addRepositoryTeam label is disabled.
+			name:         "skipped ops are retained",
+			privateTeams: []GithubTeamWithPermission{team},
+			privateRepos: []GithubRepository{{Name: "repo1", Teams: []GithubTeamWithPermission{}}},
+			seedOps: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", Operation: GithubRepoTeamOperationTypeAdd, State: GithubRepoTeamOperationStateSkipped},
+			},
+			wantOpsLen: 1,
+			wantOpsContain: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", State: GithubRepoTeamOperationStateSkipped},
+			},
+		},
+		{
+			// A failed op must be retained for auditability.
+			name:         "failed ops are retained",
+			privateTeams: []GithubTeamWithPermission{team},
+			privateRepos: []GithubRepository{{Name: "repo1", Teams: []GithubTeamWithPermission{}}},
+			seedOps: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", Operation: GithubRepoTeamOperationTypeAdd, State: GithubRepoTeamOperationStateFailed},
+			},
+			wantOpsLen: 1,
+			wantOpsContain: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "repo1", State: GithubRepoTeamOperationStateFailed},
+			},
+		},
+		{
+			// A repo listed in both private and public visibility lists must not
+			// produce duplicate (repo, team, op) pending operations.
+			name:         "repo in both private and public lists — no duplicate pending ops",
+			privateTeams: []GithubTeamWithPermission{team},
+			publicTeams:  []GithubTeamWithPermission{team},
+			privateRepos: []GithubRepository{{Name: "shared-repo", Teams: []GithubTeamWithPermission{}}},
+			publicRepos:  []GithubRepository{{Name: "shared-repo", Teams: []GithubTeamWithPermission{}}},
+			seedOps:      nil,
+			// Exactly one pending ADD for the (guard-team, shared-repo) pair.
+			wantOpsLen: 1,
+			wantOpsContain: []GithubRepoTeamOperation{
+				{Team: "guard-team", Repo: "shared-repo", Operation: GithubRepoTeamOperationTypeAdd, State: GithubRepoTeamOperationStatePending},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			org := GithubOrganization{}
+			org.Spec.DefaultPrivateRepositoryTeams = tt.privateTeams
+			org.Spec.DefaultPublicRepositoryTeams = tt.publicTeams
+			org.Status.PrivateRepositories = tt.privateRepos
+			org.Status.PublicRepositories = tt.publicRepos
+			org.Status.Operations.RepositoryTeamOperations = tt.seedOps
+
+			_, newStatus := org.RepoChangeCalculator(nil)
+			got := newStatus.Operations.RepositoryTeamOperations
+
+			if tt.wantOpsLen >= 0 && len(got) != tt.wantOpsLen {
+				t.Fatalf("RepositoryTeamOperations len = %d, want %d\ngot: %+v", len(got), tt.wantOpsLen, got)
+			}
+
+			for _, want := range tt.wantOpsContain {
+				found := false
+				for _, op := range got {
+					teamMatch := want.Team == "" || op.Team == want.Team
+					repoMatch := want.Repo == "" || op.Repo == want.Repo
+					stateMatch := want.State == "" || op.State == want.State
+					opMatch := want.Operation == "" || op.Operation == want.Operation
+					if teamMatch && repoMatch && stateMatch && opMatch {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected op %+v not found in ops: %+v", want, got)
+				}
+			}
+
+			for _, exclude := range tt.wantOpsExclude {
+				for _, op := range got {
+					teamMatch := exclude.Team == "" || op.Team == exclude.Team
+					repoMatch := exclude.Repo == "" || op.Repo == exclude.Repo
+					stateMatch := exclude.State == "" || op.State == exclude.State
+					opMatch := exclude.Operation == "" || op.Operation == exclude.Operation
+					if teamMatch && repoMatch && stateMatch && opMatch {
+						t.Errorf("excluded op %+v found in ops: %+v", exclude, got)
+					}
+				}
+			}
+		})
+	}
+}
+
 // teamOp is a helper to build a GithubRepoTeamOperation for test setup.
 func teamOp(team, repo string, opType GithubRepoTeamOperationType, state GithubRepoTeamOperationState) GithubRepoTeamOperation {
 	return GithubRepoTeamOperation{

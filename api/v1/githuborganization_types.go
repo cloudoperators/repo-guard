@@ -843,14 +843,17 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 		return false, newStatus
 	}
 
-	// Prune completed and skipped RepositoryTeamOperations before running the
-	// calculators. These have already been executed and have no further effect;
+	// Prune completed RepositoryTeamOperations before running the calculators.
+	// Complete ops have already been executed and have no further effect;
 	// keeping them causes the status payload to grow without bound and
 	// eventually exceed the etcd 3 MB limit.
+	// Skipped ops are retained: the repoChangeCalculator de-dup check relies on
+	// them to prevent re-creating the same op when the addRepositoryTeam label
+	// is disabled. Pruning skipped ops causes a reconcile loop.
 	// Failed operations are preserved so operators can inspect what went wrong.
 	pruned := newStatus.Operations.RepositoryTeamOperations[:0]
 	for _, op := range newStatus.Operations.RepositoryTeamOperations {
-		if op.State != GithubRepoTeamOperationStateComplete && op.State != GithubRepoTeamOperationStateSkipped {
+		if op.State != GithubRepoTeamOperationStateComplete {
 			pruned = append(pruned, op)
 		}
 	}
