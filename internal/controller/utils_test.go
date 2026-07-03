@@ -4,9 +4,52 @@
 package controller
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
+
+func TestIsEtagCacheInconsistency(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error returns false",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "exact etag cache inconsistency prefix matches",
+			err:  errors.New("etag cache inconsistency for /orgs/foo/teams/bar/members?per_page=100: 304 received but no valid cached value"),
+			want: true,
+		},
+		{
+			name: "error containing etag cache inconsistency substring matches",
+			err:  errors.New("wrapped: etag cache inconsistency for /orgs/foo/members: 304 received but no valid cached value"),
+			want: true,
+		},
+		{
+			name: "unrelated error returns false",
+			err:  errors.New("404 Not Found"),
+			want: false,
+		},
+		{
+			name: "rate limit error does not match",
+			err:  errors.New("API rate limit exceeded for installation ID 123"),
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isEtagCacheInconsistency(tc.err)
+			if got != tc.want {
+				t.Fatalf("isEtagCacheInconsistency(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestParseGitHubRateLimitReset(t *testing.T) {
 	t.Run("future reset timestamp via 'until' format", func(t *testing.T) {
