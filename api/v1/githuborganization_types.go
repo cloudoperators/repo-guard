@@ -843,6 +843,24 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 		return false, newStatus
 	}
 
+	// Prune completed and skipped RepositoryTeamOperations before running the
+	// calculators. These have already been executed and have no further effect;
+	// keeping them causes the status payload to grow without bound and
+	// eventually exceed the etcd 3 MB limit.
+	// Failed operations are preserved so operators can inspect what went wrong.
+	pruned := newStatus.Operations.RepositoryTeamOperations[:0]
+	for _, op := range newStatus.Operations.RepositoryTeamOperations {
+		if op.State != GithubRepoTeamOperationStateComplete && op.State != GithubRepoTeamOperationStateSkipped {
+			pruned = append(pruned, op)
+		}
+	}
+	pruneOnly := false
+	if len(pruned) != len(newStatus.Operations.RepositoryTeamOperations) {
+		newStatus.Operations.RepositoryTeamOperations = pruned
+		changed = true
+		pruneOnly = true
+	}
+
 	skipList := make([]string, 0)
 	if g.Annotations != nil && g.Annotations[GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY] != "" {
 		skipList = strings.Split(g.Annotations[GITHUB_ORG_ANNOTATION_SKIP_DEFAULT_TEAM_REPOSITORY], ",")
@@ -851,8 +869,11 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	// Only call repoChangeCalculator for a visibility when its default team
 	// list is non-empty. An empty list means "no policy for this visibility"
 	// and must not generate REMOVE operations for existing repo teams.
+	// Pass newStatus.Operations.RepositoryTeamOperations (the accumulating list)
+	// to each successive call so the de-dup check sees ops added by earlier passes
+	// and does not create cross-visibility duplicates.
 	if len(g.Spec.DefaultPrivateRepositoryTeams) > 0 {
-		privateRepoOperations := repoChangeCalculator(g.Spec.DefaultPrivateRepositoryTeams, g.Status.PrivateRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		privateRepoOperations := repoChangeCalculator(g.Spec.DefaultPrivateRepositoryTeams, g.Status.PrivateRepositories, exceptions, skipList, newStatus.Operations.RepositoryTeamOperations)
 		if len(privateRepoOperations) > 0 {
 			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, privateRepoOperations...)
 			changed = true
@@ -860,7 +881,7 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	}
 
 	if len(g.Spec.DefaultPublicRepositoryTeams) > 0 {
-		publicRepoOperations := repoChangeCalculator(g.Spec.DefaultPublicRepositoryTeams, g.Status.PublicRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		publicRepoOperations := repoChangeCalculator(g.Spec.DefaultPublicRepositoryTeams, g.Status.PublicRepositories, exceptions, skipList, newStatus.Operations.RepositoryTeamOperations)
 		if len(publicRepoOperations) > 0 {
 			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, publicRepoOperations...)
 			changed = true
@@ -868,7 +889,7 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	}
 
 	if len(g.Spec.DefaultInternalRepositoryTeams) > 0 {
-		internalRepoOperations := repoChangeCalculator(g.Spec.DefaultInternalRepositoryTeams, g.Status.InternalRepositories, exceptions, skipList, g.Status.Operations.RepositoryTeamOperations)
+		internalRepoOperations := repoChangeCalculator(g.Spec.DefaultInternalRepositoryTeams, g.Status.InternalRepositories, exceptions, skipList, newStatus.Operations.RepositoryTeamOperations)
 		if len(internalRepoOperations) > 0 {
 			newStatus.Operations.RepositoryTeamOperations = append(newStatus.Operations.RepositoryTeamOperations, internalRepoOperations...)
 			changed = true
@@ -876,7 +897,22 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	}
 
 	if changed {
-		newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		// If we only pruned completed/skipped ops and added no new ones, derive
+		// the top-level status from remaining operations rather than forcing
+		// the org back to pending.
+		if pruneOnly {
+			tmp := &GithubOrganization{Status: *newStatus}
+			switch {
+			case tmp.PendingOperationsFound():
+				newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+			case tmp.FailedOperationsFound():
+				newStatus.OrganizationStatus = GithubOrganizationStateFailed
+			default:
+				newStatus.OrganizationStatus = GithubOrganizationStateComplete
+			}
+		} else {
+			newStatus.OrganizationStatus = GithubOrganizationStatePendingOperations
+		}
 		newStatus.OrganizationStatusError = ""
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
 	}
