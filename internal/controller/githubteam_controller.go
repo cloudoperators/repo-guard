@@ -463,6 +463,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		organizationTeams, err := teamsProvider.List(ctx)
 		if err != nil {
 			l.Error(err, "error during listing organization teams")
+			if isEtagCacheInconsistency(err) {
+				// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+				return reconcile.Result{Requeue: true}, nil
+			}
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				recordTeamRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
@@ -517,6 +521,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		membersExtended, err := teamsProvider.MembersExtended(ctx, githubTeamName)
 		if err != nil {
 			l.Error(err, "error during getting the members of the team in Github")
+			if isEtagCacheInconsistency(err) {
+				// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+				return reconcile.Result{Requeue: true}, nil
+			}
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				recordTeamRateLimitHit(err.Error(), t)
 				now := time.Now().UTC()
