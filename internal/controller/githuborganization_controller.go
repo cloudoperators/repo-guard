@@ -788,6 +788,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				teamObservationsCount := 0
 				var teamMembersRateLimitResult *reconcile.Result
 				var teamMembersRateLimitErr string
+				var teamMembersEtagRequeue bool
 				for _, team := range teamsList {
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
@@ -802,6 +803,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							teamMembersRateLimitErr = merr.Error()
 							break
 						}
+						if isEtagCacheInconsistency(merr) {
+							// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+							// Do not set rate-limit state; this is a transient condition, not a rate limit.
+							teamMembersEtagRequeue = true
+							break
+						}
 						// Non-rate-limit error: treat as hard stop to avoid false-positive
 						// org-member removals from an incomplete team-member union.
 						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
@@ -812,6 +819,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						teamMembersUnion[strings.ToLower(m)] = struct{}{}
 					}
 					teamObservationsCount++
+				}
+				if teamMembersEtagRequeue {
+					// Etag cache inconsistency is a transient condition; requeue without updating status.
+					return reconcile.Result{Requeue: true}, nil
 				}
 				if teamMembersRateLimitResult != nil {
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
@@ -1282,18 +1293,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					} else {
 						err := reposProvider.RepositoryTeamAdd(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
 						if err != nil {
+							errMsg := err.Error()
 							// 422 "This repository is locked and cannot be modified." — skip permanently;
 							// retrying will never succeed and only bloats the status.
-							if strings.Contains(err.Error(), "422") && strings.Contains(err.Error(), "locked") {
-								l.Info("adding repository&team skipped: repository is locked", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team)
+							if strings.Contains(errMsg, "422") && strings.Contains(errMsg, "This repository is locked") {
+								l.Info("adding repository&team skipped: repository is locked", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
 								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateSkipped
-								newStatus.Operations.RepositoryTeamOperations[i].Error = err.Error()
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
 								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
 								statusChanged = true
 							} else {
 								l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
 								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
-								newStatus.Operations.RepositoryTeamOperations[i].Error = err.Error()
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
 								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
 								statusChanged = true
 								failed = true
