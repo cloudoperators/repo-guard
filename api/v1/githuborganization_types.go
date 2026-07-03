@@ -925,7 +925,7 @@ func (g *GithubOrganization) OrganizationMemberChangeCalculator(
 	// Build set of users with existing pending ops to avoid duplicates
 	pendingSet := make(map[string]struct{})
 	for _, op := range g.Status.Operations.OrganizationMemberOperations {
-		if op.State == GithubUserOperationStatePending || op.State == GithubUserOperationStateFailed {
+		if op.State == GithubUserOperationStatePending || op.State == GithubUserOperationStateFailed || op.State == GithubUserOperationStateSkipped {
 			pendingSet[strings.ToLower(op.User)] = struct{}{}
 		}
 	}
@@ -996,7 +996,7 @@ func (g *GithubOrganization) RepositoryDirectCollaboratorChangeCalculator(
 	type repoUser struct{ repo, user string }
 	pendingSet := make(map[repoUser]struct{})
 	for _, op := range g.Status.Operations.RepositoryCollaboratorOperations {
-		if op.State == GithubRepoUserOperationStatePending || op.State == GithubRepoUserOperationStateFailed {
+		if op.State == GithubRepoUserOperationStatePending || op.State == GithubRepoUserOperationStateFailed || op.State == GithubRepoUserOperationStateSkipped {
 			pendingSet[repoUser{repo: op.Repo, user: strings.ToLower(op.User)}] = struct{}{}
 		}
 	}
