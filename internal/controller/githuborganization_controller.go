@@ -556,9 +556,8 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		if updateRequired {
-			// Only update the metadata fields (OrganizationOwners, Teams) that
-			// triggered the updateRequired flag. Fetch the latest version first and
-			// patch only those fields so we never overwrite operations (e.g.
+			// Patch only the fields that triggered the updateRequired flag onto the
+			// freshly-fetched object so we never overwrite operations (e.g.
 			// RepositoryTeamOperations) that a concurrent reconcile just wrote.
 			updatedOwners := githubOrganization.Status.OrganizationOwners
 			updatedTeams := githubOrganization.Status.Teams
@@ -569,6 +568,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				}
 				latest.Status.OrganizationOwners = updatedOwners
 				latest.Status.Teams = updatedTeams
+				// Also compact bulky repo lists; this is what triggered the
+				// updateRequired flag at the repo-list compaction block above.
+				latest.Status.PublicRepositories = nil
+				latest.Status.PrivateRepositories = nil
+				latest.Status.InternalRepositories = nil
 				return r.Client.Status().Update(ctx, latest)
 			})
 			if err != nil {

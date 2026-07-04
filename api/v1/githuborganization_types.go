@@ -904,9 +904,10 @@ func (g GithubOrganization) RepoChangeCalculator(exceptions []GithubTeamReposito
 	}
 
 	if changed {
-		// If we only pruned complete ops and added no new ones, derive
-		// the top-level status from remaining operations rather than forcing
-		// the org back to pending.
+		// If pruning occurred, derive the top-level status from the remaining
+		// operations rather than unconditionally forcing the org back to pending.
+		// This prevents a stable org (with only skipped/failed ops) from cycling
+		// back to pending after completed ops are pruned away.
 		if pruneOnly {
 			tmp := &GithubOrganization{Status: *newStatus}
 			switch {
