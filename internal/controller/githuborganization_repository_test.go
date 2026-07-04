@@ -270,4 +270,83 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		Expect(lockedOpCount).To(BeNumerically(">", 0),
 			"expected at least one operation recorded for the locked repo")
 	})
+
+	It("revives label-disabled skipped repo-team ops to pending when the label is re-enabled", func() {
+		if !isMockMode() {
+			Skip("relies on mock-seeded data and label patching; only valid in mock mode")
+		}
+		// Phase 1: create the org with addRepositoryTeam=false so the controller
+		// skips all Add ops instead of executing them.
+		orgCR.Labels["repo-guard.cloudoperators.dev/addRepositoryTeam"] = "false"
+		Expect(ensureResourceCreated(ctx, orgCR)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, tr)).To(Succeed())
+
+		// Wait for the reconcile to settle with skipped ops.
+		Eventually(func() bool {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return false
+			}
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete ||
+				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
+		}, 3*timeout, interval).Should(BeTrue())
+
+		// Assert that at least one non-locked Add op is in Skipped state (label disabled).
+		cur := &repoguardsapv1.GithubOrganization{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur)).To(Succeed())
+		labelDisabledSkipCount := 0
+		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+			if op.State == repoguardsapv1.GithubRepoTeamOperationStateSkipped &&
+				op.Operation == repoguardsapv1.GithubRepoTeamOperationTypeAdd &&
+				op.Repo != TEST_LOCKED_REPO {
+				labelDisabledSkipCount++
+			}
+		}
+		Expect(labelDisabledSkipCount).To(BeNumerically(">", 0),
+			"expected at least one label-disabled skipped Add op before label flip")
+
+		// Phase 2: flip addRepositoryTeam back to true.
+		Eventually(func() error {
+			live := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, live); err != nil {
+				return err
+			}
+			live.Labels["repo-guard.cloudoperators.dev/addRepositoryTeam"] = "true"
+			return k8sClient.Update(ctx, live)
+		}, timeout, interval).Should(Succeed())
+
+		// Wait for the org to reconcile and execute the revived ops.
+		// Wait specifically until no skipped Add ops remain for the dynamic repos,
+		// meaning the revival + execution cycle has completed.
+		Eventually(func() bool {
+			cur = &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return false
+			}
+			for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+				if (op.Repo == repoPublic || op.Repo == repoPrivate) &&
+					op.Operation == repoguardsapv1.GithubRepoTeamOperationTypeAdd &&
+					op.State == repoguardsapv1.GithubRepoTeamOperationStateSkipped {
+					return false
+				}
+			}
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete ||
+				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
+		}, 3*timeout, interval).Should(BeTrue())
+
+		// Verify: no non-locked Add ops for the dynamically-created repos should
+		// remain Skipped (they were revived and executed). We scope to repoPublic and
+		// repoPrivate because those are the repos whose ops this test controls.
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur)).To(Succeed())
+		dynamicRepos := map[string]bool{repoPublic: true, repoPrivate: true}
+		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+			if !dynamicRepos[op.Repo] {
+				continue
+			}
+			if op.Operation == repoguardsapv1.GithubRepoTeamOperationTypeAdd {
+				Expect(op.State).NotTo(BeEquivalentTo(repoguardsapv1.GithubRepoTeamOperationStateSkipped),
+					"non-locked Add op must not be skipped after label is re-enabled: repo=%s team=%s", op.Repo, op.Team)
+			}
+		}
+	})
 })

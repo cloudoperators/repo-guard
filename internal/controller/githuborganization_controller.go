@@ -756,6 +756,56 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return reconcile.Result{}, nil
 			}
 		}
+
+		// Revival check: if the add/remove label is now enabled but there are skipped
+		// repo-team ops (label was disabled when they ran), revive them to pending and
+		// transition the org back to pending-operations so the execution block processes them.
+		// This runs outside the pending-operations guard so it also fires when the org is
+		// complete (all ops skipped).
+		if githubOrganization.Labels != nil {
+			addEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_ADD_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE
+			removeEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE
+			revivedCount := 0
+			revivedStatus := githubOrganization.Status.DeepCopy()
+			for i, op := range revivedStatus.Operations.RepositoryTeamOperations {
+				if op.State != v1.GithubRepoTeamOperationStateSkipped {
+					continue
+				}
+				// Never revive permanently-skipped ops (e.g. locked-repo errors).
+				if strings.Contains(op.Error, "locked") {
+					continue
+				}
+				if (op.Operation == v1.GithubRepoTeamOperationTypeAdd && addEnabled) ||
+					(op.Operation == v1.GithubRepoTeamOperationTypeRemove && removeEnabled) {
+					l.Info("reviving skipped repo-team op to pending (label switched to enabled)", "repo", op.Repo, "team", op.Team, "operation", op.Operation)
+					revivedStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStatePending
+					revivedStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+					revivedCount++
+				}
+			}
+			if revivedCount > 0 {
+				revivedStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
+				revivedStatus.OutOfPolicyRepositories = uniquePendingOrFailedRepoNames(revivedStatus.Operations.RepositoryTeamOperations)
+				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubOrganization{}
+					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+						return err
+					}
+					latest.Status = *revivedStatus
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
+					l.Error(err, "error during status update")
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{}, nil
+			}
+		}
+
 		// PART 4: org-member comparison (#147) — remove org members not in any GitHub team
 		removeOrgMemberLabelValue := ""
 		if githubOrganization.Labels != nil {
@@ -1282,32 +1332,6 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					}
 				}
 
-			}
-		}
-
-		// If either the add or remove label has been switched to enabled, revive
-		// previously-skipped repo-team ops back to pending so the execution loop
-		// below can process them.  Locked-repo skips are permanent (the locked
-		// state is unrelated to the mutation label) and must not be revived —
-		// they are identified by their Error field containing "locked".
-		if githubOrganization.Labels != nil {
-			addEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_ADD_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE
-			removeEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_TEAM_ENABLED_VALUE
-			for i, op := range newStatus.Operations.RepositoryTeamOperations {
-				if op.State != v1.GithubRepoTeamOperationStateSkipped {
-					continue
-				}
-				// Never revive permanently-skipped ops (e.g. locked-repo errors).
-				if strings.Contains(op.Error, "locked") {
-					continue
-				}
-				if (op.Operation == v1.GithubRepoTeamOperationTypeAdd && addEnabled) ||
-					(op.Operation == v1.GithubRepoTeamOperationTypeRemove && removeEnabled) {
-					l.Info("reviving skipped repo-team op to pending (label switched to enabled)", "repo", op.Repo, "team", op.Team, "operation", op.Operation)
-					newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStatePending
-					newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
-					statusChanged = true
-				}
 			}
 		}
 
