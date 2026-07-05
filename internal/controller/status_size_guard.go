@@ -171,6 +171,11 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 			if halvings > 0 {
 				*status = shrunk
 
+				// Update the metric to reflect the actual bytes that will be written.
+				if shrunkBytes, merr := statusPayloadBytes(*status); merr == nil {
+					ghmetrics.OrgStatusPayloadBytes.WithLabelValues(githubLabel, orgLabel).Set(float64(shrunkBytes))
+				}
+
 				annotationValue := formatTruncationAnnotation(now, halvings, originalTTL, effectiveTTL, originalBytes, opsPruned)
 				// Write the annotation to the metadata (not the status subresource)
 				// so the record persists even if the status write fails.
@@ -190,7 +195,7 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 
 			if !fits {
 				afterBytes, _ := statusPayloadBytes(*status)
-				l.Error(nil, "status payload still exceeds safety threshold after adaptive TTL shrinking; skipping write to avoid etcd 422",
+				l.Info("status payload still exceeds safety threshold after adaptive TTL shrinking; skipping write to avoid etcd 422",
 					"originalBytes", originalBytes,
 					"bytesAfterShrink", afterBytes,
 					"safetyThreshold", statusPayloadSafetyBytes,

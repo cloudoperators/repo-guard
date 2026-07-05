@@ -17,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -472,31 +471,26 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		if updateRequired {
-			// Patch only the fields that triggered the updateRequired flag onto the
-			// freshly-fetched object so we never overwrite operations (e.g.
-			// RepositoryTeamOperations) that a concurrent reconcile just wrote.
-			updatedOwners := githubOrganization.Status.OrganizationOwners
-			updatedTeams := githubOrganization.Status.Teams
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status.OrganizationOwners = updatedOwners
-				latest.Status.Teams = updatedTeams
-				// Also compact bulky repo lists; this is what triggered the
-				// updateRequired flag at the repo-list compaction block above.
-				latest.Status.PublicRepositories = nil
-				latest.Status.PrivateRepositories = nil
-				latest.Status.InternalRepositories = nil
-				return r.Client.Status().Update(ctx, latest)
-			})
-			if err != nil {
+			// Fetch the latest resource state and merge only the fields that changed
+			// so we never overwrite operations (e.g. RepositoryTeamOperations) that
+			// a concurrent reconcile just wrote.
+			latest := &v1.GithubOrganization{}
+			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
-			} else {
-				return reconcile.Result{}, nil
 			}
+			latest.Status.OrganizationOwners = githubOrganization.Status.OrganizationOwners
+			latest.Status.Teams = githubOrganization.Status.Teams
+			// Also compact bulky repo lists; this is what triggered the
+			// updateRequired flag at the repo-list compaction block above.
+			latest.Status.PublicRepositories = nil
+			latest.Status.PrivateRepositories = nil
+			latest.Status.InternalRepositories = nil
+			if err := r.safeStatusUpdate(ctx, req, &latest.Status, latest, githubName); err != nil {
+				l.Error(err, "error during status update")
+				return reconcile.Result{}, err
+			}
+			return reconcile.Result{}, nil
 		}
 
 		// find differences and add actions to status

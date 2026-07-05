@@ -21,6 +21,20 @@ func elementsMatch(listA, listB any) bool {
 	return assert.ElementsMatch(dummyAssert{}, listA, listB)
 }
 
+// isEtagCacheInconsistency returns true when the error is a stale-etag-cache
+// transient condition: the transport sent If-None-Match and received 304 but
+// the local in-process cache no longer holds the corresponding parsed value.
+// The provider layer already invalidates the cache entry before returning this
+// error, so the very next reconcile will succeed with a fresh 200 response.
+// Callers should requeue without updating the status rather than marking the
+// resource as failed.
+func isEtagCacheInconsistency(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "etag cache inconsistency")
+}
+
 // parseGitHubRateLimitReset tries to extract a retry-after time from a GitHub rate-limit error string.
 // Handles three cases emitted by the GitHub API:
 //
