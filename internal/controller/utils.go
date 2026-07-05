@@ -36,7 +36,6 @@ func isEtagCacheInconsistency(err error) bool {
 }
 
 // parseGitHubRateLimitReset tries to extract a retry-after time from a GitHub rate-limit error string.
-// Handles three cases emitted by the GitHub API:
 //
 //   - Future reset:  "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
 //     → returns the parsed future reset time so callers can requeue with RequeueAfter.

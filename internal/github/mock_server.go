@@ -54,6 +54,7 @@ type MockRepo struct {
 	Visibility string // "public", "private", or "internal"; defaults derived from Private when empty
 	Archived   bool
 	Disabled   bool
+	Locked     bool // if true, PUT team-repo returns 422 "This repository is locked and cannot be modified."
 	Teams      []MockTeamWithPermission
 }
 
@@ -609,6 +610,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 				if repoEntry.Archived || repoEntry.Disabled {
 					stateMu.Unlock()
 					writeJSONError(w, `{"message":"Repository is archived."}`, http.StatusUnprocessableEntity)
+					return
+				}
+				// Reject team-repo mutations on locked repositories.
+				if repoEntry.Locked {
+					stateMu.Unlock()
+					writeJSONError(w, `{"message":"Validation Failed","errors":[{"resource":"TeamRepository","field":"data","code":"unprocessable","message":"This repository is locked and cannot be modified."}]}`, http.StatusUnprocessableEntity)
 					return
 				}
 				perms := teamRepoPerms[repoName]

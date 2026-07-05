@@ -234,4 +234,49 @@ var _ = Describe("Github Organization controller - repository team assignments",
 				"archived-repo must not appear in status.outOfPolicyRepositories")
 		}
 	})
+
+	It("skips (not fails) repository-team operations for locked repos", func() {
+		if !isMockMode() {
+			Skip("relies on mock-seeded locked repo; only valid in mock mode")
+		}
+		// The mock server seeds TEST_LOCKED_REPO ("locked-repo") with Locked: true.
+		// When the controller calls RepositoryTeamAdd for that repo the mock returns
+		// 422 "This repository is locked and cannot be modified."
+		// The controller must mark those ops as Skipped, not Failed, and the org
+		// must still reach the Complete state (no infinite retry loop).
+		Expect(ensureResourceCreated(ctx, orgCR)).To(Succeed())
+		Expect(ensureResourceCreated(ctx, tr)).To(Succeed())
+
+		// Wait for the reconcile to settle — Complete is expected because locked ops
+		// do not count as failures.
+		Eventually(func() repoguardsapv1.GithubOrganizationState {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.OrganizationStatus
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationStateComplete))
+
+		cur := &repoguardsapv1.GithubOrganization{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNS, Name: orgResource}, cur)).To(Succeed())
+
+		// All ops referencing the locked repo must be Skipped, never Failed.
+		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+			if op.Repo == TEST_LOCKED_REPO {
+				Expect(op.State).To(Equal(repoguardsapv1.GithubRepoTeamOperationStateSkipped),
+					"locked-repo operations must be skipped, not failed")
+				Expect(op.Error).To(ContainSubstring("locked"),
+					"locked-repo skipped op must preserve the error message for auditability")
+			}
+		}
+		// Confirm at least one skipped op was recorded for the locked repo.
+		lockedOpCount := 0
+		for _, op := range cur.Status.Operations.RepositoryTeamOperations {
+			if op.Repo == TEST_LOCKED_REPO {
+				lockedOpCount++
+			}
+		}
+		Expect(lockedOpCount).To(BeNumerically(">", 0),
+			"expected at least one operation recorded for the locked repo")
+	})
 })
