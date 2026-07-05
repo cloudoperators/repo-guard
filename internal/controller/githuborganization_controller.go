@@ -138,14 +138,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			newStatus.OrganizationStatusTimestamp = metav1.Now()
 			githubOrganization.Status = newStatus
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubOrganization.Spec.Github)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -246,14 +239,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			newStatus.OrganizationStatusTimestamp = metav1.Now()
 			githubOrganization.Status = newStatus
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubOrganization.Spec.Github)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
@@ -269,14 +255,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
 		newStatus.OrganizationStatusError = "github name not provided"
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latest := &v1.GithubOrganization{}
-			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-				return err
-			}
-			latest.Status = newStatus
-			return r.Client.Status().Update(ctx, latest)
-		})
+		err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -290,14 +269,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		newStatus.OrganizationStatus = v1.GithubTeamStateFailed
 		newStatus.OrganizationStatusError = "organization name not provided"
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
-		err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			latest := &v1.GithubOrganization{}
-			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-				return err
-			}
-			latest.Status = newStatus
-			return r.Client.Status().Update(ctx, latest)
-		})
+		err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -315,14 +287,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatusError = "github not found"
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			newStatus := githubOrganization.Status
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -334,14 +299,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatusError = "error during getting the github: " + err.Error()
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			newStatus := githubOrganization.Status
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -390,14 +348,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if uerr != nil {
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
@@ -412,14 +363,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			failedScopes = append(failedScopes, "owners")
 			newStatus := githubOrganization.Status
-			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if uerr != nil {
 				l.Error(uerr, "error during status update")
 				return reconcile.Result{}, uerr
@@ -437,14 +381,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if uerr != nil {
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
@@ -459,14 +396,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			failedScopes = append(failedScopes, "teams")
 			newStatus := githubOrganization.Status
-			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if uerr != nil {
 				l.Error(uerr, "error during status update")
 				return reconcile.Result{}, uerr
@@ -484,14 +414,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if uerr != nil {
 					l.Error(uerr, "error during status update")
 					return reconcile.Result{}, uerr
@@ -506,14 +429,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 			failedScopes = append(failedScopes, "repos")
 			newStatus := githubOrganization.Status
-			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if uerr != nil {
 				l.Error(uerr, "error during status update")
 				return reconcile.Result{}, uerr
@@ -556,13 +472,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		if updateRequired {
-			newStatus := githubOrganization.Status
+			// Patch only the fields that triggered the updateRequired flag onto the
+			// freshly-fetched object so we never overwrite operations (e.g.
+			// RepositoryTeamOperations) that a concurrent reconcile just wrote.
+			updatedOwners := githubOrganization.Status.OrganizationOwners
+			updatedTeams := githubOrganization.Status.Teams
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganization{}
 				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 					return err
 				}
-				latest.Status = newStatus
+				latest.Status.OrganizationOwners = updatedOwners
+				latest.Status.Teams = updatedTeams
+				// Also compact bulky repo lists; this is what triggered the
+				// updateRequired flag at the repo-list compaction block above.
+				latest.Status.PublicRepositories = nil
+				latest.Status.PrivateRepositories = nil
+				latest.Status.InternalRepositories = nil
 				return r.Client.Status().Update(ctx, latest)
 			})
 			if err != nil {
@@ -594,14 +520,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				failedScopes = append(failedScopes, "owners")
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -620,14 +539,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			statusChanged, newStatus := githubOrganization.OwnerChangeCalculator(ownersFromKubernetes)
 			if statusChanged {
 				l.Info("status update for organization due to owner change calculation", "update", newStatus)
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = *newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -657,14 +569,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				failedScopes = append(failedScopes, "teams")
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -678,14 +583,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			statusChanged, newStatus := githubOrganization.TeamChangeCalculator(teamsFromKubernetes)
 			if statusChanged {
 				l.Info("status update for organization due to team change calculation")
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = *newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -727,14 +625,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				newStatus.PublicRepositories = nil
 				newStatus.PrivateRepositories = nil
 				newStatus.InternalRepositories = nil
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = *newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -746,6 +637,49 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				return reconcile.Result{}, nil
 			}
 		}
+
+		// Revival check: if the add/remove label is now enabled but there are skipped
+		// repo-team ops (label was disabled when they ran), revive them to pending and
+		// transition the org back to pending-operations so the execution block processes them.
+		// This runs outside the pending-operations guard so it also fires when the org is
+		// complete (all ops skipped).
+		if githubOrganization.Labels != nil {
+			addEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_ADD_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE
+			removeEnabled := githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_TEAM] == GITHUB_ORG_LABEL_ADD_REMOVE_REPOSITORY_TEAM_ENABLED_VALUE
+			revivedCount := 0
+			revivedStatus := githubOrganization.Status.DeepCopy()
+			for i, op := range revivedStatus.Operations.RepositoryTeamOperations {
+				if op.State != v1.GithubRepoTeamOperationStateSkipped {
+					continue
+				}
+				// Never revive permanently-skipped ops (e.g. locked-repo errors).
+				if strings.Contains(op.Error, "locked") {
+					continue
+				}
+				if (op.Operation == v1.GithubRepoTeamOperationTypeAdd && addEnabled) ||
+					(op.Operation == v1.GithubRepoTeamOperationTypeRemove && removeEnabled) {
+					l.Info("reviving skipped repo-team op to pending (label switched to enabled)", "repo", op.Repo, "team", op.Team, "operation", op.Operation)
+					revivedStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStatePending
+					revivedStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+					revivedCount++
+				}
+			}
+			if revivedCount > 0 {
+				revivedStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
+				revivedStatus.OutOfPolicyRepositories = uniquePendingOrFailedRepoNames(revivedStatus.Operations.RepositoryTeamOperations)
+				err := r.safeStatusUpdate(ctx, req, revivedStatus, githubOrganization, githubName)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						l.Info("resource not found in kubernetes: reconcile is skipped")
+						return reconcile.Result{}, nil
+					}
+					l.Error(err, "error during status update")
+					return reconcile.Result{}, err
+				}
+				return reconcile.Result{}, nil
+			}
+		}
+
 		// PART 4: org-member comparison (#147) — remove org members not in any GitHub team
 		removeOrgMemberLabelValue := ""
 		if githubOrganization.Labels != nil {
@@ -761,14 +695,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					githubOrganization.Status.OrganizationStatusError = "error in getting org members: " + err.Error()
 					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 					newStatus := githubOrganization.Status
-					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubOrganization{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
-						}
-						latest.Status = newStatus
-						return r.Client.Status().Update(ctx, latest)
-					})
+					uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 					if uerr != nil {
 						l.Error(uerr, "error during status update")
 						return reconcile.Result{}, uerr
@@ -788,6 +715,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				teamObservationsCount := 0
 				var teamMembersRateLimitResult *reconcile.Result
 				var teamMembersRateLimitErr string
+				var teamMembersEtagRequeue bool
 				for _, team := range teamsList {
 					members, merr := teamsProvider.Members(ctx, team)
 					if merr != nil {
@@ -802,6 +730,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							teamMembersRateLimitErr = merr.Error()
 							break
 						}
+						if isEtagCacheInconsistency(merr) {
+							// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
+							// Do not set rate-limit state; this is a transient condition, not a rate limit.
+							teamMembersEtagRequeue = true
+							break
+						}
 						// Non-rate-limit error: treat as hard stop to avoid false-positive
 						// org-member removals from an incomplete team-member union.
 						l.Error(merr, "org-member calculator: error fetching team members, aborting safety check", "team", team)
@@ -813,19 +747,16 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					}
 					teamObservationsCount++
 				}
+				if teamMembersEtagRequeue {
+					// Etag cache inconsistency is a transient condition; requeue without updating status.
+					return reconcile.Result{Requeue: true}, nil
+				}
 				if teamMembersRateLimitResult != nil {
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
 					githubOrganization.Status.OrganizationStatusError = "rate limited fetching team members for org-member safety check: " + teamMembersRateLimitErr
 					githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 					rlStatus := githubOrganization.Status
-					if uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubOrganization{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
-						}
-						latest.Status = rlStatus
-						return r.Client.Status().Update(ctx, latest)
-					}); uerr != nil {
+					if uerr := r.safeStatusUpdate(ctx, req, &rlStatus, githubOrganization, githubName); uerr != nil {
 						l.Error(uerr, "error during status update")
 						return reconcile.Result{}, uerr
 					}
@@ -848,14 +779,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if statusChanged {
 					l.Info("status update for organization due to org-member change calculation")
 					ns := newStatus
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubOrganization{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
-						}
-						latest.Status = ns
-						return r.Client.Status().Update(ctx, latest)
-					})
+					err := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
 					if err != nil {
 						if errors.IsNotFound(err) {
 							l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -893,14 +817,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						githubOrganization.Status.OrganizationStatusError = "error in getting repo collaborators: " + err.Error()
 						githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 						newStatus := githubOrganization.Status
-						uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-							latest := &v1.GithubOrganization{}
-							if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-								return err
-							}
-							latest.Status = newStatus
-							return r.Client.Status().Update(ctx, latest)
-						})
+						uerr := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 						if uerr != nil {
 							l.Error(uerr, "error during status update")
 							return reconcile.Result{}, uerr
@@ -924,14 +841,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			if statusChanged {
 				l.Info("status update for organization due to repo-collaborator change calculation")
 				ns := newStatus
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = ns
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -948,16 +858,11 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		//  no error until here, if there is already error in the status, remove it
 		if githubOrganization.Status.OrganizationStatus == "" {
 			l.Info("OrganizationStatus is empty, it could be the first round of the resource reconciliation")
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status.OrganizationStatus = v1.GithubOrganizationStateComplete
-				latest.Status.OrganizationStatusError = ""
-				latest.Status.OrganizationStatusTimestamp = metav1.Now()
-				return r.Client.Status().Update(ctx, latest)
-			})
+			newStatus := githubOrganization.Status
+			newStatus.OrganizationStatus = v1.GithubOrganizationStateComplete
+			newStatus.OrganizationStatusError = ""
+			newStatus.OrganizationStatusTimestamp = metav1.Now()
+			err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -978,14 +883,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateDryRun
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -1014,14 +912,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -1048,14 +939,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				l.Info("status will be updated: cleaning completed operations")
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -1084,14 +968,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				l.Info("status will be updated: cleaning failed operations")
 				githubOrganization.Status.OrganizationStatusTimestamp = metav1.Now()
 				newStatus := githubOrganization.Status
-				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-						return err
-					}
-					latest.Status = newStatus
-					return r.Client.Status().Update(ctx, latest)
-				})
+				err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
 				if err != nil {
 					if errors.IsNotFound(err) {
 						l.Info("resource not found in kubernetes: reconcile is skipped")
@@ -1282,12 +1159,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					} else {
 						err := reposProvider.RepositoryTeamAdd(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
 						if err != nil {
-							l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
-							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
-							newStatus.Operations.RepositoryTeamOperations[i].Error = err.Error()
-							newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
-							statusChanged = true
-							failed = true
+							errMsg := err.Error()
+							// 422 "This repository is locked and cannot be modified." — skip permanently;
+							// retrying will never succeed and only bloats the status.
+							if strings.Contains(errMsg, "422") && strings.Contains(errMsg, "This repository is locked") {
+								l.Info("adding repository&team skipped: repository is locked", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
+								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateSkipped
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
+								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+								statusChanged = true
+							} else {
+								l.Error(err, "error during adding repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
+								newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
+								newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
+								newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
+								statusChanged = true
+								failed = true
+							}
 						} else {
 							l.Info("repository&team is added", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team, "permission", repositoryTeamOperation.Permission)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateComplete
@@ -1333,6 +1221,22 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			orgMemberProtectedSet[strings.ToLower(p)] = struct{}{}
 		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		// Skip revival for protected members to avoid a pending↔skipped flap.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER] == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.OrganizationMemberOperations {
+				if op.State == v1.GithubUserOperationStateSkipped && op.Operation == v1.GithubUserOperationTypeRemove {
+					if _, isProt := orgMemberProtectedSet[strings.ToLower(op.User)]; isProt {
+						continue
+					}
+					l.Info("reviving skipped org-member remove op to pending (label switched to enabled)", "user", op.User)
+					newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStatePending
+					newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
+		}
 		for i, op := range newStatus.Operations.OrganizationMemberOperations {
 			if op.State != v1.GithubUserOperationStatePending {
 				continue
@@ -1342,8 +1246,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				orgMemberLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER]
 			}
 			if orgMemberLabel == GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing organization members is in dry-run mode: operation left pending (not executed)", "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing organization members is in dry-run mode: operation skipped", "user", op.User)
+				newStatus.Operations.OrganizationMemberOperations[i].State = v1.GithubUserOperationStateSkipped
+				newStatus.Operations.OrganizationMemberOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if orgMemberLabel != GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_ENABLED_VALUE {
@@ -1377,14 +1285,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					newStatus.OrganizationStatusError = "rate limited during org member removal: " + err.Error()
 					newStatus.OrganizationStatusTimestamp = metav1.Now()
 					ns := *newStatus
-					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubOrganization{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
-						}
-						latest.Status = ns
-						return r.Client.Status().Update(ctx, latest)
-					})
+					uerr := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
 					if uerr != nil {
 						l.Error(uerr, "error during status update")
 						return reconcile.Result{}, uerr
@@ -1421,6 +1322,22 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		for _, p := range githubOrganization.Spec.ProtectedMembers {
 			repoCollabProtectedSet[strings.ToLower(p)] = struct{}{}
 		}
+		// If the label has been switched from dryRun to enabled, revive previously-skipped
+		// remove ops back to pending so the execution loop below can process them.
+		// Skip revival for protected members to avoid a pending↔skipped flap.
+		if githubOrganization.Labels != nil && githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR] == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
+			for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
+				if op.State == v1.GithubRepoUserOperationStateSkipped && op.Operation == v1.GithubRepoUserOperationTypeRemove {
+					if _, isProt := repoCollabProtectedSet[strings.ToLower(op.User)]; isProt {
+						continue
+					}
+					l.Info("reviving skipped repo-collab remove op to pending (label switched to enabled)", "repo", op.Repo, "user", op.User)
+					newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStatePending
+					newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+					statusChanged = true
+				}
+			}
+		}
 		for i, op := range newStatus.Operations.RepositoryCollaboratorOperations {
 			if op.State != v1.GithubRepoUserOperationStatePending {
 				continue
@@ -1430,8 +1347,12 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				repoCollabLabel = githubOrganization.Labels[GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR]
 			}
 			if repoCollabLabel == GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE {
-				// dry-run: keep op pending so operators can inspect who would be removed
-				l.Info("removing repository direct collaborators is in dry-run mode: operation left pending (not executed)", "repo", op.Repo, "user", op.User)
+				// dry-run: mark as skipped so operators can inspect who would be removed
+				// without leaving the op in pending (which would block status from resolving).
+				l.Info("removing repository direct collaborators is in dry-run mode: operation skipped", "repo", op.Repo, "user", op.User)
+				newStatus.Operations.RepositoryCollaboratorOperations[i].State = v1.GithubRepoUserOperationStateSkipped
+				newStatus.Operations.RepositoryCollaboratorOperations[i].Timestamp = metav1.Now()
+				statusChanged = true
 				continue
 			}
 			if repoCollabLabel != GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE {
@@ -1465,14 +1386,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					newStatus.OrganizationStatusError = "rate limited during repo collaborator removal: " + err.Error()
 					newStatus.OrganizationStatusTimestamp = metav1.Now()
 					ns := *newStatus
-					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubOrganization{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
-						}
-						latest.Status = ns
-						return r.Client.Status().Update(ctx, latest)
-					})
+					uerr := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
 					if uerr != nil {
 						l.Error(uerr, "error during status update")
 						return reconcile.Result{}, uerr
@@ -1516,14 +1430,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			newStatus.OrganizationStatusTimestamp = metav1.Now()
 			l.Info("new status is calculated", "status", newStatus.OrganizationStatus)
 
-			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubOrganization{}
-				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-					return err
-				}
-				latest.Status = *newStatus
-				return r.Client.Status().Update(ctx, latest)
-			})
+			err = r.safeStatusUpdate(ctx, req, newStatus, githubOrganization, githubName)
 			if err != nil {
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
@@ -1732,6 +1639,9 @@ const GITHUB_ORG_LABEL_REMOVE_ORG_MEMBER_DRYRUN_VALUE = "dryRun"
 const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR = "repo-guard.cloudoperators.dev/removeRepositoryDirectCollaborator"
 const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_ENABLED_VALUE = "true"
 const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE = "dryRun"
+
+// Annotation written when adaptive TTL shrinking is applied to keep status payload under the safety threshold.
+const GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED = "repo-guard.cloudoperators.dev/statusPayloadTruncated"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {
