@@ -88,11 +88,10 @@ func TestAdaptiveTTLShrink_InvalidTTL(t *testing.T) {
 func TestAdaptiveTTLShrink_HalvesAndFits(t *testing.T) {
 	// Build a status whose JSON size exceeds statusPayloadSafetyBytes (2.5 MB).
 	// The ops all have a timestamp 48 h in the past.
-	// Starting TTL is 72h. After each halving:
-	//   72h → 36h → 18h → 9h → ...
-	// With a 48h-old timestamp, ops are NOT expired at 72h, 36h, but ARE expired at
-	// any TTL < 48h (36h < 48h → expired). So the first halving (72h→36h) already
-	// causes TTL (36h) < age (48h) → ops dropped. The status should fit after ≥1 halvings.
+	// Starting TTL is 72h. After the first halving: 72h → 36h.
+	// With a 48h-old timestamp, ops are NOT expired at 72h (72h > 48h),
+	// but ARE expired at 36h (36h < 48h → ops dropped).
+	// So the first halving (72h→36h) already prunes the ops; the status should fit after ≥1 halvings.
 	now := time.Now()
 	opAge := now.Add(-48 * time.Hour)
 

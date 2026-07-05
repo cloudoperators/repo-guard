@@ -189,7 +189,7 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 						live.Annotations = map[string]string{}
 					}
 					live.Annotations[GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED] = annotationValue
-					return r.Client.Update(ctx, live)
+					return r.Update(ctx, live)
 				})
 			}
 

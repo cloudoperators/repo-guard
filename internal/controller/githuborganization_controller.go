@@ -660,6 +660,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			}
 			if revivedCount > 0 {
 				revivedStatus.OrganizationStatus = v1.GithubOrganizationStatePendingOperations
+				revivedStatus.OrganizationStatusTimestamp = metav1.Now()
 				revivedStatus.OutOfPolicyRepositories = uniquePendingOrFailedRepoNames(revivedStatus.Operations.RepositoryTeamOperations)
 				err := r.safeStatusUpdate(ctx, req, revivedStatus, githubOrganization, githubName)
 				if err != nil {
