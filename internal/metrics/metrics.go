@@ -183,6 +183,17 @@ var (
 		[]string{"github", "organization"},
 	)
 
+	// Status payload size gauge
+	OrgStatusPayloadBytes = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganization",
+			Name:      "status_payload_bytes",
+			Help:      "JSON byte size of the GithubOrganization status subresource before each write.",
+		},
+		[]string{"github", "organization"},
+	)
+
 	// GraphQL bulk fetch counters (Track 1: #149)
 	GraphQLCallsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -237,6 +248,7 @@ func init() {
 		GraphQLCallsTotal,
 		EtagCacheHitsTotal,
 		EtagCacheMissesTotal,
+		OrgStatusPayloadBytes,
 	)
 }
 
