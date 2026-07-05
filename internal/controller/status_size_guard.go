@@ -19,7 +19,7 @@ import (
 
 const (
 	statusPayloadWarnBytes   = 1_000_000 // 1 MB — emit metric + log warning
-	statusPayloadSafetyBytes = 2_500_000 // 2.5 MB — apply adaptive TTL shrinking
+	statusPayloadSafetyBytes = 1_200_000 // 1.2 MB — apply adaptive TTL shrinking (etcd hard limit is ~1.5 MB)
 	statusPayloadMinTTL      = 5 * time.Minute
 )
 
@@ -195,13 +195,15 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 
 			if !fits {
 				afterBytes, _ := statusPayloadBytes(*status)
-				l.Info("status payload still exceeds safety threshold after adaptive TTL shrinking; skipping write to avoid etcd 422",
+				err := fmt.Errorf("status payload (%d bytes) still exceeds safety threshold (%d bytes) after %d TTL halvings; skipping write to avoid etcd 422",
+					afterBytes, statusPayloadSafetyBytes, halvings)
+				l.Error(err, "status payload oversized; write skipped",
 					"originalBytes", originalBytes,
 					"bytesAfterShrink", afterBytes,
 					"safetyThreshold", statusPayloadSafetyBytes,
 					"halvings", halvings,
 				)
-				return nil
+				return err
 			}
 		}
 	}

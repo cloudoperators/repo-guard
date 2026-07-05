@@ -183,12 +183,13 @@ func TestAdaptiveTTLShrink_EmptyTTL(t *testing.T) {
 	}
 }
 
-func TestAdaptiveTTLShrink_AllScopesPruned(t *testing.T) {
-	// Verify that completed ops in all five scopes are pruned by the halving loop.
+func TestAdaptiveTTLShrink_NonRepoScopePruned(t *testing.T) {
+	// Verify that completed ops in non-repo-team scopes (OrganizationOwnerOperations)
+	// are also pruned by the halving loop, confirming applyUserOpsTTL is wired up.
 	now := time.Now()
 	oldTS := now.Add(-48 * time.Hour)
 
-	// Build a status with old completed ops in every scope; sized to exceed safety threshold.
+	// Build a status with old completed ops in OrganizationOwnerOperations; sized to exceed safety threshold.
 	nOps := (statusPayloadSafetyBytes / 80) + 1
 	userOps := make([]v1.GithubUserOperation, nOps)
 	for i := range userOps {
@@ -261,7 +262,7 @@ func TestAdaptiveTTLShrink_AnnotationFormat(t *testing.T) {
 	if !strings.Contains(annotation, "halved 3 times") {
 		t.Errorf("annotation missing halving count: %s", annotation)
 	}
-	if !strings.Contains(annotation, "72h→9h") {
+	if !strings.Contains(annotation, "72h→9h0m0s") {
 		t.Errorf("annotation missing TTL transition: %s", annotation)
 	}
 	if !strings.Contains(annotation, "2.3MB") {
