@@ -28,6 +28,7 @@ Repo Guard exposes Prometheus metrics under the `repo_guard_*` namespace, a `Pod
 | `repo_guard_githuborganization_managed_repos_total` | Gauge | `github`, `organization`, `visibility` | Number of managed repositories partitioned by visibility. |
 | `repo_guard_githuborganization_sync_failures_total` | Counter | `github`, `organization`, `scope` | Cumulative reconcile cycles that ended in a failed state, by scope. |
 | `repo_guard_githuborganization_pending_operations_total` | Gauge | `github`, `organization` | Total pending (not yet executed) operations across all scopes. |
+| `repo_guard_githuborganization_status_payload_bytes` | Gauge | `github`, `organization` | JSON byte size of the status subresource before each status update attempt (updated again post-shrink when adaptive TTL shrinking is applied). Alert when > 1 MB. |
 
 ### GithubTeam metrics
 
