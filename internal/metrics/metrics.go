@@ -189,7 +189,7 @@ var (
 			Namespace: "repo_guard",
 			Subsystem: "githuborganization",
 			Name:      "status_payload_bytes",
-			Help:      "JSON byte size of the GithubOrganization status subresource before each write.",
+			Help:      "JSON byte size of the GithubOrganization status subresource before each status update attempt (updated again post-shrink when adaptive TTL shrinking is applied).",
 		},
 		[]string{"github", "organization"},
 	)
