@@ -207,8 +207,10 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 				return err
 			}
 
-			// Annotation is written only after confirming the shrunk payload fits,
-			// so it accurately reflects what was actually persisted.
+			// Annotation is written only after confirming the shrunk payload fits
+			// (fits==true), so it is never emitted for writes that were skipped.
+			// It is intentionally written before Status().Update so the breadcrumb
+			// survives even if the status write subsequently fails.
 			if halvings > 0 {
 				annotationValue := formatTruncationAnnotation(now, halvings, originalTTL, effectiveTTL, originalBytes, opsPruned)
 				// Write the annotation to the metadata (not the status subresource).
