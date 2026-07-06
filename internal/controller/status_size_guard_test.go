@@ -86,7 +86,7 @@ func TestAdaptiveTTLShrink_InvalidTTL(t *testing.T) {
 }
 
 func TestAdaptiveTTLShrink_HalvesAndFits(t *testing.T) {
-	// Build a status whose JSON size exceeds statusPayloadSafetyBytes (2.5 MB).
+	// Build a status whose JSON size exceeds statusPayloadSafetyBytes (1.2 MB).
 	// The ops all have a timestamp 48 h in the past.
 	// Starting TTL is 72h. After the first halving: 72h → 36h.
 	// With a 48h-old timestamp, ops are NOT expired at 72h (72h > 48h),

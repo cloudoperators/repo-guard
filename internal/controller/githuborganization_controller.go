@@ -471,9 +471,10 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		}
 
 		if updateRequired {
-			// Fetch the latest resource state and merge only the fields that changed
-			// so we never overwrite operations (e.g. RepositoryTeamOperations) that
-			// a concurrent reconcile just wrote.
+			// Fetch the latest resource state and apply only the fields that changed.
+			// This reduces (but does not eliminate) the window in which a concurrent
+			// reconcile's operation writes could be overwritten by safeStatusUpdate's
+			// own RetryOnConflict loop.
 			latest := &v1.GithubOrganization{}
 			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 				l.Error(err, "error during status update")

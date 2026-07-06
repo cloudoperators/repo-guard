@@ -89,7 +89,7 @@ func adaptiveTTLShrink(
 // GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED annotation.
 func formatTruncationAnnotation(now time.Time, halvings int, originalTTL string, effectiveTTL time.Duration, originalBytes int, opsPruned int) string {
 	return fmt.Sprintf(
-		"%s: completedTTL halved %d times (%s→%s) to fit %.1fMB payload; %d ops pruned",
+		"%s: completedTTL halved %d times (%s→%s); original payload %.1fMB exceeded threshold; %d ops pruned",
 		now.UTC().Format(time.RFC3339),
 		halvings,
 		originalTTL,
