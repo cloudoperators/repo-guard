@@ -65,6 +65,9 @@ func adaptiveTTLShrink(
 			return current, halvings, ttl, pruned, false
 		}
 		ttl /= 2
+		if ttl < statusPayloadMinTTL {
+			ttl = statusPayloadMinTTL
+		}
 		halvings++
 		// Apply the tightened TTL to all completed-op buckets.
 		if updated, changed := applyRepoOpsTTL(current.Operations.RepositoryTeamOperations, ttl, v1.GithubRepoTeamOperationStateComplete, now); changed {
