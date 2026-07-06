@@ -265,7 +265,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	if githubOrganizationName == "" {
 		l.Info("github organization name is not provided for github organization")
 		newStatus := githubOrganization.Status
-		newStatus.OrganizationStatus = v1.GithubTeamStateFailed
+		newStatus.OrganizationStatus = v1.GithubOrganizationStateFailed
 		newStatus.OrganizationStatusError = "organization name not provided"
 		newStatus.OrganizationStatusTimestamp = metav1.Now()
 		err := r.safeStatusUpdate(ctx, req, &newStatus, githubOrganization, githubName)
