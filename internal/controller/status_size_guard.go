@@ -168,12 +168,19 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 			if org.Labels != nil {
 				completedTTLStr = org.Labels[GITHUB_ORG_LABEL_COMPLETED_TTL]
 			}
-			if completedTTLStr == "" {
-				l.Info("status payload exceeds safety threshold but no completedTTL label is set; adaptive shrinking is disabled — set label to enable automatic pruning",
+			// Validate the TTL up front so we can return a clear, actionable error
+			// instead of the generic "0 halvings" message that adaptiveTTLShrink
+			// would produce when the label is absent or malformed.
+			if _, parseErr := time.ParseDuration(completedTTLStr); parseErr != nil {
+				err := fmt.Errorf("status payload (%d bytes) exceeds safety threshold (%d bytes) and adaptive shrinking is unavailable: label %s is %q (%w); set a valid duration (e.g. \"72h\") to enable automatic pruning",
+					originalBytes, statusPayloadSafetyBytes, GITHUB_ORG_LABEL_COMPLETED_TTL, completedTTLStr, parseErr)
+				l.Error(err, "status payload oversized; write skipped — set completedTTL label to enable adaptive shrinking",
 					"label", GITHUB_ORG_LABEL_COMPLETED_TTL,
+					"labelValue", completedTTLStr,
 					"bytes", originalBytes,
 					"safetyThreshold", statusPayloadSafetyBytes,
 				)
+				return err
 			}
 
 			originalTTL := completedTTLStr
