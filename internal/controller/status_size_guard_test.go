@@ -146,10 +146,14 @@ func TestAdaptiveTTLShrink_FloorReached(t *testing.T) {
 }
 
 func TestAdaptiveTTLShrink_HalvingCount(t *testing.T) {
-	// Verify the halving count matches what we calculate manually.
+	// Verify the halving count matches the manual calculation.
 	// ops age = 3h. TTL starts at 72h.
-	// 72h → 36h → 18h → 9h → 4h30m → 2h15m — first TTL < 3h age → ops pruned at step 6.
-	// But we stop as soon as payload fits, which may be sooner if the ops are numerous.
+	// Halving 1: 72h → 36h (36h > 3h, no pruning yet)
+	// Halving 2: 36h → 18h (18h > 3h, no pruning yet)
+	// Halving 3: 18h →  9h  (9h > 3h, no pruning yet)
+	// Halving 4:  9h → 4h30m (4h30m > 3h, no pruning yet)
+	// Halving 5: 4h30m → 2h15m (2h15m < 3h → ops expire → payload fits)
+	// Expected: fits=true after exactly 5 halvings.
 	now := time.Now()
 	opAge := now.Add(-3 * time.Hour)
 
@@ -162,12 +166,11 @@ func TestAdaptiveTTLShrink_HalvingCount(t *testing.T) {
 		t.Logf("halvings=%d effectiveTTL=%s finalSize=%d", halvings, effectiveTTL, finalSize)
 		t.Fatal("expected fits=true")
 	}
-	// Each halving must be positive and TTL must be strictly decreasing.
-	if halvings <= 0 {
-		t.Fatalf("expected positive halvings, got %d", halvings)
+	if halvings != 5 {
+		t.Fatalf("expected exactly 5 halvings (72h→2h15m), got %d (effectiveTTL=%s)", halvings, effectiveTTL)
 	}
-	if opsPruned < 0 {
-		t.Fatalf("opsPruned must be non-negative, got %d", opsPruned)
+	if opsPruned <= 0 {
+		t.Fatalf("expected ops to be pruned at halving 5, got opsPruned=%d", opsPruned)
 	}
 }
 
