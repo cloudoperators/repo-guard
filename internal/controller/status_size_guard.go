@@ -168,6 +168,13 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 			if org.Labels != nil {
 				completedTTLStr = org.Labels[GITHUB_ORG_LABEL_COMPLETED_TTL]
 			}
+			if completedTTLStr == "" {
+				l.Info("status payload exceeds safety threshold but no completedTTL label is set; adaptive shrinking is disabled — set label to enable automatic pruning",
+					"label", GITHUB_ORG_LABEL_COMPLETED_TTL,
+					"bytes", originalBytes,
+					"safetyThreshold", statusPayloadSafetyBytes,
+				)
+			}
 
 			originalTTL := completedTTLStr
 			shrunk, halvings, effectiveTTL, opsPruned, fits := adaptiveTTLShrink(*status, completedTTLStr, now)
@@ -198,8 +205,8 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 			if halvings > 0 {
 				annotationValue := formatTruncationAnnotation(now, halvings, originalTTL, effectiveTTL, originalBytes, opsPruned)
 				// Write the annotation to the metadata (not the status subresource).
-				// Non-fatal if it fails.
-				_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				// Non-fatal if it fails, but log so operators can investigate.
+				if aerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					live := &v1.GithubOrganization{}
 					if err := r.Get(ctx, req.NamespacedName, live); err != nil {
 						return err
@@ -209,7 +216,9 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 					}
 					live.Annotations[GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED] = annotationValue
 					return r.Update(ctx, live)
-				})
+				}); aerr != nil {
+					l.Error(aerr, "safeStatusUpdate: failed to write truncation annotation; status was shrunk but annotation was not recorded")
+				}
 			}
 		}
 	}
