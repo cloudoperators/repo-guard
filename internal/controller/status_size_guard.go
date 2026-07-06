@@ -178,22 +178,6 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 				if shrunkBytes, merr := statusPayloadBytes(*status); merr == nil {
 					ghmetrics.OrgStatusPayloadBytes.WithLabelValues(githubLabel, orgLabel).Set(float64(shrunkBytes))
 				}
-
-				annotationValue := formatTruncationAnnotation(now, halvings, originalTTL, effectiveTTL, originalBytes, opsPruned)
-				// Write the annotation to the metadata (not the status subresource)
-				// so the record persists even if the status write fails.
-				// Non-fatal if it fails.
-				_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					live := &v1.GithubOrganization{}
-					if err := r.Get(ctx, req.NamespacedName, live); err != nil {
-						return err
-					}
-					if live.Annotations == nil {
-						live.Annotations = map[string]string{}
-					}
-					live.Annotations[GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED] = annotationValue
-					return r.Update(ctx, live)
-				})
 			}
 
 			if !fits {
@@ -207,6 +191,25 @@ func (r *GithubOrganizationReconciler) safeStatusUpdate(
 					"halvings", halvings,
 				)
 				return err
+			}
+
+			// Annotation is written only after confirming the shrunk payload fits,
+			// so it accurately reflects what was actually persisted.
+			if halvings > 0 {
+				annotationValue := formatTruncationAnnotation(now, halvings, originalTTL, effectiveTTL, originalBytes, opsPruned)
+				// Write the annotation to the metadata (not the status subresource).
+				// Non-fatal if it fails.
+				_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					live := &v1.GithubOrganization{}
+					if err := r.Get(ctx, req.NamespacedName, live); err != nil {
+						return err
+					}
+					if live.Annotations == nil {
+						live.Annotations = map[string]string{}
+					}
+					live.Annotations[GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED] = annotationValue
+					return r.Update(ctx, live)
+				})
 			}
 		}
 	}
