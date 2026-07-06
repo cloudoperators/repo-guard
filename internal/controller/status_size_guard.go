@@ -34,6 +34,8 @@ func statusPayloadBytes(status v1.GithubOrganizationStatus) (int, error) {
 
 // adaptiveTTLShrink applies halving of completedTTL in-memory until the payload
 // fits under statusPayloadSafetyBytes or the TTL floor (statusPayloadMinTTL) is reached.
+// When the TTL reaches the floor it applies one final pruning pass at that floor
+// before giving up, so ops older than statusPayloadMinTTL are always expired.
 // Returns (shrunkStatus, halvingCount, effectiveTTL, opsPruned, fits).
 // opsPruned is the total number of completed operations removed across all scopes.
 func adaptiveTTLShrink(
@@ -51,6 +53,7 @@ func adaptiveTTLShrink(
 	current := *status.DeepCopy()
 	originalCount := countAllCompletedOps(status)
 
+	atFloor := false
 	for {
 		size, err := statusPayloadBytes(current)
 		if err != nil {
@@ -60,13 +63,15 @@ func adaptiveTTLShrink(
 			pruned := originalCount - countAllCompletedOps(current)
 			return current, halvings, ttl, pruned, true
 		}
-		if ttl <= statusPayloadMinTTL {
+		if atFloor {
+			// Already pruned at the floor TTL and still oversized — give up.
 			pruned := originalCount - countAllCompletedOps(current)
 			return current, halvings, ttl, pruned, false
 		}
 		ttl /= 2
 		if ttl < statusPayloadMinTTL {
 			ttl = statusPayloadMinTTL
+			atFloor = true
 		}
 		halvings++
 		// Apply the tightened TTL to all completed-op buckets.

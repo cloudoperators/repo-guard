@@ -145,6 +145,34 @@ func TestAdaptiveTTLShrink_FloorReached(t *testing.T) {
 	}
 }
 
+func TestAdaptiveTTLShrink_SmallInitialTTL(t *testing.T) {
+	// Verify that when completedTTL is already at or below the floor, the loop
+	// still applies one pruning pass at the floor TTL before giving up.
+	// ops age = 10 minutes, initial TTL = 5 minutes (= statusPayloadMinTTL).
+	// One halving: 5m → 2.5m → clamped to 5m (atFloor=true). The ops are
+	// 10 minutes old, so they expire at 5m TTL → pruned → fits=true.
+	now := time.Now()
+	opAge := now.Add(-10 * time.Minute)
+
+	status := buildLargeStatus(statusPayloadSafetyBytes+200_000, opAge)
+
+	got, halvings, effectiveTTL, opsPruned, fits := adaptiveTTLShrink(status, statusPayloadMinTTL.String(), now)
+
+	if !fits {
+		finalSize, _ := statusPayloadBytes(got)
+		t.Fatalf("expected fits=true when ops exceed the floor TTL; finalSize=%d halvings=%d effectiveTTL=%s", finalSize, halvings, effectiveTTL)
+	}
+	if halvings != 1 {
+		t.Fatalf("expected exactly 1 halving (5m→5m floor), got %d (effectiveTTL=%s)", halvings, effectiveTTL)
+	}
+	if opsPruned <= 0 {
+		t.Fatalf("expected ops to be pruned, got opsPruned=%d", opsPruned)
+	}
+	if effectiveTTL != statusPayloadMinTTL {
+		t.Fatalf("expected effectiveTTL=%s, got %s", statusPayloadMinTTL, effectiveTTL)
+	}
+}
+
 func TestAdaptiveTTLShrink_HalvingCount(t *testing.T) {
 	// Verify the halving count matches the manual calculation.
 	// ops age = 3h. TTL starts at 72h.
