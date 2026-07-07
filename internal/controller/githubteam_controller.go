@@ -15,18 +15,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -302,13 +298,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
-	// Orphaned team: no provider configured. Handle early before any GitHub API
-	// client or GithubOrganization lookups so that this path is fast and does not
-	// depend on those resources being ready yet.
+	// Orphaned team: no provider configured. Label it and fall through to the full
+	// reconcile so GitHub members are fetched and written to status as normal.
+	// TeamStatus is forced to complete at the end regardless of operations outcome.
 	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-		// Use RetryOnConflict with re-fetch consistent with the GreenhouseTeam-not-found
-		// orphaning path in this controller, so a stale resourceVersion from the initial
-		// Get does not cause a spurious conflict error. Skip the write if already labeled.
 		if githubTeam.Labels == nil || githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] != "true" {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubTeam{}
@@ -316,8 +309,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return ferr
 				}
 				if latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] == "true" {
-					// Already labeled by a concurrent reconcile — skip the write but
-					// propagate latest so the status update below uses a fresh object.
 					githubTeam = latest
 					return nil
 				}
@@ -339,27 +330,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				return reconcile.Result{}, err
 			}
 		}
-		// No provider configured: set status to complete with zero members so that
-		// ownersFromGithubTeams in the org controller does not treat this team as
-		// "not ready" and busy-loop with a 5-second requeue indefinitely.
-		// Also clear Members, Operations and any prior error so stale data from a
-		// previously-reconciled team cannot leak into org owner calculations once
-		// the provider is removed.
-		if githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
-			len(githubTeam.Status.Members) > 0 ||
-			len(githubTeam.Status.Operations) > 0 ||
-			githubTeam.Status.TeamStatusError != "" {
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			githubTeam.Status.Members = nil
-			githubTeam.Status.Operations = nil
-			githubTeam.Status.TeamStatusError = ""
-			if uerr := r.Client.Status().Update(ctx, githubTeam); uerr != nil {
-				l.Error(uerr, "error during status update for orphaned team")
-				return reconcile.Result{}, uerr
-			}
-		}
-		return reconcile.Result{}, nil
 	}
 
 	// check for github instance
@@ -972,6 +942,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		statusChanged, newStatus := githubTeam.ChangeCalculator(greenHouseTeamMemberListExtended)
 
+		// Orphaned teams (no provider) always report complete so that
+		// ownersFromGithubTeams in the org controller never busy-loops on them.
+		if githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] == "true" {
+			newStatus.TeamStatus = v1.GithubTeamStateComplete
+		}
+
 		if statusChanged {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				githubTeamForUpdate := &v1.GithubTeam{}
@@ -1186,7 +1162,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		if statusChanged {
 			l.Info("status changed during operation processing")
-			if failed {
+			if failed && githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] != "true" {
 				newStatus.TeamStatus = v1.GithubTeamStateFailed
 			} else {
 				if githubTeam.Labels != nil && githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {
@@ -1230,19 +1206,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubTeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
-	selector := labels.NewSelector()
-	orphaned, _ := labels.NewRequirement(GITHUB_TEAMS_LABEL_ORPHANED, selection.NotIn, []string{"true"})
-	selector = selector.Add(*orphaned)
-
-	metav1LabelSelector, err := metav1.ParseToLabelSelector(selector.String())
-	if err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
-		For(&v1.GithubTeam{}, builder.WithPredicates(LabelSelectorPredicate(*metav1LabelSelector))).
+		For(&v1.GithubTeam{}).
 		Watches(&greenhousesapv1alpha1.Team{}, handler.EnqueueRequestsFromMapFunc(r.greenhouseTeamToGithubTeam)).
 		Watches(&v1.GithubAccountLink{}, handler.EnqueueRequestsFromMapFunc(r.githubAccountLinkToGithubTeam)).
 		Complete(r)
@@ -1447,16 +1413,6 @@ func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.
 	}
 
 	return out, nil
-}
-
-func LabelSelectorPredicate(s metav1.LabelSelector) predicate.Predicate {
-	selector, err := metav1.LabelSelectorAsSelector(&s)
-	if err != nil {
-		return predicate.Funcs{}
-	}
-	return predicate.NewPredicateFuncs(func(o client.Object) bool {
-		return selector.Matches(labels.Set(o.GetLabels()))
-	})
 }
 
 const GITHUB_TEAMS_LABEL_ORPHANED = "repo-guard.cloudoperators.dev/orphaned"
