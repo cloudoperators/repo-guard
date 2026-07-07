@@ -19,6 +19,62 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// Orphaned-team tests use a minimal setup: the reconcile path exits before any
+// GitHub client or GithubOrganization lookup, so only a namespace is needed.
+var _ = Describe("Github Team controller orphaned path", func() {
+	var (
+		ctx             context.Context
+		nsObj           *v1.Namespace
+		uniqueNamespace string
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		uniqueNamespace = "ns-orphan-" + fmt.Sprintf("%08x", testRand.Uint32())
+		nsObj = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uniqueNamespace}}
+		Expect(ensureResourceCreated(ctx, nsObj)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, nsObj) })
+	})
+
+	It("labels orphaned team and sets complete status with no members", func() {
+		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
+		// should be labelled orphaned and immediately reach TeamStatus=complete with
+		// zero members, so that ownersFromGithubTeams in the org controller never
+		// returns retryLater=true for it and causes a 5-second busy-loop on the org.
+		// The orphaned path exits before any GithubClients or GithubOrganization
+		// lookup, so no Github/secret/org setup is required.
+		team := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "orphan-team-test",
+				Namespace: uniqueNamespace,
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       "gh-orphan-test",
+				Organization: "test-org",
+				Team:         "orphan-team",
+				// GreenhouseTeam and ExternalMemberProvider intentionally absent.
+			},
+		}
+		Expect(ensureResourceCreated(ctx, team)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, team) })
+
+		Eventually(func() repoguardsapv1.GithubTeamState {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.TeamStatus
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateComplete))
+
+		cur := &repoguardsapv1.GithubTeam{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur)).To(Succeed())
+		Expect(cur.Labels).To(HaveKeyWithValue(GITHUB_TEAMS_LABEL_ORPHANED, "true"))
+		Expect(cur.Status.Members).To(BeEmpty())
+		Expect(cur.Status.Operations).To(BeEmpty())
+		Expect(cur.Status.TeamStatusError).To(BeEmpty())
+	})
+})
+
 var _ = Describe("Github Team controller", func() {
 	var (
 		ctx context.Context
@@ -104,42 +160,6 @@ var _ = Describe("Github Team controller", func() {
 			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, nsObj)
 		})
-	})
-
-	It("labels orphaned team and sets complete status with no members", func() {
-		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
-		// should be labelled orphaned and immediately reach TeamStatus=complete with
-		// zero members, so that ownersFromGithubTeams in the org controller never
-		// returns retryLater=true for it and causes a 5-second busy-loop on the org.
-		team := &repoguardsapv1.GithubTeam{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      uniqueTeamResourceName + "-orphan",
-				Namespace: uniqueNamespace,
-			},
-			Spec: repoguardsapv1.GithubTeamSpec{
-				Github:       uniqueGithubName,
-				Organization: orgName,
-				Team:         uniqueTeamName + "-orphan",
-				// GreenhouseTeam and ExternalMemberProvider intentionally absent.
-			},
-		}
-		Expect(ensureResourceCreated(ctx, team)).To(Succeed())
-		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, team) })
-
-		Eventually(func() repoguardsapv1.GithubTeamState {
-			cur := &repoguardsapv1.GithubTeam{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur); err != nil {
-				return ""
-			}
-			return cur.Status.TeamStatus
-		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateComplete))
-
-		cur := &repoguardsapv1.GithubTeam{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur)).To(Succeed())
-		Expect(cur.Labels).To(HaveKeyWithValue(GITHUB_TEAMS_LABEL_ORPHANED, "true"))
-		Expect(cur.Status.Members).To(BeEmpty())
-		Expect(cur.Status.Operations).To(BeEmpty())
-		Expect(cur.Status.TeamStatusError).To(BeEmpty())
 	})
 
 	It("syncs greenhouse team members into GithubTeam status", func() {
