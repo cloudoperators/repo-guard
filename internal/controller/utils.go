@@ -37,8 +37,11 @@ func isEtagCacheInconsistency(err error) bool {
 
 // parseGitHubRateLimitReset tries to extract a retry-after time from a GitHub rate-limit error string.
 //
-//   - Future reset:  "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
+//   - Future reset (absolute):  "API rate limit ... still exceeded until 2025-12-05 02:02:13 +0000 UTC, ..."
 //     → returns the parsed future reset time so callers can requeue with RequeueAfter.
+//
+//   - Future reset (relative):  "... [rate reset in 8m51s]"
+//     → parses the Go duration and returns now+duration so callers requeue with RequeueAfter.
 //
 //   - Already reset: "... [rate limit was reset 1s ago]"
 //     → returns time.Now() so callers requeue immediately.
@@ -70,6 +73,18 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	// Format 2: "[rate limit was reset N ago]" — the limit has already cleared.
 	// Return now so callers requeue immediately rather than skipping the resource.
 	if strings.Contains(lowered, "was reset") && strings.Contains(lowered, "ago") {
+		return time.Now().UTC(), true
+	}
+	// Format 3: "[rate reset in 8m51s]" — relative duration until reset.
+	// This format is emitted by the GitHub Enterprise go-github client and stored verbatim in
+	// status. Without this case the error falls through to the "api rate limit exceeded for
+	// installation" catch below, which returns now+1h and continuously re-arms the backoff on
+	// every reconcile, keeping resources stuck in ratelimited state indefinitely.
+	if m := regexp.MustCompile(`\[rate reset in ([^\]]+)\]`).FindStringSubmatch(lowered); len(m) == 2 {
+		if d, err := time.ParseDuration(m[1]); err == nil && d > 0 {
+			return time.Now().UTC().Add(d), true
+		}
+		// Duration present but unparseable — treat as already expired so we requeue immediately.
 		return time.Now().UTC(), true
 	}
 	if !strings.Contains(lowered, "until ") {
