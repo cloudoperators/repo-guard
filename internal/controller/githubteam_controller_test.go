@@ -106,11 +106,11 @@ var _ = Describe("Github Team controller", func() {
 		})
 	})
 
-	It("labels orphaned team as complete and reflects GitHub members in status", func() {
+	It("reconciles no-provider team as complete and reflects GitHub members in status", func() {
 		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
-		// should be labelled orphaned and go through the full reconcile (fetch GitHub
-		// members, sync operations) but always report TeamStatus=complete so that
-		// ownersFromGithubTeams in the org controller never busy-loops on it.
+		// should go through the full reconcile (fetch GitHub members, sync operations)
+		// but always report TeamStatus=complete so that ownersFromGithubTeams in the
+		// org controller never busy-loops on it.
 		teamResourceName := fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, "orphan-team")
 		team := &repoguardsapv1.GithubTeam{
 			ObjectMeta: metav1.ObjectMeta{
@@ -137,7 +137,6 @@ var _ = Describe("Github Team controller", func() {
 
 		cur := &repoguardsapv1.GithubTeam{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: teamResourceName}, cur)).To(Succeed())
-		Expect(cur.Labels).To(HaveKeyWithValue(GITHUB_TEAMS_LABEL_ORPHANED, "true"))
 		Expect(cur.Status.TeamStatusError).To(BeEmpty())
 	})
 

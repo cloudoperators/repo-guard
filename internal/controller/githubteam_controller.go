@@ -298,40 +298,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
-	// Orphaned team: no provider configured. Label it and fall through to the full
-	// reconcile so GitHub members are fetched and written to status as normal.
-	// TeamStatus is forced to complete at the end regardless of operations outcome.
-	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-		if githubTeam.Labels == nil || githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] != "true" {
-			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				latest := &v1.GithubTeam{}
-				if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
-					return ferr
-				}
-				if latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] == "true" {
-					githubTeam = latest
-					return nil
-				}
-				if latest.Labels == nil {
-					latest.Labels = make(map[string]string)
-				}
-				latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-				if uerr := r.Update(ctx, latest); uerr != nil {
-					return uerr
-				}
-				githubTeam = latest
-				return nil
-			})
-			if err != nil {
-				if errors.IsNotFound(err) {
-					return reconcile.Result{}, nil
-				}
-				l.Error(err, "error during label update")
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
 	// check for github instance
 	githubInstance := &v1.Github{}
 	var githubClient githubapp.ClientCreator
@@ -592,27 +558,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			err = r.Get(ctx, types.NamespacedName{Name: githubTeam.Spec.GreenhouseTeam, Namespace: req.Namespace}, &greenHouseTeam)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					l.Info("Team is not found in Kubernetes. GithubTeam will be labeled as orphaned", "Team", githubTeam.Spec.GreenhouseTeam)
-					// Orphaned GithubTeam - use RetryOnConflict with re-fetch to get the latest
-					// resourceVersion before updating, consistent with other label updates in this controller.
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubTeam{}
-						if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
-							return ferr
-						}
-						if latest.Labels == nil {
-							latest.Labels = make(map[string]string)
-						}
-						latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-						return r.Update(ctx, latest)
-					})
-					if err != nil {
-						if errors.IsNotFound(err) {
-							return reconcile.Result{}, nil
-						}
-						l.Error(err, "error during label update")
-						return reconcile.Result{}, err
-					}
+					l.Info("GreenhouseTeam not found; skipping reconcile until it exists", "Team", githubTeam.Spec.GreenhouseTeam)
 					return reconcile.Result{}, nil
 				} else {
 					l.Error(err, "error during getting the Team for GithubTeam")
@@ -942,9 +888,10 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		statusChanged, newStatus := githubTeam.ChangeCalculator(greenHouseTeamMemberListExtended)
 
-		// Orphaned teams (no provider) always report complete so that
-		// ownersFromGithubTeams in the org controller never busy-loops on them.
-		if githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] == "true" {
+		// Teams with no provider (no GreenhouseTeam, no ExternalMemberProvider) always
+		// report complete so that ownersFromGithubTeams in the org controller never
+		// busy-loops on them.
+		if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
 			newStatus.TeamStatus = v1.GithubTeamStateComplete
 		}
 
@@ -1162,7 +1109,8 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		if statusChanged {
 			l.Info("status changed during operation processing")
-			if failed && githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] != "true" {
+			isNoProvider := githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil
+		if failed && !isNoProvider {
 				newStatus.TeamStatus = v1.GithubTeamStateFailed
 			} else {
 				if githubTeam.Labels != nil && githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {
@@ -1414,8 +1362,6 @@ func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.
 
 	return out, nil
 }
-
-const GITHUB_TEAMS_LABEL_ORPHANED = "repo-guard.cloudoperators.dev/orphaned"
 
 const GITHUB_TEAMS_LABEL_DRY_RUN = "repo-guard.cloudoperators.dev/dryRun"
 const GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE = "true"

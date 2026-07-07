@@ -114,4 +114,4 @@ See the full [Labels Reference](../operations/labels#githubteam-labels) for all 
 | `repo-guard.cloudoperators.dev/dryRun` | Prevent mutations; write planned operations to status. |
 | `repo-guard.cloudoperators.dev/disableInternalUsernames` | Filter out members where GreenhouseID matches GithubUsername. |
 | `repo-guard.cloudoperators.dev/require-verified-domain-email` | Only allow members with a verified email under the specified domain. |
-| `repo-guard.cloudoperators.dev/orphaned` | Set by the controller when the team has no known parent organization. Do not set manually. |
+
