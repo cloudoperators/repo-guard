@@ -143,12 +143,10 @@ func TestParseGitHubRateLimitReset(t *testing.T) {
 		if !ok {
 			t.Fatal("expected ok=true for 'rate reset in' format, got false")
 		}
-		// Should be approximately now+8m51s, well under 1h.
-		if !got.After(before) {
-			t.Fatalf("expected future time, got %v", got)
-		}
-		if got.After(before.Add(time.Hour)) {
-			t.Fatalf("expected backoff well under 1h, got %v (before=%v)", got, before)
+		// Should be approximately now+8m51s (the duration from the error string).
+		expected := before.Add(8*time.Minute + 51*time.Second)
+		if got.Before(expected.Add(-2*time.Second)) || got.After(expected.Add(2*time.Second)) {
+			t.Fatalf("expected ~%v (before+8m51s), got %v", expected, got)
 		}
 	})
 
