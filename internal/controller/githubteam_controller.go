@@ -302,6 +302,41 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return reconcile.Result{}, nil
 	}
 
+	// Orphaned team: no provider configured. Handle early before any GitHub API
+	// client or GithubOrganization lookups so that this path is fast and does not
+	// depend on those resources being ready yet.
+	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
+		if githubTeam.Labels == nil {
+			githubTeam.Labels = make(map[string]string)
+		}
+		githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
+		err := r.Update(ctx, githubTeam)
+		if err != nil {
+			l.Error(err, "error during label update")
+			return reconcile.Result{}, err
+		}
+		// No provider configured: set status to complete with zero members so that
+		// ownersFromGithubTeams in the org controller does not treat this team as
+		// "not ready" and busy-loop with a 5-second requeue indefinitely.
+		// Also clear Members, Operations and any prior error so stale data from a
+		// previously-reconciled team cannot leak into org owner calculations once
+		// the provider is removed.
+		if githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
+			len(githubTeam.Status.Members) > 0 ||
+			githubTeam.Status.TeamStatusError != "" {
+			githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
+			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
+			githubTeam.Status.Members = nil
+			githubTeam.Status.Operations = nil
+			githubTeam.Status.TeamStatusError = ""
+			if uerr := r.Client.Status().Update(ctx, githubTeam); uerr != nil {
+				l.Error(uerr, "error during status update for orphaned team")
+				return reconcile.Result{}, uerr
+			}
+		}
+		return reconcile.Result{}, nil
+	}
+
 	// check for github instance
 	githubInstance := &v1.Github{}
 	var githubClient githubapp.ClientCreator
@@ -402,37 +437,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err != nil {
 			l.Error(err, "error during status update")
 			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-		if githubTeam.Labels == nil {
-			githubTeam.Labels = make(map[string]string)
-		}
-		githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-		err := r.Update(ctx, githubTeam)
-		if err != nil {
-			l.Error(err, "error during label update")
-			return reconcile.Result{}, err
-		}
-		// No provider configured: set status to complete with zero members so that
-		// ownersFromGithubTeams in the org controller does not treat this team as
-		// "not ready" and busy-loop with a 5-second requeue indefinitely.
-		// Also clear Members, Operations and any prior error so stale data from a
-		// previously-reconciled team cannot leak into org owner calculations once
-		// the provider is removed.
-		if githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
-			len(githubTeam.Status.Members) > 0 ||
-			githubTeam.Status.TeamStatusError != "" {
-			githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
-			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
-			githubTeam.Status.Members = nil
-			githubTeam.Status.Operations = nil
-			githubTeam.Status.TeamStatusError = ""
-			if uerr := r.Client.Status().Update(ctx, githubTeam); uerr != nil {
-				l.Error(uerr, "error during status update for orphaned team")
-				return reconcile.Result{}, uerr
-			}
 		}
 		return reconcile.Result{}, nil
 	}
