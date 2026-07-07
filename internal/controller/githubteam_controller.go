@@ -315,6 +315,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
 					return ferr
 				}
+				if latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] == "true" {
+					// Already labeled by a concurrent reconcile — skip the write but
+					// propagate latest so the status update below uses a fresh object.
+					githubTeam = latest
+					return nil
+				}
 				if latest.Labels == nil {
 					latest.Labels = make(map[string]string)
 				}

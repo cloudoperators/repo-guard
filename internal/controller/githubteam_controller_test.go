@@ -58,13 +58,17 @@ var _ = Describe("Github Team controller orphaned path", func() {
 		Expect(ensureResourceCreated(ctx, team)).To(Succeed())
 		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, team) })
 
+		// Use a generous timeout: the orphaned reconcile itself is instant, but in CI the
+		// single-suite process runs 32 other tests concurrently generating watch events that
+		// keep the controller workers busy. The team will be reconciled once it reaches the
+		// front of the queue, which can take up to several minutes under load.
 		Eventually(func() repoguardsapv1.GithubTeamState {
 			cur := &repoguardsapv1.GithubTeam{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur); err != nil {
 				return ""
 			}
 			return cur.Status.TeamStatus
-		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateComplete))
+		}, 6*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateComplete))
 
 		cur := &repoguardsapv1.GithubTeam{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur)).To(Succeed())
