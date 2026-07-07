@@ -133,20 +133,32 @@ func TestParseGitHubRateLimitReset(t *testing.T) {
 		}
 	})
 
-	t.Run("relative 'rate reset in' format returns now+duration", func(t *testing.T) {
-		// This is the format emitted by the GitHub Enterprise go-github client and stored verbatim
-		// in resource status. It previously fell through to the "api rate limit exceeded for
-		// installation" catch, returning now+1h and re-arming indefinitely on every reconcile.
+	t.Run("relative 'rate reset in' format returns absolute base+duration", func(t *testing.T) {
+		// The GHE error contains an absolute base timestamp; the parser must return base+duration
+		// so re-parsing the same stored error string gives a stable (non-advancing) reset time.
 		errStr := "GET https://github.tools.sap/api/v3/orgs/cloudoperators/members?per_page=100&role=admin: 403 API rate limit exceeded for installation ID 13780. If you reach out to GitHub Support for help, please include the request ID b3f33437-996f-4cee-888e-580c1f7cc593 and timestamp 2026-07-06 19:14:42 UTC. [rate reset in 8m51s]"
-		before := time.Now().UTC()
 		got, ok := parseGitHubRateLimitReset(errStr)
 		if !ok {
 			t.Fatal("expected ok=true for 'rate reset in' format, got false")
 		}
-		// Should be approximately now+8m51s (the duration from the error string).
-		expected := before.Add(8*time.Minute + 51*time.Second)
-		if got.Before(expected.Add(-2*time.Second)) || got.After(expected.Add(2*time.Second)) {
-			t.Fatalf("expected ~%v (before+8m51s), got %v", expected, got)
+		// Expected: 2026-07-06 19:14:42 UTC + 8m51s = 2026-07-06 19:23:33 UTC
+		expected, _ := time.Parse("2006-01-02 15:04:05 MST", "2026-07-06 19:23:33 UTC")
+		if got.Before(expected.Add(-time.Second)) || got.After(expected.Add(time.Second)) {
+			t.Fatalf("expected absolute reset ~%v (base+8m51s), got %v", expected, got)
+		}
+	})
+
+	t.Run("relative 'rate reset in' is stable across re-parses", func(t *testing.T) {
+		// Simulate the controller re-parsing the same stored error string on a later reconcile.
+		// The returned time must not advance between calls.
+		errStr := "GET https://github.tools.sap/api/v3/orgs/cloudoperators/members?per_page=100&role=admin: 403 API rate limit exceeded for installation ID 13780. If you reach out to GitHub Support for help, please include the request ID b3f33437-996f-4cee-888e-580c1f7cc593 and timestamp 2026-07-06 19:14:42 UTC. [rate reset in 8m51s]"
+		got1, ok1 := parseGitHubRateLimitReset(errStr)
+		got2, ok2 := parseGitHubRateLimitReset(errStr)
+		if !ok1 || !ok2 {
+			t.Fatal("expected ok=true for both calls")
+		}
+		if !got1.Equal(got2) {
+			t.Fatalf("re-parsing the same stored error returned different times: %v vs %v", got1, got2)
 		}
 	})
 
