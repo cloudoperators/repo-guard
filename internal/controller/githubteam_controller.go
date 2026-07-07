@@ -306,14 +306,32 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// client or GithubOrganization lookups so that this path is fast and does not
 	// depend on those resources being ready yet.
 	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-		if githubTeam.Labels == nil {
-			githubTeam.Labels = make(map[string]string)
-		}
-		githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-		err := r.Update(ctx, githubTeam)
-		if err != nil {
-			l.Error(err, "error during label update")
-			return reconcile.Result{}, err
+		// Use RetryOnConflict with re-fetch consistent with the GreenhouseTeam-not-found
+		// orphaning path in this controller, so a stale resourceVersion from the initial
+		// Get does not cause a spurious conflict error. Skip the write if already labeled.
+		if githubTeam.Labels == nil || githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] != "true" {
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+					return ferr
+				}
+				if latest.Labels == nil {
+					latest.Labels = make(map[string]string)
+				}
+				latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
+				if uerr := r.Update(ctx, latest); uerr != nil {
+					return uerr
+				}
+				githubTeam = latest
+				return nil
+			})
+			if err != nil {
+				if errors.IsNotFound(err) {
+					return reconcile.Result{}, nil
+				}
+				l.Error(err, "error during label update")
+				return reconcile.Result{}, err
+			}
 		}
 		// No provider configured: set status to complete with zero members so that
 		// ownersFromGithubTeams in the org controller does not treat this team as
