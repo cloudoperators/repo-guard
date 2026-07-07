@@ -415,6 +415,18 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during label update")
 			return reconcile.Result{}, err
 		}
+		// No provider configured: set status to complete with zero members so that
+		// ownersFromGithubTeams in the org controller does not treat this team as
+		// "not ready" and busy-loop with a 5-second requeue indefinitely.
+		if githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete {
+			githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
+			githubTeam.Status.TeamStatusTimestamp = metav1.Now()
+			if uerr := r.Client.Status().Update(ctx, githubTeam); uerr != nil {
+				l.Error(uerr, "error during status update for orphaned team")
+				return reconcile.Result{}, uerr
+			}
+		}
+		return reconcile.Result{}, nil
 	}
 	if githubTeam.Spec.ExternalMemberProvider != nil {
 		providersSet := 0
