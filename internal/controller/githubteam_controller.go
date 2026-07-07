@@ -917,9 +917,13 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		// Teams with no provider (no GreenhouseTeam, no ExternalMemberProvider) always
 		// report complete so that ownersFromGithubTeams in the org controller never
-		// busy-loops on them.
+		// busy-loops on them. Force statusChanged so the complete status is always
+		// written, even when ChangeCalculator found nothing to diff (e.g. empty team).
 		if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
 			newStatus.TeamStatus = v1.GithubTeamStateComplete
+			if !statusChanged {
+				statusChanged = newStatus.TeamStatus != githubTeam.Status.TeamStatus
+			}
 		}
 
 		if statusChanged {
