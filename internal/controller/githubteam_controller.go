@@ -323,6 +323,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// the provider is removed.
 		if githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
 			len(githubTeam.Status.Members) > 0 ||
+			len(githubTeam.Status.Operations) > 0 ||
 			githubTeam.Status.TeamStatusError != "" {
 			githubTeam.Status.TeamStatus = v1.GithubTeamStateComplete
 			githubTeam.Status.TeamStatusTimestamp = metav1.Now()

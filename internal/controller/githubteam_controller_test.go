@@ -138,6 +138,7 @@ var _ = Describe("Github Team controller", func() {
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: team.Name}, cur)).To(Succeed())
 		Expect(cur.Labels).To(HaveKeyWithValue(GITHUB_TEAMS_LABEL_ORPHANED, "true"))
 		Expect(cur.Status.Members).To(BeEmpty())
+		Expect(cur.Status.Operations).To(BeEmpty())
 		Expect(cur.Status.TeamStatusError).To(BeEmpty())
 	})
 
