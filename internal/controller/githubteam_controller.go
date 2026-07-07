@@ -440,6 +440,24 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// pending means there are still waiting operations on Github side, otherwise check for teams and members in each side
+	isNoProvider := githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil
+	setFailed := func(fetchErr error) (reconcile.Result, error) {
+		uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &v1.GithubTeam{}
+			if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+				return ferr
+			}
+			latest.Status.TeamStatus = v1.GithubTeamStateFailed
+			latest.Status.TeamStatusError = fetchErr.Error()
+			latest.Status.TeamStatusTimestamp = metav1.Now()
+			return r.Client.Status().Update(ctx, latest)
+		})
+		if uerr != nil {
+			l.Error(uerr, "error during status update")
+			return reconcile.Result{}, uerr
+		}
+		return reconcile.Result{}, nil
+	}
 	if githubTeam.Status.TeamStatus != v1.GithubTeamStatePendingOperations {
 
 		l.Info("there are no pending operations, status check started")
@@ -466,6 +484,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
 				return reconcile.Result{Requeue: true}, nil
+			}
+			if isNoProvider {
+				return setFailed(err)
 			}
 			return reconcile.Result{}, err
 		}
@@ -525,11 +546,17 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 				return reconcile.Result{Requeue: true}, nil
 			}
+			if isNoProvider {
+				return setFailed(err)
+			}
 			return reconcile.Result{}, err
 		}
 		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending the members of the team in Github")
+			if isNoProvider {
+				return setFailed(err)
+			}
 			return reconcile.Result{}, err
 		}
 
@@ -558,8 +585,8 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			err = r.Get(ctx, types.NamespacedName{Name: githubTeam.Spec.GreenhouseTeam, Namespace: req.Namespace}, &greenHouseTeam)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					l.Info("GreenhouseTeam not found; skipping reconcile until it exists", "Team", githubTeam.Spec.GreenhouseTeam)
-					return reconcile.Result{}, nil
+					l.Error(err, "GreenhouseTeam not found; this is a configuration error", "Team", githubTeam.Spec.GreenhouseTeam)
+					return setFailed(fmt.Errorf("GreenhouseTeam %q not found", githubTeam.Spec.GreenhouseTeam))
 				} else {
 					l.Error(err, "error during getting the Team for GithubTeam")
 					return reconcile.Result{}, err
