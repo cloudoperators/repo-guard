@@ -584,28 +584,38 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Completed/failed operations are left for TTL labels to manage.
 		// Status.Members reflects the GitHub-observed roster.
 		if isNoProvider {
-			// Filter out any pending operations that should not exist on a no-provider team.
-			var nonPendingOps []v1.GithubUserOperation
-			for _, op := range githubTeam.Status.Operations {
-				if op.State != v1.GithubUserOperationStatePending {
-					nonPendingOps = append(nonPendingOps, op)
-				}
-			}
-			hasPendingOps := len(nonPendingOps) != len(githubTeam.Status.Operations)
-			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete || hasPendingOps || githubTeam.Status.TeamStatusError != ""
+			// Determine whether a write is needed based on the snapshot we have.
+			// nonPendingOps is recomputed from latest inside the closure to avoid
+			// clobbering concurrent updates on conflict retries.
+			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
+				githubTeam.Status.TeamStatusError != "" ||
+				func() bool {
+					for _, op := range githubTeam.Status.Operations {
+						if op.State == v1.GithubUserOperationStatePending {
+							return true
+						}
+					}
+					return false
+				}()
 			if needsWrite {
 				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubTeam{}
 					if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
 						return ferr
 					}
+					// Filter pending ops from the freshly re-fetched object to avoid
+					// overwriting any concurrent state changes on conflict retries.
+					var nonPendingOps []v1.GithubUserOperation
+					for _, op := range latest.Status.Operations {
+						if op.State != v1.GithubUserOperationStatePending {
+							nonPendingOps = append(nonPendingOps, op)
+						}
+					}
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
 					latest.Status.TeamStatusTimestamp = metav1.Now()
 					latest.Status.TeamStatusError = ""
 					latest.Status.Members = membersExtendedWithGithubUsernames
-					if hasPendingOps {
-						latest.Status.Operations = nonPendingOps
-					}
+					latest.Status.Operations = nonPendingOps
 					return r.Client.Status().Update(ctx, latest)
 				})
 				if uerr != nil {
@@ -1114,7 +1124,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				l.Error(uerr, "error during status update for no-provider team in pending state")
 				return reconcile.Result{}, uerr
 			}
-			return reconcile.Result{}, nil
+			// Requeue so the next reconcile runs the non-pending path and refreshes
+			// Status.Members from GitHub — required for ownersFromGithubTeams to find owners.
+			return reconcile.Result{Requeue: true}, nil
 		}
 
 		l.Info("there are pending operations in the status")

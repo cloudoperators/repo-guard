@@ -106,7 +106,7 @@ var _ = Describe("Github Team controller", func() {
 		})
 	})
 
-	It("reconciles no-provider team as complete and reflects GitHub members in status", func() {
+	It("reconciles no-provider team as complete with cleared operations and error", func() {
 		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
 		// should go through the full reconcile (fetch GitHub members, sync operations)
 		// but always report TeamStatus=complete so that ownersFromGithubTeams in the
