@@ -142,7 +142,10 @@ func TestParseGitHubRateLimitReset(t *testing.T) {
 			t.Fatal("expected ok=true for 'rate reset in' format, got false")
 		}
 		// Expected: 2026-07-06 19:14:42 UTC + 8m51s = 2026-07-06 19:23:33 UTC
-		expected, _ := time.Parse("2006-01-02 15:04:05 MST", "2026-07-06 19:23:33 UTC")
+		expected, err := time.Parse("2006-01-02 15:04:05 MST", "2026-07-06 19:23:33 UTC")
+		if err != nil {
+			t.Fatalf("failed to parse expected time: %v", err)
+		}
 		if got.Before(expected.Add(-time.Second)) || got.After(expected.Add(time.Second)) {
 			t.Fatalf("expected absolute reset ~%v (base+8m51s), got %v", expected, got)
 		}

@@ -11,6 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	reRateLimitResetIn = regexp.MustCompile(`\[rate reset in ([^\]]+)\]`)
+	reRateLimitBaseTS  = regexp.MustCompile(`timestamp\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)`)
+	reRateLimitUntil   = regexp.MustCompile(`(?i)until\s+([^,\]]+)`)
+)
+
 var OperatorNamespace = "repo-guard-greenhouse-system"
 
 type dummyAssert struct{}
@@ -81,7 +87,7 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	// so compute the reset time as base+duration. This is stable when the stored error string is
 	// re-parsed on subsequent reconciles — unlike now+duration, which re-arms the backoff on every
 	// reconcile and keeps resources stuck in RateLimited indefinitely.
-	if m := regexp.MustCompile(`\[rate reset in ([^\]]+)\]`).FindStringSubmatch(lowered); len(m) == 2 {
+	if m := reRateLimitResetIn.FindStringSubmatch(lowered); len(m) == 2 {
 		d, derr := time.ParseDuration(m[1])
 		if derr != nil || d <= 0 {
 			// Duration absent or already elapsed — requeue immediately.
@@ -89,7 +95,7 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 		}
 		// Try to extract the absolute base timestamp ("timestamp <ts> UTC") and anchor to it.
 		// Example: "... timestamp 2026-07-06 19:14:42 UTC. [rate reset in 8m51s]"
-		if bm := regexp.MustCompile(`timestamp\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC)`).FindStringSubmatch(errStr); len(bm) == 2 {
+		if bm := reRateLimitBaseTS.FindStringSubmatch(errStr); len(bm) == 2 {
 			if base, perr := time.Parse("2006-01-02 15:04:05 MST", bm[1]); perr == nil {
 				return base.UTC().Add(d), true
 			}
@@ -109,8 +115,7 @@ func parseGitHubRateLimitReset(errStr string) (time.Time, bool) {
 	// Example captured: 2025-12-05 02:02:13 +0000 UTC
 	// Use case-insensitive flag so the regex matches the original errStr consistently
 	// with the lowercased guard above (avoiding a mismatch if GitHub ever varies casing).
-	re := regexp.MustCompile(`(?i)until\s+([^,\]]+)`)
-	m := re.FindStringSubmatch(errStr)
+	m := reRateLimitUntil.FindStringSubmatch(errStr)
 	if len(m) < 2 {
 		return time.Time{}, false
 	}
