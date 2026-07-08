@@ -2,7 +2,7 @@ module github.com/cloudoperators/repo-guard
 
 go 1.26.0
 
-toolchain go1.26.4
+toolchain go1.26.5
 
 require (
 	github.com/cloudoperators/greenhouse v0.13.1
