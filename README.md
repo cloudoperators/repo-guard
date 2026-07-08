@@ -416,7 +416,6 @@ GithubTeam labels:
 | `repo-guard.cloudoperators.dev/dryRun` | "true"/"false" | When "true", no member changes are made on GitHub; status shows planned operations. | "false" |
 | `repo-guard.cloudoperators.dev/disableInternalUsernames` | "true"/"false" | When "true", members where GreenhouseID == GithubUsername are filtered out (avoids using internal IDs externally). | "false" |
 | `repo-guard.cloudoperators.dev/require-verified-domain-email` | <domain> | When set, only members with a verified email under this domain (as reported in their `GithubAccountLink` multi-org results) are allowed. | Not set |
-| `repo-guard.cloudoperators.dev/orphaned` | "true" | Informational label set by the controller when the team is considered orphaned. Do not set manually. | Not set (controller-managed) |
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |

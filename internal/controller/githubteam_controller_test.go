@@ -133,11 +133,12 @@ var _ = Describe("Github Team controller", func() {
 				return ""
 			}
 			return cur.Status.TeamStatus
-		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateComplete))
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateComplete)))
 
 		cur := &repoguardsapv1.GithubTeam{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: teamResourceName}, cur)).To(Succeed())
 		Expect(cur.Status.TeamStatusError).To(BeEmpty())
+		Expect(cur.Status.Operations).To(BeEmpty())
 	})
 
 	It("syncs greenhouse team members into GithubTeam status", func() {

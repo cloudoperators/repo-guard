@@ -577,6 +577,44 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Do not return here; continue reconciliation to calculate desired state
 		}
 
+		// No-provider teams (no GreenhouseTeam, no ExternalMemberProvider): treat as
+		// terminal-complete after observing the GitHub-side members. Skip ChangeCalculator
+		// so we never generate spurious remove-ops against an empty desired list.
+		// Pending operations (which should not exist for no-provider teams) are cleared.
+		// Completed/failed operations are left for TTL labels to manage.
+		// Status.Members reflects the GitHub-observed roster.
+		if isNoProvider {
+			// Filter out any pending operations that should not exist on a no-provider team.
+			var nonPendingOps []v1.GithubUserOperation
+			for _, op := range githubTeam.Status.Operations {
+				if op.State != v1.GithubUserOperationStatePending {
+					nonPendingOps = append(nonPendingOps, op)
+				}
+			}
+			hasPendingOps := len(nonPendingOps) != len(githubTeam.Status.Operations)
+			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete || hasPendingOps
+			if needsWrite {
+				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+						return ferr
+					}
+					latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					latest.Status.Members = membersExtendedWithGithubUsernames
+					if hasPendingOps {
+						latest.Status.Operations = nonPendingOps
+					}
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if uerr != nil {
+					l.Error(uerr, "error during status update for no-provider team")
+					return reconcile.Result{}, uerr
+				}
+			}
+			return reconcile.Result{}, nil
+		}
+
 		greenHouseTeamMemberList := make([]string, 0)
 
 		if githubTeam.Spec.GreenhouseTeam != "" {
@@ -915,17 +953,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		statusChanged, newStatus := githubTeam.ChangeCalculator(greenHouseTeamMemberListExtended)
 
-		// Teams with no provider (no GreenhouseTeam, no ExternalMemberProvider) always
-		// report complete so that ownersFromGithubTeams in the org controller never
-		// busy-loops on them. Force statusChanged so the complete status is always
-		// written, even when ChangeCalculator found nothing to diff (e.g. empty team).
-		if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-			newStatus.TeamStatus = v1.GithubTeamStateComplete
-			if !statusChanged {
-				statusChanged = newStatus.TeamStatus != githubTeam.Status.TeamStatus
-			}
-		}
-
 		if statusChanged {
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				githubTeamForUpdate := &v1.GithubTeam{}
@@ -1140,8 +1167,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		if statusChanged {
 			l.Info("status changed during operation processing")
-			isNoProvider := githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil
-		if failed && !isNoProvider {
+			if failed {
 				newStatus.TeamStatus = v1.GithubTeamStateFailed
 			} else {
 				if githubTeam.Labels != nil && githubTeam.Labels[GITHUB_TEAMS_LABEL_DRY_RUN] == GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE {

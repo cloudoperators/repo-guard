@@ -167,7 +167,6 @@ kubectl get githubteam -A -o json | jq -r '
     name: .metadata.name,
     labels: {
       dryRun:                  (.metadata.labels["repo-guard.cloudoperators.dev/dryRun"] // ""),
-      orphaned:                (.metadata.labels["repo-guard.cloudoperators.dev/orphaned"] // ""),
       addUser:                 (.metadata.labels["repo-guard.cloudoperators.dev/addUser"] // ""),
       removeUser:              (.metadata.labels["repo-guard.cloudoperators.dev/removeUser"] // ""),
       disableInternalUsernames:(.metadata.labels["repo-guard.cloudoperators.dev/disableInternalUsernames"] // ""),
@@ -185,7 +184,7 @@ kubectl get githubteam -A -o json | jq -r '
       pending:  ([(.status.operations // [] | .[] | select(.state=="pending"))]  | length)
     }
   } |
-  "\(.ns)/\(.name)\n  labels: dryRun=\(.labels.dryRun) orphaned=\(.labels.orphaned) addUser=\(.labels.addUser) removeUser=\(.labels.removeUser)\n         disableInternalUsernames=\(.labels.disableInternalUsernames) requireVerifiedEmail=\(.labels.requireVerifiedEmail)\n         failedTTL=\(.labels.failedTTL) completedTTL=\(.labels.completedTTL) notfoundTTL=\(.labels.notfoundTTL) skippedTTL=\(.labels.skippedTTL)\n  ops:    failed=\(.ops.failed) complete=\(.ops.complete) notfound=\(.ops.notfound) skipped=\(.ops.skipped) pending=\(.ops.pending)"
+  "\(.ns)/\(.name)\n  labels: dryRun=\(.labels.dryRun) addUser=\(.labels.addUser) removeUser=\(.labels.removeUser)\n         disableInternalUsernames=\(.labels.disableInternalUsernames) requireVerifiedEmail=\(.labels.requireVerifiedEmail)\n         failedTTL=\(.labels.failedTTL) completedTTL=\(.labels.completedTTL) notfoundTTL=\(.labels.notfoundTTL) skippedTTL=\(.labels.skippedTTL)\n  ops:    failed=\(.ops.failed) complete=\(.ops.complete) notfound=\(.ops.notfound) skipped=\(.ops.skipped) pending=\(.ops.pending)"
 '
 ```
 
@@ -212,7 +211,6 @@ For each resource, flag the following conditions:
 - `addUser=true` with failed add-user operations.
 - `removeUser=true` with failed remove-user operations.
 - `dryRun=true` — mutations suppressed.
-- `orphaned=true` — team is marked orphaned; controller will not manage memberships.
 
 ```bash
 # Quick anomaly scan: resources with failed ops but no failedTTL configured
@@ -250,13 +248,6 @@ kubectl get githubteam -A -o json | jq -r '
   .items[] |
   select(.metadata.labels["repo-guard.cloudoperators.dev/dryRun"] == "true") |
   "GithubTeam \(.metadata.namespace)/\(.metadata.name) — DRY RUN active (mutations suppressed)"
-'
-
-echo "=== Orphaned GithubTeams ==="
-kubectl get githubteam -A -o json | jq -r '
-  .items[] |
-  select(.metadata.labels["repo-guard.cloudoperators.dev/orphaned"] != null) |
-  "GithubTeam \(.metadata.namespace)/\(.metadata.name) — orphaned=\(.metadata.labels["repo-guard.cloudoperators.dev/orphaned"]) (membership management disabled)"
 '
 ```
 
@@ -401,4 +392,3 @@ Present the findings in the following structure:
   - Org ops (`status.operations.{organizationOwnerOperations, teamOperations, repoOperations}`): `complete`, `failed`, `skipped` observed; `skipped` ops in orgs accumulate indefinitely (no `skippedTTL` label for orgs)
 - TTL labels take a Go duration string (e.g. `1h`, `24h`, `7d`). An empty or invalid value disables cleanup.
 - `dryRun=true` suppresses all GitHub API mutations for that resource — add/remove operations are logged but not executed.
-- `orphaned=true` on a GithubTeam disables membership management entirely for that team.
