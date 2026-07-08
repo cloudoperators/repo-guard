@@ -592,7 +592,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 			}
 			hasPendingOps := len(nonPendingOps) != len(githubTeam.Status.Operations)
-			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete || hasPendingOps
+			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete || hasPendingOps || githubTeam.Status.TeamStatusError != ""
 			if needsWrite {
 				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubTeam{}
@@ -601,6 +601,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					}
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
 					latest.Status.TeamStatusTimestamp = metav1.Now()
+					latest.Status.TeamStatusError = ""
 					latest.Status.Members = membersExtendedWithGithubUsernames
 					if hasPendingOps {
 						latest.Status.Operations = nonPendingOps
@@ -1085,6 +1086,36 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// if GithubTeamState is "pending" -- take actions on the Github side
 	if githubTeam.Status.TeamStatus == v1.GithubTeamStatePendingOperations {
+
+		// No-provider teams must never execute membership operations regardless of
+		// TeamStatus. If a no-provider team somehow accumulated PendingOperations
+		// (e.g. from an older buggy reconcile), resolve them to complete immediately
+		// rather than executing Add/Remove operations against GitHub.
+		if isNoProvider {
+			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+					return ferr
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateComplete
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				latest.Status.TeamStatusError = ""
+				// Clear all pending operations — they should not exist for a no-provider team.
+				var nonPending []v1.GithubUserOperation
+				for _, op := range latest.Status.Operations {
+					if op.State != v1.GithubUserOperationStatePending {
+						nonPending = append(nonPending, op)
+					}
+				}
+				latest.Status.Operations = nonPending
+				return r.Client.Status().Update(ctx, latest)
+			})
+			if uerr != nil {
+				l.Error(uerr, "error during status update for no-provider team in pending state")
+				return reconcile.Result{}, uerr
+			}
+			return reconcile.Result{}, nil
+		}
 
 		l.Info("there are pending operations in the status")
 
