@@ -15,18 +15,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -405,17 +401,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return reconcile.Result{}, nil
 	}
-	if githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil {
-		if githubTeam.Labels == nil {
-			githubTeam.Labels = make(map[string]string)
-		}
-		githubTeam.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-		err := r.Update(ctx, githubTeam)
-		if err != nil {
-			l.Error(err, "error during label update")
-			return reconcile.Result{}, err
-		}
-	}
 	if githubTeam.Spec.ExternalMemberProvider != nil {
 		providersSet := 0
 		// Treat LDAP and LDAPGroup as the same provider (backwards compatibility)
@@ -455,6 +440,24 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// pending means there are still waiting operations on Github side, otherwise check for teams and members in each side
+	isNoProvider := githubTeam.Spec.GreenhouseTeam == "" && githubTeam.Spec.ExternalMemberProvider == nil
+	setFailed := func(fetchErr error) (reconcile.Result, error) {
+		uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &v1.GithubTeam{}
+			if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+				return ferr
+			}
+			latest.Status.TeamStatus = v1.GithubTeamStateFailed
+			latest.Status.TeamStatusError = fetchErr.Error()
+			latest.Status.TeamStatusTimestamp = metav1.Now()
+			return r.Client.Status().Update(ctx, latest)
+		})
+		if uerr != nil {
+			l.Error(uerr, "error during status update")
+			return reconcile.Result{}, uerr
+		}
+		return reconcile.Result{}, nil
+	}
 	if githubTeam.Status.TeamStatus != v1.GithubTeamStatePendingOperations {
 
 		l.Info("there are no pending operations, status check started")
@@ -565,6 +568,55 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Do not return here; continue reconciliation to calculate desired state
 		}
 
+		// No-provider teams (no GreenhouseTeam, no ExternalMemberProvider): treat as
+		// terminal-complete after observing the GitHub-side members. Skip ChangeCalculator
+		// so we never generate spurious remove-ops against an empty desired list.
+		// Pending operations (which should not exist for no-provider teams) are cleared.
+		// Completed/failed operations are left for TTL labels to manage.
+		// Status.Members reflects the GitHub-observed roster.
+		if isNoProvider {
+			// Determine whether a write is needed based on the snapshot we have.
+			// nonPendingOps is recomputed from latest inside the closure to avoid
+			// clobbering concurrent updates on conflict retries.
+			needsWrite := githubTeam.Status.TeamStatus != v1.GithubTeamStateComplete ||
+				githubTeam.Status.TeamStatusError != "" ||
+				func() bool {
+					for _, op := range githubTeam.Status.Operations {
+						if op.State == v1.GithubUserOperationStatePending {
+							return true
+						}
+					}
+					return false
+				}()
+			if needsWrite {
+				uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					latest := &v1.GithubTeam{}
+					if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+						return ferr
+					}
+					// Filter pending ops from the freshly re-fetched object to avoid
+					// overwriting any concurrent state changes on conflict retries.
+					var nonPendingOps []v1.GithubUserOperation
+					for _, op := range latest.Status.Operations {
+						if op.State != v1.GithubUserOperationStatePending {
+							nonPendingOps = append(nonPendingOps, op)
+						}
+					}
+					latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					latest.Status.TeamStatusTimestamp = metav1.Now()
+					latest.Status.TeamStatusError = ""
+					latest.Status.Members = membersExtendedWithGithubUsernames
+					latest.Status.Operations = nonPendingOps
+					return r.Client.Status().Update(ctx, latest)
+				})
+				if uerr != nil {
+					l.Error(uerr, "error during status update for no-provider team")
+					return reconcile.Result{}, uerr
+				}
+			}
+			return reconcile.Result{}, nil
+		}
+
 		greenHouseTeamMemberList := make([]string, 0)
 
 		if githubTeam.Spec.GreenhouseTeam != "" {
@@ -573,28 +625,8 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			err = r.Get(ctx, types.NamespacedName{Name: githubTeam.Spec.GreenhouseTeam, Namespace: req.Namespace}, &greenHouseTeam)
 			if err != nil {
 				if errors.IsNotFound(err) {
-					l.Info("Team is not found in Kubernetes. GithubTeam will be labeled as orphaned", "Team", githubTeam.Spec.GreenhouseTeam)
-					// Orphaned GithubTeam - use RetryOnConflict with re-fetch to get the latest
-					// resourceVersion before updating, consistent with other label updates in this controller.
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-						latest := &v1.GithubTeam{}
-						if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
-							return ferr
-						}
-						if latest.Labels == nil {
-							latest.Labels = make(map[string]string)
-						}
-						latest.Labels[GITHUB_TEAMS_LABEL_ORPHANED] = "true"
-						return r.Update(ctx, latest)
-					})
-					if err != nil {
-						if errors.IsNotFound(err) {
-							return reconcile.Result{}, nil
-						}
-						l.Error(err, "error during label update")
-						return reconcile.Result{}, err
-					}
-					return reconcile.Result{}, nil
+					l.Error(err, "GreenhouseTeam not found; this is a configuration error", "Team", githubTeam.Spec.GreenhouseTeam)
+					return setFailed(fmt.Errorf("GreenhouseTeam %q not found", githubTeam.Spec.GreenhouseTeam))
 				} else {
 					l.Error(err, "error during getting the Team for GithubTeam")
 					return reconcile.Result{}, err
@@ -1056,6 +1088,38 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// if GithubTeamState is "pending" -- take actions on the Github side
 	if githubTeam.Status.TeamStatus == v1.GithubTeamStatePendingOperations {
 
+		// No-provider teams must never execute membership operations regardless of
+		// TeamStatus. If a no-provider team somehow accumulated PendingOperations
+		// (e.g. from an older buggy reconcile), resolve them to complete immediately
+		// rather than executing Add/Remove operations against GitHub.
+		if isNoProvider {
+			uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &v1.GithubTeam{}
+				if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+					return ferr
+				}
+				latest.Status.TeamStatus = v1.GithubTeamStateComplete
+				latest.Status.TeamStatusTimestamp = metav1.Now()
+				latest.Status.TeamStatusError = ""
+				// Clear all pending operations — they should not exist for a no-provider team.
+				var nonPending []v1.GithubUserOperation
+				for _, op := range latest.Status.Operations {
+					if op.State != v1.GithubUserOperationStatePending {
+						nonPending = append(nonPending, op)
+					}
+				}
+				latest.Status.Operations = nonPending
+				return r.Client.Status().Update(ctx, latest)
+			})
+			if uerr != nil {
+				l.Error(uerr, "error during status update for no-provider team in pending state")
+				return reconcile.Result{}, uerr
+			}
+			// Requeue so the next reconcile runs the non-pending path and refreshes
+			// Status.Members from GitHub — required for ownersFromGithubTeams to find owners.
+			return reconcile.Result{Requeue: true}, nil
+		}
+
 		l.Info("there are pending operations in the status")
 
 		newStatus := githubTeam.Status.DeepCopy()
@@ -1181,19 +1245,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GithubTeamReconciler) SetupWithManager(mgr ctrl.Manager) error {
-
-	selector := labels.NewSelector()
-	orphaned, _ := labels.NewRequirement(GITHUB_TEAMS_LABEL_ORPHANED, selection.NotIn, []string{"true"})
-	selector = selector.Add(*orphaned)
-
-	metav1LabelSelector, err := metav1.ParseToLabelSelector(selector.String())
-	if err != nil {
-		return err
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
-		For(&v1.GithubTeam{}, builder.WithPredicates(LabelSelectorPredicate(*metav1LabelSelector))).
+		For(&v1.GithubTeam{}).
 		Watches(&greenhousesapv1alpha1.Team{}, handler.EnqueueRequestsFromMapFunc(r.greenhouseTeamToGithubTeam)).
 		Watches(&v1.GithubAccountLink{}, handler.EnqueueRequestsFromMapFunc(r.githubAccountLinkToGithubTeam)).
 		Complete(r)
@@ -1399,18 +1453,6 @@ func extendGithubMembersWithGreenhouseIDs(ctx context.Context, members []github.
 
 	return out, nil
 }
-
-func LabelSelectorPredicate(s metav1.LabelSelector) predicate.Predicate {
-	selector, err := metav1.LabelSelectorAsSelector(&s)
-	if err != nil {
-		return predicate.Funcs{}
-	}
-	return predicate.NewPredicateFuncs(func(o client.Object) bool {
-		return selector.Matches(labels.Set(o.GetLabels()))
-	})
-}
-
-const GITHUB_TEAMS_LABEL_ORPHANED = "repo-guard.cloudoperators.dev/orphaned"
 
 const GITHUB_TEAMS_LABEL_DRY_RUN = "repo-guard.cloudoperators.dev/dryRun"
 const GITHUB_TEAMS_LABEL_DRY_RUN_ENABLED_VALUE = "true"

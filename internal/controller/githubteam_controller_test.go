@@ -35,6 +35,7 @@ var _ = Describe("Github Team controller", func() {
 		uniqueGithubSecretName string
 		uniqueTeamName         string
 		uniqueTeamResourceName string
+		uniqueOrphanTeamName   string
 
 		orgName string
 	)
@@ -51,6 +52,7 @@ var _ = Describe("Github Team controller", func() {
 		uniqueGithubSecretName = "sec-team-" + uniqueID
 		uniqueTeamName = "tm-" + uniqueID
 		uniqueTeamResourceName = fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, uniqueTeamName)
+		uniqueOrphanTeamName = "orphan-" + uniqueID
 
 		nsObj = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uniqueNamespace}}
 		Expect(ensureResourceCreated(ctx, nsObj)).To(Succeed())
@@ -104,6 +106,41 @@ var _ = Describe("Github Team controller", func() {
 			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, nsObj)
 		})
+	})
+
+	It("reconciles no-provider team as complete with cleared operations and error", func() {
+		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
+		// should observe GitHub-side members and clear any stale pending ops, but skip
+		// ChangeCalculator entirely — always reporting TeamStatus=complete so that
+		// ownersFromGithubTeams in the org controller never busy-loops on it.
+		teamResourceName := fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, uniqueOrphanTeamName)
+		team := &repoguardsapv1.GithubTeam{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      teamResourceName,
+				Namespace: uniqueNamespace,
+			},
+			Spec: repoguardsapv1.GithubTeamSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Team:         uniqueOrphanTeamName,
+				// GreenhouseTeam and ExternalMemberProvider intentionally absent.
+			},
+		}
+		Expect(ensureResourceCreated(ctx, team)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, team) })
+
+		Eventually(func() repoguardsapv1.GithubTeamState {
+			cur := &repoguardsapv1.GithubTeam{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: teamResourceName}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.TeamStatus
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateComplete)))
+
+		cur := &repoguardsapv1.GithubTeam{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: teamResourceName}, cur)).To(Succeed())
+		Expect(cur.Status.TeamStatusError).To(BeEmpty())
+		Expect(cur.Status.Operations).To(BeEmpty())
 	})
 
 	It("syncs greenhouse team members into GithubTeam status", func() {
@@ -169,6 +206,7 @@ var _ = Describe("Github Team controller", func() {
 			}
 		}
 		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
+		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueOrphanTeamName)
 
 		// Keep it small: enough to let reconcile settle in CI without long sleeps
 		Eventually(func() bool { return true }, 200*time.Millisecond, 200*time.Millisecond).Should(BeTrue())

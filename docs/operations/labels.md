@@ -38,7 +38,6 @@ Labels control the behavior of Repo Guard controllers. All labels live under `me
 | `repo-guard.cloudoperators.dev/dryRun` | `"true"` / `"false"` | When `"true"`, no member changes are made; status shows planned operations. | `"false"` |
 | `repo-guard.cloudoperators.dev/disableInternalUsernames` | `"true"` / `"false"` | Filters out members where GreenhouseID == GithubUsername (avoids leaking internal IDs). | `"false"` |
 | `repo-guard.cloudoperators.dev/require-verified-domain-email` | `<domain>` | Only allows members with a verified email under this domain (from their `GithubAccountLink`). | Not set |
-| `repo-guard.cloudoperators.dev/orphaned` | `"true"` | Set by the controller when the team is considered orphaned. **Do not set manually.** | Controller-managed |
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration | Clears failed operations and error after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/notfoundTTL` | Go duration | Clears operations in `notfound` state after the duration since last status timestamp. | Not set |
