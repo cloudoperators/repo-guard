@@ -35,6 +35,7 @@ var _ = Describe("Github Team controller", func() {
 		uniqueGithubSecretName string
 		uniqueTeamName         string
 		uniqueTeamResourceName string
+		uniqueOrphanTeamName   string
 
 		orgName string
 	)
@@ -51,6 +52,7 @@ var _ = Describe("Github Team controller", func() {
 		uniqueGithubSecretName = "sec-team-" + uniqueID
 		uniqueTeamName = "tm-" + uniqueID
 		uniqueTeamResourceName = fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, uniqueTeamName)
+		uniqueOrphanTeamName = "orphan-" + uniqueID
 
 		nsObj = &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: uniqueNamespace}}
 		Expect(ensureResourceCreated(ctx, nsObj)).To(Succeed())
@@ -111,7 +113,7 @@ var _ = Describe("Github Team controller", func() {
 		// should go through the full reconcile (fetch GitHub members, sync operations)
 		// but always report TeamStatus=complete so that ownersFromGithubTeams in the
 		// org controller never busy-loops on it.
-		teamResourceName := fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, "orphan-team")
+		teamResourceName := fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, uniqueOrphanTeamName)
 		team := &repoguardsapv1.GithubTeam{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      teamResourceName,
@@ -120,7 +122,7 @@ var _ = Describe("Github Team controller", func() {
 			Spec: repoguardsapv1.GithubTeamSpec{
 				Github:       uniqueGithubName,
 				Organization: orgName,
-				Team:         "orphan-team",
+				Team:         uniqueOrphanTeamName,
 				// GreenhouseTeam and ExternalMemberProvider intentionally absent.
 			},
 		}
@@ -204,7 +206,7 @@ var _ = Describe("Github Team controller", func() {
 			}
 		}
 		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
-		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, "orphan-team")
+		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueOrphanTeamName)
 
 		// Keep it small: enough to let reconcile settle in CI without long sleeps
 		Eventually(func() bool { return true }, 200*time.Millisecond, 200*time.Millisecond).Should(BeTrue())

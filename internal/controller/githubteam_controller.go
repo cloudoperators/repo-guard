@@ -485,9 +485,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 				return reconcile.Result{Requeue: true}, nil
 			}
-			if isNoProvider {
-				return setFailed(err)
-			}
 			return reconcile.Result{}, err
 		}
 
@@ -546,17 +543,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				}
 				return reconcile.Result{Requeue: true}, nil
 			}
-			if isNoProvider {
-				return setFailed(err)
-			}
 			return reconcile.Result{}, err
 		}
 		membersExtendedWithGithubUsernames, err := extendGithubMembersWithGreenhouseIDs(ctx, membersExtended, githubName, r.Client)
 		if err != nil {
 			l.Error(err, "error during extending the members of the team in Github")
-			if isNoProvider {
-				return setFailed(err)
-			}
 			return reconcile.Result{}, err
 		}
 
