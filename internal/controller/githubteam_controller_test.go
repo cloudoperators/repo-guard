@@ -110,9 +110,9 @@ var _ = Describe("Github Team controller", func() {
 
 	It("reconciles no-provider team as complete with cleared operations and error", func() {
 		// A GithubTeam with neither a GreenhouseTeam ref nor an ExternalMemberProvider
-		// should go through the full reconcile (fetch GitHub members, sync operations)
-		// but always report TeamStatus=complete so that ownersFromGithubTeams in the
-		// org controller never busy-loops on it.
+		// should observe GitHub-side members and clear any stale pending ops, but skip
+		// ChangeCalculator entirely — always reporting TeamStatus=complete so that
+		// ownersFromGithubTeams in the org controller never busy-loops on it.
 		teamResourceName := fmt.Sprintf("%s--%s--%s", uniqueGithubName, orgName, uniqueOrphanTeamName)
 		team := &repoguardsapv1.GithubTeam{
 			ObjectMeta: metav1.ObjectMeta{
