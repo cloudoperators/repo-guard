@@ -356,6 +356,17 @@ var _ = Describe("Github Team controller — transient external provider errors"
 			return cur.Status.State
 		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubStateRunning))
 
+		// Wait for GithubOrganization to be reconciled so the teams provider is
+		// initialized before the test body creates a GithubTeam.
+		Eventually(func() bool {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: org.Name}, cur); err != nil {
+				return false
+			}
+			return cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete ||
+				cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateRateLimited
+		}, 3*timeout, interval).Should(BeTrue())
+
 		DeferCleanup(func() {
 			transientProviderErrorServer.SetErrorMode(false)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, team)
