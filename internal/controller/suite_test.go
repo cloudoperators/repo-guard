@@ -255,6 +255,10 @@ var _ = AfterSuite(func() {
 	if empHTTPServer != nil {
 		empHTTPServer.Close()
 	}
+	if transientProviderErrorServer != nil {
+		transientProviderErrorServer.Close()
+		transientProviderErrorServer = nil
+	}
 	if ldapServer != nil {
 		ldapServer.Close()
 	}

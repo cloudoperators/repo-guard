@@ -715,21 +715,21 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := ldapProvider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group", "group", group)
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 						latest := &v1.GithubTeam{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
+						if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+							return ferr
 						}
 						latest.Status.TeamStatus = v1.GithubTeamStateFailed
 						latest.Status.TeamStatusError = "error during getting users from ldap: " + err.Error()
 						latest.Status.TeamStatusTimestamp = metav1.Now()
 						return r.Client.Status().Update(ctx, latest)
 					})
-					if err != nil {
-						l.Error(err, "error during status update")
-						return reconcile.Result{}, err
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
 					}
-					return reconcile.Result{}, nil
+					return reconcile.Result{}, err
 				}
 				greenHouseTeamMemberList = userIDs
 			}
@@ -782,21 +782,21 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := provider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group from external member provider", "group", group)
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 						latest := &v1.GithubTeam{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
+						if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+							return ferr
 						}
 						latest.Status.TeamStatus = v1.GithubTeamStateFailed
 						latest.Status.TeamStatusError = "error during getting users from external member provider: " + err.Error()
 						latest.Status.TeamStatusTimestamp = metav1.Now()
 						return r.Client.Status().Update(ctx, latest)
 					})
-					if err != nil {
-						l.Error(err, "error during status update")
-						return reconcile.Result{}, err
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
 					}
-					return reconcile.Result{}, nil
+					return reconcile.Result{}, err
 				}
 				greenHouseTeamMemberList = userIDs
 			}
@@ -848,21 +848,21 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				userIDs, err := provider.Users(ctx, group)
 				if err != nil {
 					l.Error(err, "error during getting users for group from static member provider", "group", group)
-					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					uerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 						latest := &v1.GithubTeam{}
-						if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
-							return err
+						if ferr := r.Get(ctx, req.NamespacedName, latest); ferr != nil {
+							return ferr
 						}
 						latest.Status.TeamStatus = v1.GithubTeamStateFailed
 						latest.Status.TeamStatusError = "error during getting users from static member provider: " + err.Error()
 						latest.Status.TeamStatusTimestamp = metav1.Now()
 						return r.Client.Status().Update(ctx, latest)
 					})
-					if err != nil {
-						l.Error(err, "error during status update")
-						return reconcile.Result{}, err
+					if uerr != nil {
+						l.Error(uerr, "error during status update")
+						return reconcile.Result{}, uerr
 					}
-					return reconcile.Result{}, nil
+					return reconcile.Result{}, err
 				}
 				greenHouseTeamMemberList = userIDs
 			}

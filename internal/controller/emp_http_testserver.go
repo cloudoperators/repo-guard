@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 // empHTTPTestServer encapsulates a local dummy HTTP server that mimics
@@ -20,6 +21,8 @@ type empHTTPTestServer struct {
 	// fixed group id and user id used to produce deterministic output
 	groupID string
 	userID  string
+	// forceError, when non-zero, makes all /api/sp/groups/ requests return 502.
+	forceError atomic.Int32
 }
 
 func (s *empHTTPTestServer) Close() {
@@ -71,6 +74,10 @@ func newEMPHTTPTestServer(username, password, groupID, userID string) *empHTTPTe
 	})
 
 	mux.HandleFunc("/api/sp/groups/", func(w http.ResponseWriter, r *http.Request) {
+		if h.forceError.Load() != 0 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
 		if !h.authOK(r) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -128,3 +135,12 @@ func (s *empHTTPTestServer) authOK(r *http.Request) bool {
 
 // baseURL returns the server base URL (e.g., http://127.0.0.1:XXXXX)
 func (s *empHTTPTestServer) baseURL() string { return s.srv.URL }
+
+// SetErrorMode controls whether the groups endpoint returns 502 (true) or normal responses (false).
+func (s *empHTTPTestServer) SetErrorMode(on bool) {
+	if on {
+		s.forceError.Store(1)
+	} else {
+		s.forceError.Store(0)
+	}
+}
