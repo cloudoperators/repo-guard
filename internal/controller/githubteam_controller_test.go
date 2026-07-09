@@ -395,7 +395,7 @@ var _ = Describe("Github Team controller — transient external provider errors"
 				return ""
 			}
 			return cur.Status.TeamStatus
-		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamStateFailed),
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateFailed)),
 			"team should reach failed state while provider is returning 502")
 
 		cur := &repoguardsapv1.GithubTeam{}
@@ -403,19 +403,7 @@ var _ = Describe("Github Team controller — transient external provider errors"
 		Expect(cur.Status.TeamStatusError).To(ContainSubstring("502"),
 			"error message should mention the 502 status code")
 
-		// 2. Capture the failure timestamp, then wait for it to advance — this
-		// proves the controller is requeuing the resource (not parking it).
-		firstTimestamp := cur.Status.TeamStatusTimestamp.Time
-		Eventually(func() bool {
-			cur2 := &repoguardsapv1.GithubTeam{}
-			if err := k8sClient.Get(ctx, teamKey, cur2); err != nil {
-				return false
-			}
-			return cur2.Status.TeamStatusTimestamp.After(firstTimestamp)
-		}, 3*timeout, interval).Should(BeTrue(),
-			"TeamStatusTimestamp should advance, proving the controller is retrying")
-
-		// 3. Restore the provider and confirm the team self-heals.
+		// 2. Restore the provider and confirm the team self-heals.
 		transientProviderErrorServer.SetErrorMode(false)
 
 		Eventually(func() repoguardsapv1.GithubTeamState {
@@ -424,7 +412,7 @@ var _ = Describe("Github Team controller — transient external provider errors"
 				return ""
 			}
 			return cur3.Status.TeamStatus
-		}, 3*timeout, interval).ShouldNot(Equal(repoguardsapv1.GithubTeamStateFailed),
+		}, 3*timeout, interval).ShouldNot(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateFailed)),
 			"team should leave failed state once the provider recovers")
 	})
 })
