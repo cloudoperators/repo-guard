@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	gogithub "github.com/google/go-github/v88/github"
+	gogithub "github.com/google/go-github/v89/github"
 	"github.com/palantir/go-githubapp/githubapp"
 
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"

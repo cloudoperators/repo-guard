@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gogithub "github.com/google/go-github/v88/github"
+	gogithub "github.com/google/go-github/v89/github"
 )
 
 // newTestOrganizationProvider creates a DefaultOrganizationProvider backed by a

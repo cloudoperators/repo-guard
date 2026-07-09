@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// Verified against github.com/google/go-github/v88
+// Verified against github.com/google/go-github/v89
 
 package github
 
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	gogithub "github.com/google/go-github/v88/github"
+	gogithub "github.com/google/go-github/v89/github"
 )
 
 // TestMockResponseShapes validates that the JSON shapes used as mock fixtures
