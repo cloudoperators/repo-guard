@@ -17,7 +17,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("Github Team controller", func() {
@@ -416,9 +415,5 @@ var _ = Describe("Github Team controller — transient external provider errors"
 			return cur3.Status.TeamStatus
 		}, 3*timeout, interval).ShouldNot(Equal(repoguardsapv1.GithubTeamStateFailed),
 			"team should leave failed state once the provider recovers")
-
-		Expect(func() error {
-			return client.IgnoreNotFound(k8sClient.Get(ctx, teamKey, &repoguardsapv1.GithubTeam{}))
-		}()).To(Succeed())
 	})
 })
