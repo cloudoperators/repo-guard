@@ -115,17 +115,19 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
 
-	// If the forceReconcile label is present, remove it, wipe the status, and requeue so
-	// the next reconcile starts with a clean slate regardless of any stuck state.
+	// If the forceReconcile label is present, wipe the status first, then remove the label,
+	// and requeue so the next reconcile starts with a clean slate regardless of any stuck state.
+	// Status is reset before the label is removed so that if the label update fails the trigger
+	// is not silently lost — the user can retry by setting the label again.
 	if githubOrganization.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE] == GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE {
-		delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
-		if err = r.Update(ctx, githubOrganization); err != nil {
-			l.Error(err, "failed to remove forceReconcile label")
-			return reconcile.Result{}, err
-		}
 		githubOrganization.Status = v1.GithubOrganizationStatus{}
 		if err = r.Client.Status().Update(ctx, githubOrganization); err != nil {
 			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
+		if err = r.Update(ctx, githubOrganization); err != nil {
+			l.Error(err, "failed to remove forceReconcile label")
 			return reconcile.Result{}, err
 		}
 		l.Info("forceReconcile label detected: status cleared, requeueing")
