@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -114,6 +115,31 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 
 	// Update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
+
+	// If the forceReconcile label is present, wipe the status first (via safeStatusUpdate so
+	// payload metrics stay accurate and the write is conflict-retried), then remove the label
+	// inside a RetryOnConflict loop.  Status is reset before the label is removed so that if
+	// the label Update fails the trigger is not silently lost — the user can retry by re-setting
+	// the label.
+	if githubOrganization.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE] == GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE {
+		emptyStatus := v1.GithubOrganizationStatus{}
+		if err = r.safeStatusUpdate(ctx, req, &emptyStatus, githubOrganization, githubOrganization.Spec.Github); err != nil {
+			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubOrganization); rerr != nil {
+				return rerr
+			}
+			delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
+			return r.Update(ctx, githubOrganization)
+		}); err != nil {
+			l.Error(err, "failed to remove forceReconcile label")
+			return reconcile.Result{}, err
+		}
+		l.Info("forceReconcile label detected: status cleared, requeueing")
+		return reconcile.Result{Requeue: true}, nil
+	}
 
 	// If previously rate-limited, honor retry time from the stored error message
 	if githubOrganization.Status.OrganizationStatus == v1.GithubOrganizationStateRateLimited && githubOrganization.Status.OrganizationStatusError != "" {
@@ -1638,6 +1664,12 @@ const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE = "dry
 
 // Annotation written when adaptive TTL shrinking is applied to keep status payload under the safety threshold.
 const GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED = "repo-guard.cloudoperators.dev/statusPayloadTruncated"
+
+// Label that, when set to "true", causes the controller to wipe the resource status and requeue
+// for a clean full reconcile — bypassing any ratelimited/failed holdoff.
+// The label is removed by the controller after it is processed.
+const GITHUB_ORG_LABEL_FORCE_RECONCILE = "repo-guard.cloudoperators.dev/forceReconcile"
+const GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE = "true"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {

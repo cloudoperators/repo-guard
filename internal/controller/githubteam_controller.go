@@ -83,6 +83,36 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubTeamMetrics(githubTeam)
 
+	// If the forceReconcile label is present, wipe the status first, then remove the label,
+	// and requeue so the next reconcile starts with a clean slate regardless of any stuck state.
+	// Both writes are wrapped in RetryOnConflict; the object is re-GET-ed between them so the
+	// label Update uses a current resourceVersion.  Status is reset before the label is removed
+	// so that if the label Update fails the trigger is not silently lost — the user can retry.
+	if githubTeam.Labels[GITHUB_TEAM_LABEL_FORCE_RECONCILE] == GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE {
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubTeam); rerr != nil {
+				return rerr
+			}
+			githubTeam.Status = v1.GithubTeamStatus{}
+			return r.Client.Status().Update(ctx, githubTeam)
+		}); err != nil {
+			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubTeam); rerr != nil {
+				return rerr
+			}
+			delete(githubTeam.Labels, GITHUB_TEAM_LABEL_FORCE_RECONCILE)
+			return r.Update(ctx, githubTeam)
+		}); err != nil {
+			l.Error(err, "failed to remove forceReconcile label")
+			return reconcile.Result{}, err
+		}
+		l.Info("forceReconcile label detected: status cleared, requeueing")
+		return reconcile.Result{Requeue: true}, nil
+	}
+
 	// If previously rate-limited, honor retry time from the stored error message
 	if githubTeam.Status.TeamStatus == v1.GithubTeamStateRateLimited && githubTeam.Status.TeamStatusError != "" {
 		if resetAt, ok := parseGitHubRateLimitReset(githubTeam.Status.TeamStatusError); ok {
@@ -1477,6 +1507,12 @@ const GITHUB_TEAM_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
 const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
 const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repo-guard.cloudoperators.dev/notfoundTTL"
 const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repo-guard.cloudoperators.dev/skippedTTL"
+
+// Label that, when set to "true", causes the controller to wipe the resource status and requeue
+// for a clean full reconcile — bypassing any ratelimited/failed holdoff.
+// The label is removed by the controller after it is processed.
+const GITHUB_TEAM_LABEL_FORCE_RECONCILE = "repo-guard.cloudoperators.dev/forceReconcile"
+const GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE = "true"
 
 // recordTeamRateLimitHit records a rate-limit event for the team controller and observes the backoff.
 func recordTeamRateLimitHit(errMsg string, resetAt time.Time) {

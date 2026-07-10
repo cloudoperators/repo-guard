@@ -141,6 +141,18 @@ func updateStatusWithRetry[T client.Object](ctx context.Context, c client.Client
 	return lastErr
 }
 
+// labelWithRetry sets a single label on the object, retrying on conflict.
+func labelWithRetry[T client.Object](ctx context.Context, c client.Client, keyObj T, key, value string) error {
+	return updateObjectWithRetry(ctx, c, keyObj, func(cur T) {
+		labels := cur.GetLabels()
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels[key] = value
+		cur.SetLabels(labels)
+	})
+}
+
 // githubEnsureTeam ensures a team exists in the org (idempotent).
 // If the team already exists, it returns nil.
 // In mock mode (GITHUB_MOCK=true) this is a no-op because teams are pre-seeded
