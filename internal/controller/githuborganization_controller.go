@@ -115,6 +115,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
 
+	// If the forceReconcile label is present, remove it, wipe the status, and requeue so
+	// the next reconcile starts with a clean slate regardless of any stuck state.
+	if githubOrganization.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE] == GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE {
+		delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
+		if err = r.Update(ctx, githubOrganization); err != nil {
+			l.Error(err, "failed to remove forceReconcile label")
+			return reconcile.Result{}, err
+		}
+		githubOrganization.Status = v1.GithubOrganizationStatus{}
+		if err = r.Client.Status().Update(ctx, githubOrganization); err != nil {
+			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		l.Info("forceReconcile label detected: status cleared, requeueing")
+		return reconcile.Result{Requeue: true}, nil
+	}
+
 	// If previously rate-limited, honor retry time from the stored error message
 	if githubOrganization.Status.OrganizationStatus == v1.GithubOrganizationStateRateLimited && githubOrganization.Status.OrganizationStatusError != "" {
 		if resetAt, ok := parseGitHubRateLimitReset(githubOrganization.Status.OrganizationStatusError); ok {
@@ -1638,6 +1655,12 @@ const GITHUB_ORG_LABEL_REMOVE_REPOSITORY_DIRECT_COLLABORATOR_DRYRUN_VALUE = "dry
 
 // Annotation written when adaptive TTL shrinking is applied to keep status payload under the safety threshold.
 const GITHUB_ORG_ANNOTATION_STATUS_PAYLOAD_TRUNCATED = "repo-guard.cloudoperators.dev/statusPayloadTruncated"
+
+// Label that, when set to "true", causes the controller to wipe the resource status and requeue
+// for a clean full reconcile — bypassing any ratelimited/failed holdoff.
+// The label is removed by the controller after it is processed.
+const GITHUB_ORG_LABEL_FORCE_RECONCILE = "repo-guard.cloudoperators.dev/forceReconcile"
+const GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE = "true"
 
 // ttlExpired parses a duration string (e.g., "24h", "30m") and checks if since+TTL is before now.
 func ttlExpired(ttlStr string, since time.Time, now time.Time) (bool, error) {

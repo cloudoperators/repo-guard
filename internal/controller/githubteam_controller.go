@@ -83,6 +83,23 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubTeamMetrics(githubTeam)
 
+	// If the forceReconcile label is present, remove it, wipe the status, and requeue so
+	// the next reconcile starts with a clean slate regardless of any stuck state.
+	if githubTeam.Labels[GITHUB_TEAM_LABEL_FORCE_RECONCILE] == GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE {
+		delete(githubTeam.Labels, GITHUB_TEAM_LABEL_FORCE_RECONCILE)
+		if err = r.Update(ctx, githubTeam); err != nil {
+			l.Error(err, "failed to remove forceReconcile label")
+			return reconcile.Result{}, err
+		}
+		githubTeam.Status = v1.GithubTeamStatus{}
+		if err = r.Client.Status().Update(ctx, githubTeam); err != nil {
+			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		l.Info("forceReconcile label detected: status cleared, requeueing")
+		return reconcile.Result{Requeue: true}, nil
+	}
+
 	// If previously rate-limited, honor retry time from the stored error message
 	if githubTeam.Status.TeamStatus == v1.GithubTeamStateRateLimited && githubTeam.Status.TeamStatusError != "" {
 		if resetAt, ok := parseGitHubRateLimitReset(githubTeam.Status.TeamStatusError); ok {
@@ -1477,6 +1494,12 @@ const GITHUB_TEAM_LABEL_FAILED_TTL = "repo-guard.cloudoperators.dev/failedTTL"
 const GITHUB_TEAM_LABEL_COMPLETED_TTL = "repo-guard.cloudoperators.dev/completedTTL"
 const GITHUB_TEAM_LABEL_NOTFOUND_TTL = "repo-guard.cloudoperators.dev/notfoundTTL"
 const GITHUB_TEAM_LABEL_SKIPPED_TTL = "repo-guard.cloudoperators.dev/skippedTTL"
+
+// Label that, when set to "true", causes the controller to wipe the resource status and requeue
+// for a clean full reconcile — bypassing any ratelimited/failed holdoff.
+// The label is removed by the controller after it is processed.
+const GITHUB_TEAM_LABEL_FORCE_RECONCILE = "repo-guard.cloudoperators.dev/forceReconcile"
+const GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE = "true"
 
 // recordTeamRateLimitHit records a rate-limit event for the team controller and observes the backoff.
 func recordTeamRateLimitHit(errMsg string, resetAt time.Time) {
