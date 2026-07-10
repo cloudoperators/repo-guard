@@ -115,14 +115,20 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	// Update metrics to reflect current state at the beginning of reconcile
 	ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
 
-	// If the forceReconcile label is present, wipe the status first, then remove the label,
-	// and requeue so the next reconcile starts with a clean slate regardless of any stuck state.
-	// Status is reset before the label is removed so that if the label update fails the trigger
-	// is not silently lost — the user can retry by setting the label again.
+	// If the forceReconcile label is present, wipe the status first (via safeStatusUpdate so
+	// payload metrics stay accurate and the write is conflict-retried), re-GET the object to
+	// obtain a current resourceVersion, then remove the label.  Status is reset before the label
+	// is removed so that if the label Update fails the trigger is not silently lost — the user
+	// can retry by setting the label again.
 	if githubOrganization.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE] == GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE {
-		githubOrganization.Status = v1.GithubOrganizationStatus{}
-		if err = r.Client.Status().Update(ctx, githubOrganization); err != nil {
+		emptyStatus := v1.GithubOrganizationStatus{}
+		if err = r.safeStatusUpdate(ctx, req, &emptyStatus, githubOrganization, githubOrganization.Spec.Github); err != nil {
 			l.Error(err, "failed to reset status after forceReconcile")
+			return reconcile.Result{}, err
+		}
+		// Re-GET to pick up the new resourceVersion produced by the status write above.
+		if err = r.Get(ctx, req.NamespacedName, githubOrganization); err != nil {
+			l.Error(err, "failed to re-read organization after forceReconcile status reset")
 			return reconcile.Result{}, err
 		}
 		delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)

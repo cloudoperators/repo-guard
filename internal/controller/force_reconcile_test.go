@@ -87,12 +87,13 @@ var _ = Describe("forceReconcile label", Ordered, func() {
 		// Set the forceReconcile label; the controller should wipe the status and remove the label.
 		Expect(labelWithRetry(ctx, k8sClient, testOrg, GITHUB_ORG_LABEL_FORCE_RECONCILE, GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE)).To(Succeed())
 
-		// Once the label is gone the forceReconcile path has run. Assert both that the label is
-		// removed and that the sentinel error is no longer present (status was actually wiped).
+		// Once the label is gone the forceReconcile path has run. Assert both that the label key
+		// is absent (not merely set to a different value) and that the sentinel error is cleared
+		// (status was actually wiped).
 		Eventually(func(g Gomega) {
 			cur := &repoguardsapv1.GithubOrganization{}
 			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: testOrg.Namespace, Name: testOrg.Name}, cur)).To(Succeed())
-			g.Expect(cur.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE]).NotTo(Equal(GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE))
+			g.Expect(cur.Labels).NotTo(HaveKey(GITHUB_ORG_LABEL_FORCE_RECONCILE))
 			g.Expect(cur.Status.OrganizationStatusError).NotTo(Equal(sentinelError))
 		}, 3*timeout, interval).Should(Succeed())
 	})
@@ -132,12 +133,13 @@ var _ = Describe("forceReconcile label", Ordered, func() {
 		// Set the forceReconcile label; the controller should wipe the status and remove the label.
 		Expect(labelWithRetry(ctx, k8sClient, t, GITHUB_TEAM_LABEL_FORCE_RECONCILE, GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE)).To(Succeed())
 
-		// Once the label is gone the forceReconcile path has run. Assert both that the label is
-		// removed and that the sentinel error is no longer present (status was actually wiped).
+		// Once the label is gone the forceReconcile path has run. Assert both that the label key
+		// is absent (not merely set to a different value) and that the sentinel error is cleared
+		// (status was actually wiped).
 		Eventually(func(g Gomega) {
 			cur := &repoguardsapv1.GithubTeam{}
 			g.Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: TEST_ENV["NAMESPACE"], Name: name}, cur)).To(Succeed())
-			g.Expect(cur.Labels[GITHUB_TEAM_LABEL_FORCE_RECONCILE]).NotTo(Equal(GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE))
+			g.Expect(cur.Labels).NotTo(HaveKey(GITHUB_TEAM_LABEL_FORCE_RECONCILE))
 			g.Expect(cur.Status.TeamStatusError).NotTo(Equal(sentinelError))
 		}, 3*timeout, interval).Should(Succeed())
 	})

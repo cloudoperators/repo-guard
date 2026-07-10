@@ -85,16 +85,27 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// If the forceReconcile label is present, wipe the status first, then remove the label,
 	// and requeue so the next reconcile starts with a clean slate regardless of any stuck state.
-	// Status is reset before the label is removed so that if the label update fails the trigger
-	// is not silently lost — the user can retry by setting the label again.
+	// Both writes are wrapped in RetryOnConflict; the object is re-GET-ed between them so the
+	// label Update uses a current resourceVersion.  Status is reset before the label is removed
+	// so that if the label Update fails the trigger is not silently lost — the user can retry.
 	if githubTeam.Labels[GITHUB_TEAM_LABEL_FORCE_RECONCILE] == GITHUB_TEAM_LABEL_FORCE_RECONCILE_VALUE {
-		githubTeam.Status = v1.GithubTeamStatus{}
-		if err = r.Client.Status().Update(ctx, githubTeam); err != nil {
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubTeam); rerr != nil {
+				return rerr
+			}
+			githubTeam.Status = v1.GithubTeamStatus{}
+			return r.Client.Status().Update(ctx, githubTeam)
+		}); err != nil {
 			l.Error(err, "failed to reset status after forceReconcile")
 			return reconcile.Result{}, err
 		}
-		delete(githubTeam.Labels, GITHUB_TEAM_LABEL_FORCE_RECONCILE)
-		if err = r.Update(ctx, githubTeam); err != nil {
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubTeam); rerr != nil {
+				return rerr
+			}
+			delete(githubTeam.Labels, GITHUB_TEAM_LABEL_FORCE_RECONCILE)
+			return r.Update(ctx, githubTeam)
+		}); err != nil {
 			l.Error(err, "failed to remove forceReconcile label")
 			return reconcile.Result{}, err
 		}
