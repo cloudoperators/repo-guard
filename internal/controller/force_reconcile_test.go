@@ -30,7 +30,7 @@ var _ = Describe("forceReconcile label", Ordered, func() {
 		secName := generateUniqueName("sec-force-reconcile")
 
 		operatorNsObj := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: TestOperatorNamespace}}
-		_ = ensureResourceCreated(ctx, operatorNsObj)
+		Expect(ensureResourceCreated(ctx, operatorNsObj)).To(Succeed())
 
 		secret = githubComSecret.DeepCopy()
 		secret.Name = secName

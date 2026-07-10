@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -116,23 +117,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 	ghmetrics.SetGithubOrganizationMetrics(githubOrganization)
 
 	// If the forceReconcile label is present, wipe the status first (via safeStatusUpdate so
-	// payload metrics stay accurate and the write is conflict-retried), re-GET the object to
-	// obtain a current resourceVersion, then remove the label.  Status is reset before the label
-	// is removed so that if the label Update fails the trigger is not silently lost — the user
-	// can retry by setting the label again.
+	// payload metrics stay accurate and the write is conflict-retried), then remove the label
+	// inside a RetryOnConflict loop.  Status is reset before the label is removed so that if
+	// the label Update fails the trigger is not silently lost — the user can retry by re-setting
+	// the label.
 	if githubOrganization.Labels[GITHUB_ORG_LABEL_FORCE_RECONCILE] == GITHUB_ORG_LABEL_FORCE_RECONCILE_VALUE {
 		emptyStatus := v1.GithubOrganizationStatus{}
 		if err = r.safeStatusUpdate(ctx, req, &emptyStatus, githubOrganization, githubOrganization.Spec.Github); err != nil {
 			l.Error(err, "failed to reset status after forceReconcile")
 			return reconcile.Result{}, err
 		}
-		// Re-GET to pick up the new resourceVersion produced by the status write above.
-		if err = r.Get(ctx, req.NamespacedName, githubOrganization); err != nil {
-			l.Error(err, "failed to re-read organization after forceReconcile status reset")
-			return reconcile.Result{}, err
-		}
-		delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
-		if err = r.Update(ctx, githubOrganization); err != nil {
+		if err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if rerr := r.Get(ctx, req.NamespacedName, githubOrganization); rerr != nil {
+				return rerr
+			}
+			delete(githubOrganization.Labels, GITHUB_ORG_LABEL_FORCE_RECONCILE)
+			return r.Update(ctx, githubOrganization)
+		}); err != nil {
 			l.Error(err, "failed to remove forceReconcile label")
 			return reconcile.Result{}, err
 		}
