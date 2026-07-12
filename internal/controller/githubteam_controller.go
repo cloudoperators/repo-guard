@@ -1042,7 +1042,6 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// or empty (first reconcile), write complete to reflect that the provider
 			// is now healthy and there is nothing to do.
 			if githubTeam.Status.TeamStatus == "" || githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed {
-				l.Info("TeamStatus is empty or failed with no pending changes, setting to complete")
 				latest := &v1.GithubTeam{}
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
@@ -1058,6 +1057,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					if latest.PendingOperationsFound() || latest.FailedOperationsFound() {
 						return nil
 					}
+					l.Info("TeamStatus is empty or failed with no pending changes, setting to complete")
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
 					latest.Status.TeamStatusError = ""
 					latest.Status.TeamStatusTimestamp = metav1.Now()
