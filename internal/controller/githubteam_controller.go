@@ -1050,7 +1050,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					}
 					// Re-check on the freshly fetched object to avoid clobbering a
 					// concurrent status write that moved the resource out of failed/empty.
+					// Also skip if there are still pending or failed operations — those
+					// must be resolved before the team can be considered complete.
 					if latest.Status.TeamStatus != "" && latest.Status.TeamStatus != v1.GithubTeamStateFailed {
+						return nil
+					}
+					if latest.PendingOperationsFound() || latest.FailedOperationsFound() {
 						return nil
 					}
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
