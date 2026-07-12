@@ -213,6 +213,7 @@ func (github GithubTeam) ChangeCalculator(desiredMembers []Member) (bool, *Githu
 
 	if changed {
 		newStatus.TeamStatus = GithubTeamStatePendingOperations
+		newStatus.TeamStatusError = ""
 		newStatus.TeamStatusTimestamp = metav1.Now()
 	}
 

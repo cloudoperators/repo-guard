@@ -1048,6 +1048,11 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 						return err
 					}
+					// Re-check on the freshly fetched object to avoid clobbering a
+					// concurrent status write that moved the resource out of failed/empty.
+					if latest.Status.TeamStatus != "" && latest.Status.TeamStatus != v1.GithubTeamStateFailed {
+						return nil
+					}
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
 					latest.Status.TeamStatusError = ""
 					latest.Status.TeamStatusTimestamp = metav1.Now()
