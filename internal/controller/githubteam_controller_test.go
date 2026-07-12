@@ -412,7 +412,7 @@ var _ = Describe("Github Team controller — transient external provider errors"
 				return ""
 			}
 			return cur3.Status.TeamStatus
-		}, 3*timeout, interval).ShouldNot(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateFailed)),
-			"team should leave failed state once the provider recovers")
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubTeamState(repoguardsapv1.GithubTeamStateComplete)),
+			"team should transition to complete once the provider recovers")
 	})
 })

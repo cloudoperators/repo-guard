@@ -1037,15 +1037,19 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return reconcile.Result{}, nil
 
 		} else {
-			// check for empty status in kubernetes resource
-			if githubTeam.Status.TeamStatus == "" {
-				l.Info("TeamStatus is empty, it could be the first round of the resource reconciliation")
+			// No diff from ChangeCalculator — team is already in desired state.
+			// If the current status is failed (e.g., from a prior transient provider error)
+			// or empty (first reconcile), write complete to reflect that the provider
+			// is now healthy and there is nothing to do.
+			if githubTeam.Status.TeamStatus == "" || githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed {
+				l.Info("TeamStatus is empty or failed with no pending changes, setting to complete")
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					latest := &v1.GithubTeam{}
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 						return err
 					}
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					latest.Status.TeamStatusError = ""
 					latest.Status.TeamStatusTimestamp = metav1.Now()
 					return r.Client.Status().Update(ctx, latest)
 				})
