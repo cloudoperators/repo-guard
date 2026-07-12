@@ -1043,8 +1043,8 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// is now healthy and there is nothing to do.
 			if githubTeam.Status.TeamStatus == "" || githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed {
 				l.Info("TeamStatus is empty or failed with no pending changes, setting to complete")
+				latest := &v1.GithubTeam{}
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubTeam{}
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 						return err
 					}
@@ -1067,6 +1067,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
+				// Sync the in-memory object so the deferred metrics/failure-counter
+				// at the top of Reconcile reflects the status we just wrote.
+				githubTeam.Status = latest.Status
 			}
 		}
 
