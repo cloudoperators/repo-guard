@@ -1037,15 +1037,29 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return reconcile.Result{}, nil
 
 		} else {
-			// check for empty status in kubernetes resource
-			if githubTeam.Status.TeamStatus == "" {
-				l.Info("TeamStatus is empty, it could be the first round of the resource reconciliation")
+			// No diff from ChangeCalculator — team is already in desired state.
+			// If the current status is failed (e.g., from a prior transient provider error)
+			// or empty (first reconcile), write complete to reflect that the provider
+			// is now healthy and there is nothing to do.
+			if githubTeam.Status.TeamStatus == "" || githubTeam.Status.TeamStatus == v1.GithubTeamStateFailed {
+				latest := &v1.GithubTeam{}
 				err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-					latest := &v1.GithubTeam{}
 					if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
 						return err
 					}
+					// Re-check on the freshly fetched object to avoid clobbering a
+					// concurrent status write that moved the resource out of failed/empty.
+					// Also skip if there are still pending or failed operations — those
+					// must be resolved before the team can be considered complete.
+					if latest.Status.TeamStatus != "" && latest.Status.TeamStatus != v1.GithubTeamStateFailed {
+						return nil
+					}
+					if latest.PendingOperationsFound() || latest.FailedOperationsFound() {
+						return nil
+					}
+					l.Info("TeamStatus is empty or failed with no pending changes, setting to complete")
 					latest.Status.TeamStatus = v1.GithubTeamStateComplete
+					latest.Status.TeamStatusError = ""
 					latest.Status.TeamStatusTimestamp = metav1.Now()
 					return r.Client.Status().Update(ctx, latest)
 				})
@@ -1053,6 +1067,9 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					l.Error(err, "error during status update")
 					return reconcile.Result{}, err
 				}
+				// Sync the in-memory object so the deferred metrics/failure-counter
+				// at the top of Reconcile reflects the status we just wrote.
+				githubTeam.Status = latest.Status
 			}
 		}
 
