@@ -402,6 +402,7 @@ GithubOrganization labels:
 | `repo-guard.cloudoperators.dev/cleanOperations` | "complete"/"failed" | When in dryRun, set to "complete" to purge completed operations from status, or "failed" to purge failed ones. The label is removed automatically after cleanup. | Not set |
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration (e.g., 1h, 30m) | Automatically clears failed operations and failed status after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration (e.g., 24h) | Automatically clears completed operations after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/forceReconcile` | "true"/"false" | Force reconciliation of this organization. | Not set |
 
 Note: GithubOrganization also supports the annotation `repo-guard.cloudoperators.dev/skipDefaultRepositoryTeams` to skip applying default team permissions on a comma-separated list of repositories.
 
@@ -420,6 +421,7 @@ GithubTeam labels:
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration | Clears completed operations after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/notfoundTTL` | Go duration | Clears operations in "notfound" state after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/skippedTTL` | Go duration | Clears operations in "skipped" state after the duration since last status timestamp. | Not set |
+| `repo-guard.cloudoperators.dev/forceReconcile` | "true"/"false" | Force reconciliation of this team. | Not set |
 
 GithubAccountLink labels & annotations:
 
@@ -522,6 +524,24 @@ Alerting rules are provided in `config/prometheus/rules.yaml` and include:
 - Slow reconciles (p95)
 - No reconcile activity
 - External API high error rate and slow latency (p95)
+
+## Troubleshooting
+
+To resolve reconciliation discrepancies for a particular team or organization, follow these steps to manually force a sync.
+
+### Force reconcile a stuck team
+
+```bash
+kubectl label githubteam <name> -n <ns> \
+  repo-guard.cloudoperators.dev/forceReconcile=true
+```
+
+### Force reconcile a stuck organization
+
+```bash
+kubectl label githuborganization <name> -n <ns> \
+  repo-guard.cloudoperators.dev/forceReconcile=true
+```
 
 ## Support, Feedback, Contributing
 
