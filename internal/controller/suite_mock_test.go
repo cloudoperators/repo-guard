@@ -113,8 +113,4 @@ func startMockGitHubServer() {
 	if TEST_ENV["GITHUB_INTEGRATION_ID"] == "" {
 		TEST_ENV["GITHUB_INTEGRATION_ID"] = "1"
 	}
-	// Token used by tests that construct a direct githubAPI client (e.g. repository tests).
-	if TEST_ENV["GITHUB_TOKEN"] == "" {
-		TEST_ENV["GITHUB_TOKEN"] = "mock-token"
-	}
 }

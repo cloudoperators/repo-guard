@@ -6,12 +6,10 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
-	githubAPI "github.com/google/go-github/v89/github"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -44,7 +42,6 @@ var _ = Describe("Github Team controller", func() {
 		ctx = context.Background()
 
 		orgName = requireEnv("ORGANIZATION")
-		requireEnv("GITHUB_TOKEN")
 
 		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNamespace = "ns-team-" + uniqueID
@@ -188,23 +185,7 @@ var _ = Describe("Github Team controller", func() {
 
 	AfterEach(func() {
 		ctx := context.Background()
-		client, clientErr := githubAPI.NewClient(githubAPI.WithAuthToken(requireEnv("GITHUB_TOKEN")))
-		Expect(clientErr).NotTo(HaveOccurred())
-		if isMockMode() {
-			// In mock mode point the client at the mock server so that cleanup
-			// calls never hit api.github.com and the in-process mock state stays
-			// clean between test runs.
-			v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
-			if v3URL != "" {
-				if !strings.HasSuffix(v3URL, "/") {
-					v3URL += "/"
-				}
-				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
-				var err error
-				client, err = githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
-				Expect(err).NotTo(HaveOccurred())
-			}
-		}
+		client := newTestGithubClient()
 		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueTeamName)
 		_, _ = client.Teams.DeleteTeamBySlug(ctx, orgName, uniqueOrphanTeamName)
 
@@ -241,7 +222,6 @@ var _ = Describe("Github Team controller — transient external provider errors"
 	BeforeEach(func() {
 		ctx = context.Background()
 		orgName = requireEnv("ORGANIZATION")
-		requireEnv("GITHUB_TOKEN")
 
 		// Start the dedicated error-injectable HTTP server once.
 		if transientProviderErrorServer == nil {

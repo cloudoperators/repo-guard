@@ -159,7 +159,7 @@ e2e-live: ## Full e2e flow against real GitHub (requires credentials in test.env
 	USE_MOCK_GITHUB=false $(MAKE) e2e
 
 .PHONY: e2e-github-cleanup
-e2e-github-cleanup: ## Delete e2e-created GitHub teams (and optionally repos) using PAT from test.env. Env: E2E_DRY_RUN=true|false, E2E_CLEANUP_REPOS=true|false, E2E_REPO_PREFIX=<prefix>
+e2e-github-cleanup: ## Delete e2e-created GitHub teams (and optionally repos) using GitHub App credentials from test.env. Env: E2E_DRY_RUN=true|false, E2E_CLEANUP_REPOS=true|false, E2E_REPO_PREFIX=<prefix>
 	bash hack/e2e/e2e.sh github-cleanup
 
 .PHONY: lint

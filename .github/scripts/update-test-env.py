@@ -14,7 +14,6 @@ import sys
 
 path = sys.argv[1]
 replacements = {
-    "GITHUB_TOKEN": os.environ["TEST_GITHUB_TOKEN"],
     "GITHUB_CLIENT_ID": os.environ["TEST_GITHUB_CLIENT_ID"],
     "GITHUB_CLIENT_SECRET": os.environ["TEST_GITHUB_CLIENT_SECRET"],
 }

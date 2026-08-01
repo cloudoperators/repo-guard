@@ -902,10 +902,9 @@ cmd_test() {
   rm -f "$MET_FILE"
 
 
-  # 5) Validate GitHub side using PAT (basic checks)
+  # 5) Validate GitHub side using GitHub App installation token (basic checks)
   log_step "Validating GitHub resources via API"
   GITHUB_API=$(read_env_var GITHUB_V3_API_URL)
-  GITHUB_TOKEN=$(read_env_var GITHUB_TOKEN)
   ORG=$(read_env_var ORGANIZATION)
   TEAM_1=$(read_env_var TEAM_1)
   TEAM_2=$(read_env_var TEAM_2)
@@ -928,10 +927,16 @@ cmd_test() {
     GITHUB_API="http://localhost:${MOCK_LOCAL_PORT}/api/v3"
     GITHUB_TOKEN="mock-token"
     log_info "Mock GitHub API available at ${GITHUB_API}"
+  else
+    # Live mode: obtain a short-lived GitHub App installation token
+    GITHUB_TOKEN=$(github_get_installation_token) || {
+      echo "GITHUB_TOKEN could not be obtained via GitHub App; skipping GitHub API checks" >&2
+      GITHUB_TOKEN=""
+    }
   fi
 
   if [[ -z "$GITHUB_TOKEN" ]]; then
-    echo "GITHUB_TOKEN missing in ${ENV_FILE_DEFAULT}; skipping GitHub API checks" >&2
+    echo "GITHUB_TOKEN not available; skipping GitHub API checks" >&2
   else
     authHeader=( -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" )
     echo "Checking organization ${ORG} accessibility"
@@ -1123,12 +1128,17 @@ wait_for_org_repo_ops() {
 run_repository_scenarios() {
   ensure_jq
   local ORG=$(read_env_var ORGANIZATION)
-  # In mock mode GITHUB_TOKEN is set to "mock-token" by cmd_test; in live mode read from test.env
-  local TOKEN="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
+  # In mock mode GITHUB_TOKEN is set to "mock-token" by cmd_test; in live mode
+  # obtain a short-lived GitHub App installation token.
+  local TOKEN="${GITHUB_TOKEN:-}"
   if [[ -z "$TOKEN" ]]; then
-    log_info "Skipping repository scenarios: GITHUB_TOKEN not set"
+    TOKEN=$(github_get_installation_token) || TOKEN=""
+  fi
+  if [[ -z "$TOKEN" ]]; then
+    log_info "Skipping repository scenarios: could not obtain GitHub token"
     return 0
   fi
+  GITHUB_TOKEN="$TOKEN"
 
   local PUB=$(read_env_var E2E_REPO_PUBLIC)
   local PRIV=$(read_env_var E2E_REPO_PRIVATE)
@@ -1352,6 +1362,89 @@ cmd_install_crds() {
 }
 
 # ------------------------------
+# GitHub App installation token
+# ------------------------------
+
+# Generate a short-lived GitHub App installation token using the App's private
+# key + integration ID (for the JWT) and the installation ID for the token
+# exchange.  Prints the token to stdout on success; exits non-zero on failure.
+#
+# Required env / test.env values:
+#   GITHUB_PRIVATE_KEY      – RSA PEM private key for the GitHub App
+#   GITHUB_INTEGRATION_ID   – GitHub App ID (numeric)
+#   GITHUB_INSTALLATION_ID  – Installation ID for the target org
+#   GITHUB_V3_API_URL        – GitHub API base URL
+#
+# Implementation note: JWT generation is done entirely with openssl + standard
+# POSIX tools; no extra dependencies (Python, jq for signing) are needed.
+github_get_installation_token() {
+  local app_id integration_id installation_id api private_key_pem
+
+  integration_id=$(read_env_var GITHUB_INTEGRATION_ID)
+  installation_id=$(read_env_var GITHUB_INSTALLATION_ID)
+  api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
+  # Strip trailing slash for consistent URL construction
+  api="${api%/}"
+  private_key_pem=$(read_env_var GITHUB_PRIVATE_KEY)
+
+  if [[ -z "$integration_id" || -z "$installation_id" || -z "$private_key_pem" ]]; then
+    echo "[$(ts)] ERROR: GITHUB_INTEGRATION_ID, GITHUB_INSTALLATION_ID, and GITHUB_PRIVATE_KEY must be set for GitHub App token generation" >&2
+    return 1
+  fi
+
+  # --- Build JWT ---
+  local now iat exp header payload sig jwt
+
+  now=$(date +%s)
+  iat=$(( now - 60 ))        # issued 60 s in the past to allow clock skew
+  exp=$(( now + 540 ))       # expires in 9 minutes (max is 10 min)
+
+  # base64url-encode without padding
+  b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+  header=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
+  payload=$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$iat" "$exp" "$integration_id" | b64url)
+
+  # Write private key to a temp file so openssl dgst can read it
+  local key_file
+  key_file=$(mktemp /tmp/gh-app-key.XXXXXX.pem)
+  # shellcheck disable=SC2064
+  trap "rm -f '${key_file}'" RETURN
+  printf '%s' "$private_key_pem" > "$key_file"
+
+  sig=$(printf '%s.%s' "$header" "$payload" \
+        | openssl dgst -sha256 -sign "$key_file" \
+        | b64url)
+
+  jwt="${header}.${payload}.${sig}"
+  rm -f "$key_file"
+
+  # --- Exchange JWT for installation token ---
+  local token_json http_code
+  http_code=$(curl -sS -o /tmp/gh-installation-token.json -w "%{http_code}" \
+    -X POST \
+    -H "Authorization: Bearer ${jwt}" \
+    -H "Accept: application/vnd.github+json" \
+    "${api}/app/installations/${installation_id}/access_tokens")
+
+  if [[ "$http_code" != "201" ]]; then
+    echo "[$(ts)] ERROR: Failed to get GitHub App installation token (HTTP ${http_code})" >&2
+    cat /tmp/gh-installation-token.json >&2 || true
+    return 1
+  fi
+
+  local token
+  token=$(jq -r '.token // empty' /tmp/gh-installation-token.json)
+  if [[ -z "$token" ]]; then
+    echo "[$(ts)] ERROR: Installation token response missing .token field" >&2
+    cat /tmp/gh-installation-token.json >&2 || true
+    return 1
+  fi
+
+  printf '%s' "$token"
+}
+
+# ------------------------------
 # GitHub cleanup (teams/repos)
 # ------------------------------
 
@@ -1388,12 +1481,26 @@ github_delete_repo() {
 cmd_github_cleanup() {
   ensure_jq
   local token org
-  token=$(read_env_var GITHUB_TOKEN)
   org=$(read_env_var ORGANIZATION)
-  if [[ -z "$token" || -z "$org" ]]; then
-    echo "ERROR: GITHUB_TOKEN and ORGANIZATION must be set in ${ENV_FILE_DEFAULT} for cleanup." >&2
+  if [[ -z "$org" ]]; then
+    echo "ERROR: ORGANIZATION must be set in ${ENV_FILE_DEFAULT} for cleanup." >&2
     exit 1
   fi
+
+  # Obtain a short-lived GitHub App installation token; fall back to GITHUB_TOKEN
+  # (PAT) only when App credentials are absent (e.g. local dev without App setup).
+  log_step "Obtaining GitHub token for cleanup"
+  token=$(github_get_installation_token 2>&1) || {
+    token=$(read_env_var GITHUB_TOKEN)
+    if [[ -z "$token" ]]; then
+      echo "ERROR: Could not obtain GitHub App installation token and GITHUB_TOKEN is not set." >&2
+      exit 1
+    fi
+    log_info "Falling back to GITHUB_TOKEN (PAT) for cleanup"
+  }
+  # Export so all helper functions (github_delete_team etc.) pick it up via
+  # the ${GITHUB_TOKEN:-...} pattern without re-reading from test.env.
+  GITHUB_TOKEN="$token"
 
   local dry=${E2E_DRY_RUN:-false}
   local do_repos=${E2E_CLEANUP_REPOS:-true}

@@ -12,7 +12,11 @@ import (
 
 	greenhousesapv1alpha1 "github.com/cloudoperators/greenhouse/api/v1alpha1"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
+	githubAPI "github.com/google/go-github/v89/github"
 	"github.com/joho/godotenv"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/palantir/go-githubapp/githubapp"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -87,7 +91,7 @@ func loadTestEnv() map[string]string {
 
 	// Allow overriding from process env (both KEY and TEST_KEY)
 	keys := []string{
-		"GITHUB_TOKEN", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_PRIVATE_KEY",
+		"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "GITHUB_PRIVATE_KEY",
 		"ORGANIZATION", "NAMESPACE", "OPERATOR_NAMESPACE",
 		"GITHUB_KUBERNETES_RESOURCE_NAME", "GITHUB_KUBERNETES_SECRET_RESOURCE_NAME",
 		"GITHUB_WEB_URL", "GITHUB_V3_API_URL", "GITHUB_INTEGRATION_ID", "GITHUB_INSTALLATION_ID",
@@ -153,6 +157,43 @@ func mustParseInt64(key string, def int64) int64 {
 		panic(fmt.Errorf("invalid %s=%q: %w", key, raw, err))
 	}
 	return n
+}
+
+// newTestGithubClient returns a *githubAPI.Client for use in test cleanup.
+// In mock mode it points at the in-process mock server with a dummy token.
+// In live mode it authenticates as the GitHub App installation (no PAT needed).
+func newTestGithubClient() *githubAPI.Client {
+	GinkgoHelper()
+	if isMockMode() {
+		v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
+		if v3URL != "" {
+			if !strings.HasSuffix(v3URL, "/") {
+				v3URL += "/"
+			}
+			uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
+			c, err := githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
+			Expect(err).NotTo(HaveOccurred())
+			return c
+		}
+		c, err := githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"))
+		Expect(err).NotTo(HaveOccurred())
+		return c
+	}
+
+	// Live mode: use GitHub App installation token via go-githubapp
+	cfg := githubapp.Config{
+		WebURL:   strings.TrimSpace(TEST_ENV["GITHUB_WEB_URL"]),
+		V3APIURL: strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"]),
+	}
+	cfg.App.IntegrationID = GITHUB_INTEGRATION_ID
+	cfg.App.PrivateKey = strings.TrimSpace(TEST_ENV["GITHUB_PRIVATE_KEY"])
+
+	cc, err := githubapp.NewDefaultCachingClientCreator(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	c, err := cc.NewInstallationClient(GITHUB_INSTALLATION_ID)
+	Expect(err).NotTo(HaveOccurred())
+	return c
 }
 
 func initSharedResources() {

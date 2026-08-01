@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	githubAPI "github.com/google/go-github/v89/github"
@@ -61,26 +60,7 @@ var _ = Describe("Github Organization controller - repository team assignments",
 		ctx = context.Background()
 
 		orgName = requireEnv("ORGANIZATION")
-		var clientErr error
-		client, clientErr = githubAPI.NewClient(githubAPI.WithAuthToken(requireEnv("GITHUB_TOKEN")))
-		Expect(clientErr).NotTo(HaveOccurred())
-		if isMockMode() {
-			// In mock mode point the client at the mock server so that any direct
-			// API calls (e.g. cleanup in DeferCleanup) never hit api.github.com.
-			v3URL := strings.TrimSpace(TEST_ENV["GITHUB_V3_API_URL"])
-			if v3URL != "" {
-				if !strings.HasSuffix(v3URL, "/") {
-					v3URL += "/"
-				}
-				// uploadURL must be the server root so that go-github appends
-				// "/api/uploads" correctly; passing v3URL would produce
-				// "…/api/v3/api/uploads".
-				uploadURL := strings.TrimSuffix(v3URL, "api/v3/")
-				var err error
-				client, err = githubAPI.NewClient(githubAPI.WithAuthToken("mock-token"), githubAPI.WithEnterpriseURLs(v3URL, uploadURL))
-				Expect(err).NotTo(HaveOccurred())
-			}
-		}
+		client = newTestGithubClient()
 
 		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNS = "ns-repo-" + uniqueID
