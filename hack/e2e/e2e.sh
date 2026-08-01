@@ -1378,14 +1378,34 @@ cmd_install_crds() {
 # Implementation note: JWT generation is done entirely with openssl + standard
 # POSIX tools; no extra dependencies (Python, jq for signing) are needed.
 github_get_installation_token() {
-  local app_id integration_id installation_id api private_key_pem
+  local integration_id installation_id api private_key_pem
 
-  integration_id=$(read_env_var GITHUB_INTEGRATION_ID)
-  installation_id=$(read_env_var GITHUB_INSTALLATION_ID)
-  api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
+  # Read values preferring process environment (TEST_* prefix first, then plain),
+  # falling back to test.env via read_env_var.  This mirrors the convention used
+  # by gen-values.sh and the nightly workflow (TEST_GITHUB_PRIVATE_KEY env var).
+  _read_app_var() {
+    local name=$1 v=""
+    # 1. TEST_<name> from env
+    eval "v=\"\${TEST_${name}:-}\""
+    [[ -n "$v" ]] && { printf '%s' "$v"; return; }
+    # 2. plain <name> from env
+    eval "v=\"\${${name}:-}\""
+    [[ -n "$v" ]] && { printf '%s' "$v"; return; }
+    # 3. test.env file
+    read_env_var "$name"
+  }
+
+  integration_id=$(_read_app_var GITHUB_INTEGRATION_ID)
+  installation_id=$(_read_app_var GITHUB_INSTALLATION_ID)
+  api="${GITHUB_API:-$(_read_app_var GITHUB_V3_API_URL)}"
   # Strip trailing slash for consistent URL construction
   api="${api%/}"
-  private_key_pem=$(read_env_var GITHUB_PRIVATE_KEY)
+  private_key_pem=$(_read_app_var GITHUB_PRIVATE_KEY)
+
+  # Normalize literal \n sequences (GitHub Actions injects multiline secrets this way)
+  if [[ "$private_key_pem" == *'\\n'* ]]; then
+    private_key_pem=$(printf '%b' "$private_key_pem")
+  fi
 
   if [[ -z "$integration_id" || -z "$installation_id" || -z "$private_key_pem" ]]; then
     echo "[$(ts)] ERROR: GITHUB_INTEGRATION_ID, GITHUB_INSTALLATION_ID, and GITHUB_PRIVATE_KEY must be set for GitHub App token generation" >&2
