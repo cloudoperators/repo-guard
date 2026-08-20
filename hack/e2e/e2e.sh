@@ -1481,11 +1481,27 @@ github_delete_team() {
 
 github_list_repos_json() {
   local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
-  local org=$(read_env_var ORGANIZATION)
+  local org
+  org=$(read_env_var ORGANIZATION)
   local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
-  curl -sS -o /tmp/repos.json -w "%{http_code}" \
-    -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
-    "${api}/orgs/${org}/repos?per_page=100"
+  local page=1 all="[]" batch code
+  while true; do
+    code=$(curl -sS -o /tmp/repos_page.json -w "%{http_code}" \
+      -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
+      "${api}/orgs/${org}/repos?per_page=100&page=${page}")
+    if [[ "$code" != "200" ]]; then
+      echo "$code"
+      return
+    fi
+    batch=$(cat /tmp/repos_page.json)
+    if [[ "$(echo "$batch" | jq 'length')" == "0" ]]; then
+      break
+    fi
+    all=$(echo "$all" "$batch" | jq -s 'add')
+    ((page++))
+  done
+  echo "$all" > /tmp/repos.json
+  echo "200"
 }
 
 github_delete_repo() {

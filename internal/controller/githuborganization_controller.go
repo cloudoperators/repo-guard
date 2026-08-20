@@ -1182,6 +1182,23 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						err := reposProvider.RepositoryTeamAdd(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team, repositoryTeamOperation.Permission)
 						if err != nil {
 							errMsg := err.Error()
+							if t, ok := parseGitHubRateLimitReset(errMsg); ok {
+								recordOrgRateLimitHit(errMsg, t)
+								now := time.Now().UTC()
+								newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+								newStatus.OrganizationStatusError = "rate limited during repository team add: " + errMsg
+								newStatus.OrganizationStatusTimestamp = metav1.Now()
+								ns := *newStatus
+								uerr := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
+								if uerr != nil {
+									l.Error(uerr, "error during status update")
+									return reconcile.Result{}, uerr
+								}
+								if t.After(now) {
+									return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+								}
+								return reconcile.Result{Requeue: true}, nil
+							}
 							// 422 "This repository is locked and cannot be modified." — skip permanently;
 							// retrying will never succeed and only bloats the status.
 							if strings.Contains(errMsg, "422") && strings.Contains(errMsg, "This repository is locked") {
@@ -1219,9 +1236,27 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					} else {
 						err := reposProvider.RepositoryTeamRemove(ctx, repositoryTeamOperation.Repo, repositoryTeamOperation.Team)
 						if err != nil {
+							errMsg := err.Error()
+							if t, ok := parseGitHubRateLimitReset(errMsg); ok {
+								recordOrgRateLimitHit(errMsg, t)
+								now := time.Now().UTC()
+								newStatus.OrganizationStatus = v1.GithubOrganizationStateRateLimited
+								newStatus.OrganizationStatusError = "rate limited during repository team remove: " + errMsg
+								newStatus.OrganizationStatusTimestamp = metav1.Now()
+								ns := *newStatus
+								uerr := r.safeStatusUpdate(ctx, req, &ns, githubOrganization, githubName)
+								if uerr != nil {
+									l.Error(uerr, "error during status update")
+									return reconcile.Result{}, uerr
+								}
+								if t.After(now) {
+									return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
+								}
+								return reconcile.Result{Requeue: true}, nil
+							}
 							l.Error(err, "error during removing repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
-							newStatus.Operations.RepositoryTeamOperations[i].Error = err.Error()
+							newStatus.Operations.RepositoryTeamOperations[i].Error = errMsg
 							newStatus.Operations.RepositoryTeamOperations[i].Timestamp = metav1.Now()
 							statusChanged = true
 							failed = true
