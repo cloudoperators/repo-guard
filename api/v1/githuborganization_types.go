@@ -93,9 +93,10 @@ type GithubTeamWithPermission struct {
 type GithubTeamPermission string
 
 const (
-	GithubTeamPermissionAdmin = "admin"
-	GithubTeamPermissionPush  = "push"
-	GithubTeamPermissionPull  = "pull"
+	GithubTeamPermissionAdmin        = "admin"
+	GithubTeamPermissionAdminOndemand = "admin-ondemand"
+	GithubTeamPermissionPush         = "push"
+	GithubTeamPermissionPull         = "pull"
 )
 
 // GithubOrganizationStatus defines the observed state of GithubOrganization
