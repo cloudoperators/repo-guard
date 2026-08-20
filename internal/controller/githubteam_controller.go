@@ -110,7 +110,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return reconcile.Result{}, err
 		}
 		l.Info("forceReconcile label detected: status cleared, requeueing")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// If previously rate-limited, honor retry time from the stored error message
@@ -372,7 +372,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	githubClient = GithubClients[githubName]
 	if githubClient == nil {
 		l.Info("waiting for github to be initialized", "github", githubName)
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// check for github organization
@@ -498,7 +498,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during listing organization teams")
 			if isEtagCacheInconsistency(err) {
 				// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				recordTeamRateLimitHit(err.Error(), t)
@@ -513,7 +513,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				if t.After(now) {
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			return reconcile.Result{}, err
 		}
@@ -542,12 +542,12 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					if t.After(now) {
 						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 					}
-					return reconcile.Result{Requeue: true}, nil
+					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
 				return reconcile.Result{}, err
 			}
 			l.Info("team is added to Github, resource will be reconciled")
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{RequeueAfter: time.Second}, nil
 		}
 
 		// If there is a team -- check for its members in Github
@@ -556,7 +556,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			l.Error(err, "error during getting the members of the team in Github")
 			if isEtagCacheInconsistency(err) {
 				// Cache was stale; provider already invalidated it. Requeue for a fresh fetch.
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			if t, ok := parseGitHubRateLimitReset(err.Error()); ok {
 				recordTeamRateLimitHit(err.Error(), t)
@@ -571,7 +571,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 				if t.After(now) {
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			return reconcile.Result{}, err
 		}
@@ -1094,7 +1094,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, err
 				}
 				l.Error(err, "dry run mode set, resource is sent to requeue")
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 		} else {
 			// remove the dry run status if it is not enabled
@@ -1121,7 +1121,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 					return reconcile.Result{}, err
 				}
 				l.Error(err, "resource is sent to requeue")
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 
 		}
@@ -1164,7 +1164,7 @@ func (r *GithubTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			}
 			// Requeue so the next reconcile runs the non-pending path and refreshes
 			// Status.Members from GitHub — required for ownersFromGithubTeams to find owners.
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{RequeueAfter: time.Second}, nil
 		}
 
 		l.Info("there are pending operations in the status")

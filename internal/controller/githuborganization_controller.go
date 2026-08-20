@@ -138,7 +138,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 			return reconcile.Result{}, err
 		}
 		l.Info("forceReconcile label detected: status cleared, requeueing")
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// If previously rate-limited, honor retry time from the stored error message
@@ -381,7 +381,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if t.After(now) {
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting organization owners: " + err.Error()
@@ -414,7 +414,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if t.After(now) {
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error in getting teams: " + err.Error()
@@ -447,7 +447,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				if t.After(now) {
 					return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 				}
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateFailed
 			githubOrganization.Status.OrganizationStatusError = "error listing repositories: " + err.Error()
@@ -725,7 +725,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if t.After(now) {
 						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 					}
-					return reconcile.Result{Requeue: true}, nil
+					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
 				// non-rate-limit error: return so controller-runtime retries with backoff
 				l.Error(err, "org-member calculator: error fetching org members, requeueing")
@@ -747,7 +747,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 							if t.After(now) {
 								teamMembersRateLimitResult = &reconcile.Result{RequeueAfter: t.Sub(now)}
 							} else {
-								teamMembersRateLimitResult = &reconcile.Result{Requeue: true}
+								teamMembersRateLimitResult = &reconcile.Result{RequeueAfter: time.Second}
 							}
 							teamMembersRateLimitErr = merr.Error()
 							break
@@ -771,7 +771,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				}
 				if teamMembersEtagRequeue {
 					// Etag cache inconsistency is a transient condition; requeue without updating status.
-					return reconcile.Result{Requeue: true}, nil
+					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
 				if teamMembersRateLimitResult != nil {
 					githubOrganization.Status.OrganizationStatus = v1.GithubOrganizationStateRateLimited
@@ -847,7 +847,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 						if t.After(now) {
 							return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 						}
-						return reconcile.Result{Requeue: true}, nil
+						return reconcile.Result{RequeueAfter: time.Second}, nil
 					}
 					l.Error(err, "repo-collab calculator: error fetching collaborators, skipping repo", "repo", repo.Name)
 					continue
@@ -915,7 +915,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return reconcile.Result{}, err
 				}
 				l.Error(err, "dry run mode set, resource is sent to requeue")
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 		} else {
 			// remove the dry run status if it is not enabled
@@ -944,7 +944,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					return reconcile.Result{}, err
 				}
 				l.Error(err, "resource is sent to requeue")
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 		}
 	}
@@ -1197,7 +1197,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 								if t.After(now) {
 									return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 								}
-								return reconcile.Result{Requeue: true}, nil
+								return reconcile.Result{RequeueAfter: time.Second}, nil
 							}
 							// 422 "This repository is locked and cannot be modified." — skip permanently;
 							// retrying will never succeed and only bloats the status.
@@ -1252,7 +1252,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 								if t.After(now) {
 									return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 								}
-								return reconcile.Result{Requeue: true}, nil
+								return reconcile.Result{RequeueAfter: time.Second}, nil
 							}
 							l.Error(err, "error during removing repository&team", "repository", repositoryTeamOperation.Repo, "team", repositoryTeamOperation.Team)
 							newStatus.Operations.RepositoryTeamOperations[i].State = v1.GithubRepoTeamOperationStateFailed
@@ -1350,7 +1350,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if t.After(now) {
 						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 					}
-					return reconcile.Result{Requeue: true}, nil
+					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
 				// "user not a member" (404) — treat as success/complete
 				if strings.Contains(err.Error(), "404") {
@@ -1451,7 +1451,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 					if t.After(now) {
 						return reconcile.Result{RequeueAfter: t.Sub(now)}, nil
 					}
-					return reconcile.Result{Requeue: true}, nil
+					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
 				// "user not found" (404) — treat as success/complete
 				if strings.Contains(err.Error(), "user not found in github") {
