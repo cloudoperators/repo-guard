@@ -102,25 +102,22 @@ const (
 // PermissionsMatch reports whether the permission observed on GitHub is
 // equivalent to the configured permission.
 //
-// admin-ondemand is a GitHub Enterprise custom repository role with base_role
-// "read". The GitHub GraphQL API does not expose custom role names on
+// admin-ondemand is a GitHub Enterprise custom repository role that inherits
+// Read. The GitHub GraphQL API does not expose custom role names on
 // TeamRepositoryEdge — it returns the RepositoryPermission enum for the
-// base_role instead, which is READ for admin-ondemand. The REST
-// GET /repos/{org}/{repo}/teams endpoint does return the custom role name
-// correctly as "admin-ondemand", but the controller uses GraphQL for bulk
-// fetching. To avoid an endless remove→re-add loop, any observed permission
-// is treated as matching when the configured permission is "admin-ondemand",
-// since the REST add call correctly assigns the custom role and GraphQL
-// cannot report it accurately.
+// inherited base role instead. Because admin-ondemand inherits Read, GraphQL
+// returns READ, which maps internally to "pull". The REST
+// GET /repos/{org}/{repo}/teams endpoint returns the custom role name
+// ("admin-ondemand") correctly, but the controller uses GraphQL for bulk
+// fetching. Therefore "pull" observed via GraphQL must be treated as
+// equivalent to a configured "admin-ondemand" to prevent an endless
+// remove→re-add reconcile loop.
 func PermissionsMatch(actual, configured GithubTeamPermission) bool {
 	if actual == configured {
 		return true
 	}
-	if configured == GithubTeamPermissionAdminOndemand {
-		// GraphQL returns the base_role (READ→"pull", ADMIN→"admin") rather than
-		// the custom role name. Accept any observed permission as matching so that
-		// a correctly-assigned admin-ondemand team is not endlessly removed and
-		// re-added.
+	// admin-ondemand inherits Read: GraphQL returns READ → "pull" for it.
+	if configured == GithubTeamPermissionAdminOndemand && actual == GithubTeamPermissionPull {
 		return true
 	}
 	return false
