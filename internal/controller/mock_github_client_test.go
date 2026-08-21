@@ -6,7 +6,7 @@ package controller
 import (
 	"net/http"
 
-	gogithub "github.com/google/go-github/v89/github"
+	gogithub "github.com/google/go-github/v90/github"
 	githubv4 "github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
