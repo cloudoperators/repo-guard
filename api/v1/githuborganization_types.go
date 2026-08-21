@@ -68,7 +68,7 @@ func GithubTeamWithPermissionListContentSame(github, kubernetes []GithubTeamWith
 		for _, k := range kubernetes {
 
 			if g.Team == k.Team {
-				if g.Permission != k.Permission {
+				if !PermissionsMatch(g.Permission, k.Permission) {
 					return false
 				}
 				found = true
@@ -98,6 +98,26 @@ const (
 	GithubTeamPermissionPush          = "push"
 	GithubTeamPermissionPull          = "pull"
 )
+
+// PermissionsMatch reports whether the permission observed on GitHub is
+// equivalent to the configured permission.
+//
+// admin-ondemand is a GitHub Enterprise custom repository role. The GitHub
+// GraphQL API does not expose custom role names on TeamRepositoryEdge — it
+// returns the standard RepositoryPermission enum value for the effective
+// access level instead. Because the custom role is based on "admin" access,
+// GitHub returns ADMIN (mapped to "admin" internally). Therefore "admin" and
+// "admin-ondemand" must be treated as equivalent to prevent an endless
+// remove→re-add reconcile loop.
+func PermissionsMatch(actual, configured GithubTeamPermission) bool {
+	if actual == configured {
+		return true
+	}
+	isAdminClass := func(p GithubTeamPermission) bool {
+		return p == GithubTeamPermissionAdmin || p == GithubTeamPermissionAdminOndemand
+	}
+	return isAdminClass(actual) && isAdminClass(configured)
+}
 
 // GithubOrganizationStatus defines the observed state of GithubOrganization
 type GithubOrganizationStatus struct {
@@ -458,7 +478,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 			for _, team := range repo.Teams {
 				if team.Team == configTeamSlug {
 					configTeamFound = true
-					if team.Permission != configTeam.Permission {
+					if !PermissionsMatch(team.Permission, configTeam.Permission) {
 						// remove the team and add it with the config permission
 
 						// check if there is any existing task (pending, complete, failed, etc.)
@@ -540,7 +560,7 @@ func repoChangeCalculator(defaultConfig []GithubTeamWithPermission, actual []Git
 				configTeamSlug := slug.Make(configTeam.Team)
 				if team.Team == configTeamSlug {
 					repoTeamFound = true
-					if team.Permission != configTeam.Permission {
+					if !PermissionsMatch(team.Permission, configTeam.Permission) {
 						// remove the team and add it with the config permission
 
 						// check if there is any existing task (pending, complete, failed, etc.)

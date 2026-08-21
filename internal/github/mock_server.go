@@ -1037,7 +1037,7 @@ func restPermissionToGraphQL(p string) string {
 		return "WRITE"
 	case "pull":
 		return "READ"
-	case "admin":
+	case "admin", "admin-ondemand":
 		return "ADMIN"
 	case "maintain":
 		return "MAINTAIN"
