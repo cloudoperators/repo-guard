@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	gogithub "github.com/google/go-github/v89/github"
+	gogithub "github.com/google/go-github/v90/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
 
