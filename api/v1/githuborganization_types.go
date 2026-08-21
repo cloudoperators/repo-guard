@@ -102,21 +102,28 @@ const (
 // PermissionsMatch reports whether the permission observed on GitHub is
 // equivalent to the configured permission.
 //
-// admin-ondemand is a GitHub Enterprise custom repository role. The GitHub
-// GraphQL API does not expose custom role names on TeamRepositoryEdge — it
-// returns the standard RepositoryPermission enum value for the effective
-// access level instead. Because the custom role is based on "admin" access,
-// GitHub returns ADMIN (mapped to "admin" internally). Therefore "admin" and
-// "admin-ondemand" must be treated as equivalent to prevent an endless
-// remove→re-add reconcile loop.
+// admin-ondemand is a GitHub Enterprise custom repository role with base_role
+// "read". The GitHub GraphQL API does not expose custom role names on
+// TeamRepositoryEdge — it returns the RepositoryPermission enum for the
+// base_role instead, which is READ for admin-ondemand. The REST
+// GET /repos/{org}/{repo}/teams endpoint does return the custom role name
+// correctly as "admin-ondemand", but the controller uses GraphQL for bulk
+// fetching. To avoid an endless remove→re-add loop, any observed permission
+// is treated as matching when the configured permission is "admin-ondemand",
+// since the REST add call correctly assigns the custom role and GraphQL
+// cannot report it accurately.
 func PermissionsMatch(actual, configured GithubTeamPermission) bool {
 	if actual == configured {
 		return true
 	}
-	isAdminClass := func(p GithubTeamPermission) bool {
-		return p == GithubTeamPermissionAdmin || p == GithubTeamPermissionAdminOndemand
+	if configured == GithubTeamPermissionAdminOndemand {
+		// GraphQL returns the base_role (READ→"pull", ADMIN→"admin") rather than
+		// the custom role name. Accept any observed permission as matching so that
+		// a correctly-assigned admin-ondemand team is not endlessly removed and
+		// re-added.
+		return true
 	}
-	return isAdminClass(actual) && isAdminClass(configured)
+	return false
 }
 
 // GithubOrganizationStatus defines the observed state of GithubOrganization
