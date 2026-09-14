@@ -31,7 +31,11 @@ metadata:
     repo-guard.cloudoperators.dev/github-instance: "{{ $githubInstance }}"
     repo-guard.cloudoperators.dev/github-instance-key: "{{ $org.githubInstanceKey | default $org.github }}"
     repo-guard.cloudoperators.dev/default-ldap-provider: "{{ $org.defaultLdapProvider | default "" }}"
-    repo-guard.cloudoperators.dev/admin-permission: "{{ $org.adminPermission | default "admin" }}"
+    {{- $adminPermission := $org.adminPermission | default "admin" -}}
+    {{- if and $org.adminPermission (not (or (eq $org.adminPermission "admin") (eq $org.adminPermission "admin-ondemand"))) -}}
+      {{- fail (printf "githubOrganizations[].adminPermission must be \"admin\" or \"admin-ondemand\", got %q" $org.adminPermission) -}}
+    {{- end }}
+    repo-guard.cloudoperators.dev/admin-permission: "{{ $adminPermission }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}
   {{- if $skipTeams }}
   annotations:
