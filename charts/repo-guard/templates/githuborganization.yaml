@@ -23,7 +23,9 @@ metadata:
     {{- $githubInstance := $org.githubInstanceHostname -}}
     {{- if not $githubInstance -}}
       {{- range $.Values.githubs -}}
-        {{- if eq .name $org.github -}}{{- $githubInstance = .webURL -}}{{- end -}}
+        {{- if eq .name $org.github -}}
+          {{- $githubInstance = (.webURL | trimPrefix "https://" | trimPrefix "http://") -}}
+        {{- end -}}
       {{- end -}}
     {{- end }}
     repo-guard.cloudoperators.dev/github-instance: "{{ $githubInstance }}"
