@@ -132,6 +132,13 @@ perses:
 #     # removeRepositoryDirectCollaborator. Typically includes bot accounts and the GitHub App user.
 #     protectedMembers: []
 #     disableInternalUsernames:
+#     # Operational labels consumed by Permission Manager for org lookup and team creation.
+#     # githubInstanceKey: defaults to the first segment of the 'github' field (e.g. "enterprise" from "enterprise.github.com")
+#     githubInstanceKey:
+#     # defaultLdapProvider: written by PM into spec.externalMemberProvider.ldap.provider on GithubTeams it creates for this org
+#     defaultLdapProvider:
+#     # adminPermission: "admin" or "admin-ondemand"; PM maps ADMIN role to this value (default: admin)
+#     adminPermission: admin
 #     # GithubAccountLink email verification settings applied to all GALs
 #     # associated with this GitHub (organization-level policy).
 #     # When set, the Helm chart will populate a JSON annotation on each
