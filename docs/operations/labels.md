@@ -27,8 +27,8 @@ These labels are set automatically by the Helm chart and are not intended to con
 
 | Key | Description | Default (Helm) |
 |---|---|---|
-| `repo-guard.cloudoperators.dev/github-instance` | Full GitHub hostname (e.g. `enterprise.github.com`). PM uses this as a label selector to find the org CR from a CCRN instance segment. Must be ≤ 63 characters (Kubernetes label value limit). | `spec.github` value |
-| `repo-guard.cloudoperators.dev/github-instance-key` | Key PM uses to construct CR names matching the repo-guard convention (`<instance-key>--<org>--<team-slug>`). Defaults to the full `spec.github` value, which matches how the Helm chart names `GithubOrganization` CRs. Override via `githubInstanceKey` in Helm values. | `spec.github` value |
+| `repo-guard.cloudoperators.dev/github-instance` | GitHub hostname (e.g. `enterprise.github.com`). PM uses this as a label selector to find the org CR from a CCRN instance segment (the `<instance>` path component, which is the full hostname). Defaults to the `webURL` of the matching `githubs[]` entry; override via `githubInstanceHostname` in Helm values. Must be ≤ 63 characters (Kubernetes label value limit). | `githubs[].webURL` for the matching `github` key |
+| `repo-guard.cloudoperators.dev/github-instance-key` | Short key PM uses as the naming prefix in repo-guard's `<instance-key>--<org>--<team-slug>` CR convention. Defaults to `spec.github` (the `Github` CR name), which is the same prefix the Helm chart uses when naming `GithubOrganization` CRs. Override via `githubInstanceKey` in Helm values. | `spec.github` value (the `Github` CR name) |
 | `repo-guard.cloudoperators.dev/default-ldap-provider` | LDAP provider name PM writes into `spec.externalMemberProvider.ldap.provider` on each `GithubTeam` it creates for this org. Empty string when not set. | `""` |
 | `repo-guard.cloudoperators.dev/admin-permission` | Permission string PM uses when mapping the `ADMIN` role for this org. Either `"admin"` or `"admin-ondemand"`. | `"admin"` |
 

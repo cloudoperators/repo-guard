@@ -133,7 +133,11 @@ perses:
 #     protectedMembers: []
 #     disableInternalUsernames:
 #     # Operational labels consumed by Permission Manager for org lookup and team creation.
-#     # githubInstanceKey: defaults to the 'github' field value; used as the prefix in CR names (<instance-key>--<org>--<slug>)
+#     # githubInstanceHostname: GitHub hostname PM uses as a label selector to find this org CR from a CCRN instance segment.
+#     #   Defaults to the webURL of the matching githubs[] entry. Override only if the webURL is not set or a different value is needed.
+#     githubInstanceHostname:
+#     # githubInstanceKey: short key PM uses as the prefix in CR names (<instance-key>--<org>--<team-slug>).
+#     #   Defaults to the 'github' field value (the Github CR name), which matches how Helm names GithubOrganization CRs.
 #     githubInstanceKey:
 #     # defaultLdapProvider: written by PM into spec.externalMemberProvider.ldap.provider on GithubTeams it creates for this org
 #     defaultLdapProvider:
