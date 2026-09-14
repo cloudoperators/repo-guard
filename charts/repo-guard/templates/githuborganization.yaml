@@ -20,11 +20,13 @@ metadata:
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
     repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
     repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
-    {{- $githubInstance := $org.githubInstanceHostname -}}
+    {{- $githubInstance := $org.githubInstanceHostname | default "" -}}
     {{- if not $githubInstance -}}
       {{- range $.Values.githubs -}}
         {{- if eq .name $org.github -}}
-          {{- $githubInstance = (.webURL | trimPrefix "https://" | trimPrefix "http://") -}}
+          {{- $webURL := .webURL | default "" -}}
+          {{- $host := ($webURL | trimPrefix "https://" | trimPrefix "http://") -}}
+          {{- $githubInstance = (splitList ":" $host | first) -}}
         {{- end -}}
       {{- end -}}
     {{- end }}
