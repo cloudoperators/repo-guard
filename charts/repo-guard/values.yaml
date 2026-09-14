@@ -133,7 +133,7 @@ perses:
 #     protectedMembers: []
 #     disableInternalUsernames:
 #     # Operational labels consumed by Permission Manager for org lookup and team creation.
-#     # githubInstanceKey: defaults to the first segment of the 'github' field (e.g. "enterprise" from "enterprise.github.com")
+#     # githubInstanceKey: defaults to the 'github' field value; used as the prefix in CR names (<instance-key>--<org>--<slug>)
 #     githubInstanceKey:
 #     # defaultLdapProvider: written by PM into spec.externalMemberProvider.ldap.provider on GithubTeams it creates for this org
 #     defaultLdapProvider:

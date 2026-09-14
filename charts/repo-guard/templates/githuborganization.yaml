@@ -21,7 +21,7 @@ metadata:
     repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
     repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
     repo-guard.cloudoperators.dev/github-instance: "{{ $org.github }}"
-    repo-guard.cloudoperators.dev/github-instance-key: "{{ $org.githubInstanceKey | default ($org.github | splitList "." | first) }}"
+    repo-guard.cloudoperators.dev/github-instance-key: "{{ $org.githubInstanceKey | default $org.github }}"
     repo-guard.cloudoperators.dev/default-ldap-provider: "{{ $org.defaultLdapProvider | default "" }}"
     repo-guard.cloudoperators.dev/admin-permission: "{{ $org.adminPermission | default "admin" }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}

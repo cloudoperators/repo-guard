@@ -21,6 +21,17 @@ Labels control the behavior of Repo Guard controllers. All labels live under `me
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration (e.g. `1h`, `30m`) | Clears failed operations and failed status after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration (e.g. `24h`) | Clears completed operations after the duration since last status timestamp. | Not set |
 
+**Operational labels (read by Permission Manager):**
+
+These labels are set automatically by the Helm chart and are not intended to control reconciler behaviour. They allow Permission Manager to locate a `GithubOrganization` CR via label selectors and read org-level config without parsing `spec` fields.
+
+| Key | Description | Default (Helm) |
+|---|---|---|
+| `repo-guard.cloudoperators.dev/github-instance` | Full GitHub hostname (e.g. `enterprise.github.com`). PM uses this as a label selector to find the org CR from a CCRN instance segment. Must be ≤ 63 characters (Kubernetes label value limit). | `spec.github` value |
+| `repo-guard.cloudoperators.dev/github-instance-key` | Key PM uses to construct CR names matching the repo-guard convention (`<instance-key>--<org>--<team-slug>`). Defaults to the full `spec.github` value, which matches how the Helm chart names `GithubOrganization` CRs. Override via `githubInstanceKey` in Helm values. | `spec.github` value |
+| `repo-guard.cloudoperators.dev/default-ldap-provider` | LDAP provider name PM writes into `spec.externalMemberProvider.ldap.provider` on each `GithubTeam` it creates for this org. Empty string when not set. | `""` |
+| `repo-guard.cloudoperators.dev/admin-permission` | Permission string PM uses when mapping the `ADMIN` role for this org. Either `"admin"` or `"admin-ondemand"`. | `"admin"` |
+
 **Annotation:**
 
 | Key | Description |
