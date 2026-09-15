@@ -138,6 +138,9 @@ perses:
 #     githubInstanceHostname:
 #     # githubInstanceKey: short key PM uses as the prefix in CR names (<instance-key>--<org>--<team-slug>).
 #     #   Defaults to the 'github' field value (the Github CR name), which matches how Helm names GithubOrganization CRs.
+#     #   WARNING: overriding this value causes the label to advertise a prefix that differs from the one Helm uses when
+#     #   naming GithubOrganization, GithubTeam, and GithubTeamRepository CRs (all of which are prefixed with $org.github).
+#     #   Only override if you are also renaming those CRs to match.
 #     githubInstanceKey:
 #     # defaultLdapProvider: written by PM into spec.externalMemberProvider.ldap.provider on GithubTeams it creates for this org
 #     defaultLdapProvider:

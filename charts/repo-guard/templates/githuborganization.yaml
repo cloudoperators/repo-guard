@@ -23,7 +23,7 @@ metadata:
     {{- $githubInstance := $org.githubInstanceHostname | default "" -}}
     {{- if not $githubInstance -}}
       {{- range $.Values.githubs -}}
-        {{- if eq .name $org.github -}}
+        {{- if eq (.name | lower) ($org.github | lower) -}}
           {{- $webURL := .webURL | default "" -}}
           {{- $host := ($webURL | trimPrefix "https://" | trimPrefix "http://") -}}
           {{- $githubInstance = (splitList ":" $host | first | splitList "/" | first) -}}
