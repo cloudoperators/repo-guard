@@ -20,6 +20,47 @@ metadata:
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
     repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.organization.failed) }}"
     repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.organization.completed) }}"
+    {{- $githubInstance := $org.githubInstanceHostname | default "" -}}
+    {{- if not $githubInstance -}}
+      {{- range $.Values.githubs -}}
+        {{- if eq (.name | lower) ($org.github | lower) -}}
+          {{- $webURL := .webURL | default "" -}}
+          {{- $host := ($webURL | trimPrefix "https://" | trimPrefix "http://") -}}
+          {{- $githubInstance = (splitList ":" $host | first | splitList "/" | first) -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if gt (len $githubInstance) 63 -}}
+      {{- fail (printf "github-instance label value exceeds 63 characters (got %d): %q — set githubInstanceHostname to a shorter value" (len $githubInstance) $githubInstance) -}}
+    {{- end -}}
+    {{- if and $githubInstance (not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$" $githubInstance)) -}}
+      {{- fail (printf "github-instance label value is not a valid Kubernetes label value: %q — must start and end with alphanumeric, set githubInstanceHostname to a valid value" $githubInstance) -}}
+    {{- end }}
+    repo-guard.cloudoperators.dev/github-instance: "{{ $githubInstance }}"
+    {{- $githubInstanceKey := $org.githubInstanceKey | default $org.github -}}
+    {{- if gt (len $githubInstanceKey) 63 -}}
+      {{- fail (printf "github-instance-key label value exceeds 63 characters (got %d): %q — set githubInstanceKey to a shorter value" (len $githubInstanceKey) $githubInstanceKey) -}}
+    {{- end -}}
+    {{- if and $githubInstanceKey (not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$" $githubInstanceKey)) -}}
+      {{- fail (printf "github-instance-key label value is not a valid Kubernetes label value: %q — must start and end with alphanumeric, set githubInstanceKey to a valid value" $githubInstanceKey) -}}
+    {{- end }}
+    repo-guard.cloudoperators.dev/github-instance-key: "{{ $githubInstanceKey }}"
+    {{- $defaultLdapProvider := $org.defaultLdapProvider | default "" -}}
+    {{- if gt (len $defaultLdapProvider) 63 -}}
+      {{- fail (printf "default-ldap-provider label value exceeds 63 characters (got %d): %q — set defaultLdapProvider to a shorter value" (len $defaultLdapProvider) $defaultLdapProvider) -}}
+    {{- end -}}
+    {{- if and $defaultLdapProvider (not (regexMatch "^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$" $defaultLdapProvider)) -}}
+      {{- fail (printf "default-ldap-provider label value is not a valid Kubernetes label value: %q — must start and end with alphanumeric, set defaultLdapProvider to a valid value" $defaultLdapProvider) -}}
+    {{- end }}
+    repo-guard.cloudoperators.dev/default-ldap-provider: "{{ $defaultLdapProvider }}"
+    {{- if and (hasKey $org "adminPermission") (not (kindIs "string" $org.adminPermission)) -}}
+      {{- fail (printf "githubOrganizations[].adminPermission must be a string (\"admin\" or \"admin-ondemand\"), got %v" $org.adminPermission) -}}
+    {{- end -}}
+    {{- if and (hasKey $org "adminPermission") (kindIs "string" $org.adminPermission) (not (or (eq $org.adminPermission "admin") (eq $org.adminPermission "admin-ondemand"))) -}}
+      {{- fail (printf "githubOrganizations[].adminPermission must be \"admin\" or \"admin-ondemand\", got %q" $org.adminPermission) -}}
+    {{- end -}}
+    {{- $adminPermission := $org.adminPermission | default "admin" }}
+    repo-guard.cloudoperators.dev/admin-permission: "{{ $adminPermission }}"
   {{- $skipTeams := join "," $org.skipDefaultRepositoryTeams }}
   {{- if $skipTeams }}
   annotations:

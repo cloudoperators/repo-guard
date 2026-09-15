@@ -21,6 +21,17 @@ Labels control the behavior of Repo Guard controllers. All labels live under `me
 | `repo-guard.cloudoperators.dev/failedTTL` | Go duration (e.g. `1h`, `30m`) | Clears failed operations and failed status after the duration since last status timestamp. | Not set |
 | `repo-guard.cloudoperators.dev/completedTTL` | Go duration (e.g. `24h`) | Clears completed operations after the duration since last status timestamp. | Not set |
 
+**Operational labels (read by Permission Manager):**
+
+These labels are set automatically by the Helm chart and are not intended to control reconciler behaviour. They allow Permission Manager to locate a `GithubOrganization` CR via label selectors and read org-level config without parsing `spec` fields.
+
+| Key | Description | Default (Helm) |
+|---|---|---|
+| `repo-guard.cloudoperators.dev/github-instance` | GitHub hostname (e.g. `github.com`, `github.wdf.sap.corp`). PM uses this as a label selector to find the org CR from a CCRN instance segment (the `<instance>` path component, which is the full hostname). Derived from `githubs[].webURL` of the matching entry (scheme, port, and path stripped — e.g. `https://host:8080/base/` → `host`); override via `githubInstanceHostname` in Helm values. Must be a valid Kubernetes label value (≤ 63 chars, starts and ends with alphanumeric). | `githubs[].webURL` (scheme, port, and path stripped) for the matching `github` key |
+| `repo-guard.cloudoperators.dev/github-instance-key` | Short key PM uses as the naming prefix in repo-guard's `<instance-key>--<org>--<team-slug>` CR convention. Defaults to `spec.github` (the `Github` CR name), which is the same prefix the Helm chart uses when naming `GithubOrganization` CRs. Override via `githubInstanceKey` in Helm values. | `spec.github` value (the `Github` CR name) |
+| `repo-guard.cloudoperators.dev/default-ldap-provider` | LDAP provider name PM writes into `spec.externalMemberProvider.ldap.provider` on each `GithubTeam` it creates for this org. Empty string when not set. | `""` |
+| `repo-guard.cloudoperators.dev/admin-permission` | Permission string PM uses when mapping the `ADMIN` role for this org. Either `"admin"` or `"admin-ondemand"`. | `"admin"` |
+
 **Annotation:**
 
 | Key | Description |
