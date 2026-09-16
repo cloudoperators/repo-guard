@@ -60,6 +60,8 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:
@@ -72,6 +74,8 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:
@@ -84,6 +88,8 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:
@@ -128,6 +134,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object
@@ -257,6 +265,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object
@@ -273,6 +283,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object

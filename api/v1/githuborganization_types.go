@@ -93,7 +93,8 @@ type GithubRepository struct {
 	Teams []GithubTeamWithPermission `json:"teams,omitempty"`
 }
 type GithubTeamWithPermission struct {
-	Team       string               `json:"team,omitempty"`
+	// +kubebuilder:validation:Required
+	Team       string               `json:"team"`
 	Permission GithubTeamPermission `json:"permission,omitempty"`
 }
 
