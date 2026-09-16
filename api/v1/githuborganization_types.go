@@ -17,9 +17,16 @@ type GithubOrganizationSpec struct {
 	Github       string `json:"github,omitempty"`
 	Organization string `json:"organization,omitempty"`
 
-	OrganizationOwnerTeams         []string                   `json:"organizationOwnerTeams,omitempty"`
-	DefaultPublicRepositoryTeams   []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
-	DefaultPrivateRepositoryTeams  []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
+	// +listType=set
+	OrganizationOwnerTeams []string `json:"organizationOwnerTeams,omitempty"`
+	// +listType=map
+	// +listMapKey=team
+	DefaultPublicRepositoryTeams []GithubTeamWithPermission `json:"defaultPublicRepositoryTeams,omitempty"`
+	// +listType=map
+	// +listMapKey=team
+	DefaultPrivateRepositoryTeams []GithubTeamWithPermission `json:"defaultPrivateRepositoryTeams,omitempty"`
+	// +listType=map
+	// +listMapKey=team
 	DefaultInternalRepositoryTeams []GithubTeamWithPermission `json:"defaultInternalRepositoryTeams,omitempty"`
 
 	// ProtectedMembers is a list of GitHub logins that must never be removed by
