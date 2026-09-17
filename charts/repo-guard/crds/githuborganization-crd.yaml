@@ -60,8 +60,13 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - team
+                x-kubernetes-list-type: map
               defaultPrivateRepositoryTeams:
                 items:
                   properties:
@@ -69,8 +74,13 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - team
+                x-kubernetes-list-type: map
               defaultPublicRepositoryTeams:
                 items:
                   properties:
@@ -78,8 +88,13 @@ spec:
                       type: string
                     team:
                       type: string
+                  required:
+                  - team
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - team
+                x-kubernetes-list-type: map
               github:
                 type: string
               installationID:
@@ -91,6 +106,7 @@ spec:
                 items:
                   type: string
                 type: array
+                x-kubernetes-list-type: set
               protectedMembers:
                 description: |-
                   ProtectedMembers is a list of GitHub logins that must never be removed by
@@ -118,6 +134,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object
@@ -247,6 +265,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object
@@ -263,6 +283,8 @@ spec:
                             type: string
                           team:
                             type: string
+                        required:
+                        - team
                         type: object
                       type: array
                   type: object
