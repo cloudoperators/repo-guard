@@ -7,7 +7,7 @@
 apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubTeamRepository
 metadata:
-  name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}--{{ $assign.team | replace "_" "-" | replace " " "-" | lower }}--{{ $assign.permission }}
+  name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}--{{ $assign.team | toString | replace "_" "-" | replace " " "-" | lower }}--{{ $assign.permission }}
 spec:
   github: {{ $org.github }}
   organization: {{ $org.organization }}

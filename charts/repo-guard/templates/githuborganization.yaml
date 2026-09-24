@@ -5,7 +5,7 @@
 apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubOrganization
 metadata:
-  name: {{ $org.github }}--{{ $org.organization | replace "/" "-" | lower }}
+  name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}
   labels:
     repo-guard.cloudoperators.dev/addTeam: "{{ $org.addTeam | default "true" }}"
     repo-guard.cloudoperators.dev/removeTeam: "{{ $org.removeTeam | default "true" }}"
