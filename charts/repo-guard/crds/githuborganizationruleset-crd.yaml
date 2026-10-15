@@ -232,6 +232,11 @@ spec:
             - name
             - organization
             type: object
+            x-kubernetes-validations:
+            - message: github is immutable
+              rule: self.github == oldSelf.github
+            - message: organization is immutable
+              rule: self.organization == oldSelf.organization
           status:
             description: GithubOrganizationRulesetStatus defines the observed state
               of GithubOrganizationRuleset.

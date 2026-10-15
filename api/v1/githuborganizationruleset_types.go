@@ -140,6 +140,8 @@ type RulesetRules struct {
 }
 
 // GithubOrganizationRulesetSpec defines the desired state of GithubOrganizationRuleset.
+// +kubebuilder:validation:XValidation:rule="self.github == oldSelf.github",message="github is immutable"
+// +kubebuilder:validation:XValidation:rule="self.organization == oldSelf.organization",message="organization is immutable"
 type GithubOrganizationRulesetSpec struct {
 	// Github references the Github CR that holds the GitHub App credentials.
 	Github string `json:"github"`

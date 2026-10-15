@@ -5,11 +5,12 @@ package controller
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,6 +24,7 @@ import (
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
 	"github.com/cloudoperators/repo-guard/internal/github"
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
+	gogithub "github.com/google/go-github/v90/github"
 )
 
 const rulesetFinalizer = "repo-guard.cloudoperators.dev/ruleset"
@@ -53,7 +55,7 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 
 	rs := &v1.GithubOrganizationRuleset{}
 	if err = r.Get(ctx, req.NamespacedName, rs); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
@@ -73,21 +75,27 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 				}
 				orgCRName := fmt.Sprintf("%s--%s", strings.ToLower(githubName), strings.ToLower(orgName))
 				githubOrg := &v1.GithubOrganization{}
-				if getErr := r.Get(ctx, types.NamespacedName{Name: orgCRName, Namespace: req.Namespace}, githubOrg); getErr == nil {
-					rulesetProvider, provErr := github.NewRulesetProvider(cc, githubOrg.Spec.InstallationID, orgName)
-					if provErr == nil {
-						if delErr := rulesetProvider.Delete(ctx, *rs.Status.RulesetID); delErr != nil {
-							if resetAt, ok := parseGitHubRateLimitReset(delErr.Error()); ok {
-								return reconcile.Result{RequeueAfter: time.Until(resetAt) + time.Second}, nil
-							}
-							l.Error(delErr, "failed to delete ruleset from GitHub", "rulesetID", *rs.Status.RulesetID)
-						} else {
-							l.Info("deleted ruleset from GitHub", "rulesetID", *rs.Status.RulesetID, "name", rs.Spec.Name)
-						}
-					}
+				if getErr := r.Get(ctx, types.NamespacedName{Name: orgCRName, Namespace: req.Namespace}, githubOrg); getErr != nil {
+					// Can't look up the org — retain the finalizer and retry.
+					l.Error(getErr, "cannot look up GithubOrganization for ruleset deletion; retaining finalizer")
+					return reconcile.Result{}, getErr
 				}
+				rulesetProvider, provErr := github.NewRulesetProvider(cc, githubOrg.Spec.InstallationID, orgName)
+				if provErr != nil {
+					l.Error(provErr, "cannot create ruleset provider for deletion; retaining finalizer")
+					return reconcile.Result{}, provErr
+				}
+				if delErr := rulesetProvider.Delete(ctx, *rs.Status.RulesetID); delErr != nil {
+					if resetAt, ok := parseGitHubRateLimitReset(delErr.Error()); ok {
+						return reconcile.Result{RequeueAfter: time.Until(resetAt) + time.Second}, nil
+					}
+					// Retain the finalizer so the deletion is retried on the next reconcile.
+					l.Error(delErr, "failed to delete ruleset from GitHub; retaining finalizer", "rulesetID", *rs.Status.RulesetID)
+					return reconcile.Result{}, delErr
+				}
+				l.Info("deleted ruleset from GitHub", "rulesetID", *rs.Status.RulesetID, "name", rs.Spec.Name)
 			}
-			// Remove the finalizer so the object is garbage collected.
+			// Remote ruleset is gone (or never existed); remove the finalizer.
 			if removeErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				latest := &v1.GithubOrganizationRuleset{}
 				if getErr := r.Get(ctx, req.NamespacedName, latest); getErr != nil {
@@ -119,7 +127,7 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	// Resolve Github CR to get the installation ID.
 	githubInstance := &v1.Github{}
 	if err = r.Get(ctx, types.NamespacedName{Name: githubName}, githubInstance); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return r.fail(ctx, rs, "github CR not found: "+githubName)
 		}
 		return reconcile.Result{}, err
@@ -135,7 +143,7 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	orgCRName := fmt.Sprintf("%s--%s", strings.ToLower(githubName), strings.ToLower(orgName))
 	githubOrg := &v1.GithubOrganization{}
 	if err = r.Get(ctx, types.NamespacedName{Name: orgCRName, Namespace: req.Namespace}, githubOrg); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return r.fail(ctx, rs, "GithubOrganization not found: "+orgCRName)
 		}
 		return reconcile.Result{}, err
@@ -144,6 +152,12 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	rulesetProvider, err := github.NewRulesetProvider(cc, githubOrg.Spec.InstallationID, orgName)
 	if err != nil {
 		return r.fail(ctx, rs, "create ruleset provider: "+err.Error())
+	}
+
+	// Respect the dry-run label — log what would happen but skip GitHub mutations.
+	if rs.Labels[GITHUB_ORG_LABEL_DRY_RUN] == GITHUB_ORG_LABEL_DRY_RUN_ENABLED_VALUE {
+		l.Info("dry-run mode: skipping GitHub ruleset mutations", "name", rs.Spec.Name)
+		return r.succeed(ctx, rs)
 	}
 
 	// Adopt an existing ruleset by name if we don't have an ID yet.
@@ -190,6 +204,15 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 			if resetAt, ok := parseGitHubRateLimitReset(updateErr.Error()); ok {
 				return reconcile.Result{RequeueAfter: time.Until(resetAt) + time.Second}, nil
 			}
+			// If GitHub returns 404 the ruleset was deleted externally. Clear the
+			// stored ID so the next reconcile re-adopts or re-creates it.
+			if ghErr, ok := stderrors.AsType[*gogithub.ErrorResponse](updateErr); ok && ghErr.Response != nil && ghErr.Response.StatusCode == 404 {
+				if clearErr := r.setRulesetID(ctx, rs, 0); clearErr == nil {
+					rs.Status.RulesetID = nil
+				}
+				l.Info("ruleset no longer exists on GitHub; clearing ID to trigger re-creation", "name", rs.Spec.Name)
+				return reconcile.Result{Requeue: true}, nil
+			}
 			return r.fail(ctx, rs, "update ruleset: "+updateErr.Error())
 		}
 		l.Info("reconciled ruleset", "rulesetID", *rs.Status.RulesetID, "name", rs.Spec.Name)
@@ -198,10 +221,12 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	return r.succeed(ctx, rs)
 }
 
-// fail marks the resource as Failed with the given message and returns an empty result.
+// fail marks the resource as Failed with the given message and returns an error
+// so controller-runtime applies exponential backoff on the next reconcile.
 func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.GithubOrganizationRuleset, msg string) (reconcile.Result, error) {
-	log.FromContext(ctx).Error(fmt.Errorf("%s", msg), "ruleset reconcile failed")
-	updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	origErr := fmt.Errorf("%s", msg)
+	log.FromContext(ctx).Error(origErr, "ruleset reconcile failed")
+	_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &v1.GithubOrganizationRuleset{}
 		if err := r.Get(ctx, types.NamespacedName{Name: rs.Name, Namespace: rs.Namespace}, latest); err != nil {
 			return err
@@ -226,7 +251,8 @@ func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.G
 		)
 		return nil
 	})
-	return reconcile.Result{}, updateErr
+	// Return the original error so controller-runtime applies retry backoff.
+	return reconcile.Result{}, origErr
 }
 
 // succeed marks the resource as Ready.
@@ -255,13 +281,18 @@ func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v
 }
 
 // setRulesetID persists the adopted/created GitHub ruleset ID to status.
+// Pass id=0 to clear a stale ID (sets status.rulesetId to nil).
 func (r *GithubOrganizationRulesetReconciler) setRulesetID(ctx context.Context, rs *v1.GithubOrganizationRuleset, id int64) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &v1.GithubOrganizationRuleset{}
 		if err := r.Get(ctx, types.NamespacedName{Name: rs.Name, Namespace: rs.Namespace}, latest); err != nil {
 			return err
 		}
-		latest.Status.RulesetID = &id
+		if id == 0 {
+			latest.Status.RulesetID = nil
+		} else {
+			latest.Status.RulesetID = &id
+		}
 		if err := r.Client.Status().Update(ctx, latest); err != nil {
 			return err
 		}
@@ -272,12 +303,16 @@ func (r *GithubOrganizationRulesetReconciler) setRulesetID(ctx context.Context, 
 }
 
 // setRulesetCondition upserts a condition on the status by type.
+// All fields are always refreshed; LastTransitionTime is preserved only when
+// the Status value is unchanged (standard Kubernetes condition semantics).
 func setRulesetCondition(rs *v1.GithubOrganizationRuleset, cond metav1.Condition) {
 	for i, c := range rs.Status.Conditions {
 		if c.Type == cond.Type {
-			if c.Status != cond.Status {
-				rs.Status.Conditions[i] = cond
+			if c.Status == cond.Status {
+				// Status unchanged — keep the original transition time.
+				cond.LastTransitionTime = c.LastTransitionTime
 			}
+			rs.Status.Conditions[i] = cond
 			return
 		}
 	}

@@ -16,6 +16,7 @@ rules:
       - githuborganizations
       - githubs
       - githubteams
+      - githuborganizationrulesets
       - ldapgroupproviders
       - clusterldapgroupproviders
       - githubaccountlinks
@@ -37,6 +38,7 @@ rules:
       - githuborganizations/finalizers
       - githubs/finalizers
       - githubteams/finalizers
+      - githuborganizationrulesets/finalizers
       - ldapgroupproviders/finalizers
       - clusterldapgroupproviders/finalizers
       - genericexternalmemberproviders/finalizers
@@ -53,6 +55,7 @@ rules:
       - githuborganizations/status
       - githubs/status
       - githubteams/status
+      - githuborganizationrulesets/status
       - ldapgroupproviders/status
       - clusterldapgroupproviders/status
       - genericexternalmemberproviders/status
