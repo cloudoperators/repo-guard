@@ -18,11 +18,12 @@ import (
 
 // MockConfig defines the canned data served by the mock GitHub HTTP server.
 type MockConfig struct {
-	Org     string
-	Members []MockUser // all org members (role=all)
-	Owners  []MockUser // org owners (role=admin)
-	Teams   []MockTeam
-	Repos   []MockRepo
+	Org      string
+	Members  []MockUser // all org members (role=all)
+	Owners   []MockUser // org owners (role=admin)
+	Teams    []MockTeam
+	Repos    []MockRepo
+	Rulesets []MockRuleset
 }
 
 // MockUser represents a GitHub user for mock purposes.
@@ -63,6 +64,12 @@ type MockTeamWithPermission struct {
 	Slug       string
 	ID         int64
 	Permission string
+}
+
+// MockRuleset represents a GitHub organization ruleset for mock purposes.
+type MockRuleset struct {
+	ID   int64
+	Name string
 }
 
 // MockTestHelper is a minimal interface satisfied by both *testing.T and
@@ -832,6 +839,112 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		default:
 			msg, _ := json.Marshal(map[string]string{"message": fmt.Sprintf("mock: unhandled repos path: %s %s/%s", r.Method, repoName, subPath)})
 			writeJSONError(w, string(msg), http.StatusNotFound)
+		}
+	})
+
+	// ---- rulesets ----
+
+	// rulesets is a mutable copy of cfg.Rulesets so that POST can add entries.
+	rulesets := make([]MockRuleset, len(cfg.Rulesets))
+	copy(rulesets, cfg.Rulesets)
+	nextRulesetID := int64(1)
+	for _, rs := range rulesets {
+		if rs.ID >= nextRulesetID {
+			nextRulesetID = rs.ID + 1
+		}
+	}
+
+	// GET  /api/v3/orgs/{org}/rulesets          — list all rulesets
+	// POST /api/v3/orgs/{org}/rulesets           — create a ruleset
+	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/rulesets", org), func(w http.ResponseWriter, r *http.Request) {
+		stateMu.Lock()
+		defer stateMu.Unlock()
+
+		switch r.Method {
+		case http.MethodGet:
+			result := make([]map[string]any, 0, len(rulesets))
+			for _, rs := range rulesets {
+				result = append(result, map[string]any{"id": rs.ID, "name": rs.Name})
+			}
+			writeJSON(w, result)
+		case http.MethodPost:
+			var body struct {
+				Name        string `json:"name"`
+				Enforcement string `json:"enforcement"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+				writeJSONError(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
+				return
+			}
+			id := nextRulesetID
+			nextRulesetID++
+			rulesets = append(rulesets, MockRuleset{ID: id, Name: body.Name})
+			writeJSONCreated(w, map[string]any{"id": id, "name": body.Name, "enforcement": body.Enforcement})
+		default:
+			writeJSONError(w, `{"message":"method not allowed"}`, http.StatusMethodNotAllowed)
+		}
+	})
+
+	// GET    /api/v3/orgs/{org}/rulesets/{id}    — get one ruleset
+	// PUT    /api/v3/orgs/{org}/rulesets/{id}    — update a ruleset
+	// DELETE /api/v3/orgs/{org}/rulesets/{id}    — delete a ruleset
+	mux.HandleFunc(fmt.Sprintf("/api/v3/orgs/%s/rulesets/", org), func(w http.ResponseWriter, r *http.Request) {
+		rawID := strings.TrimPrefix(r.URL.Path, fmt.Sprintf("/api/v3/orgs/%s/rulesets/", org))
+		// Strip trailing path segments (e.g. /history).
+		rawID = strings.Split(rawID, "/")[0]
+		if rawID == "" {
+			writeJSONError(w, `{"message":"missing ruleset id"}`, http.StatusBadRequest)
+			return
+		}
+
+		var id int64
+		if _, err := fmt.Sscan(rawID, &id); err != nil {
+			writeJSONError(w, `{"message":"invalid ruleset id"}`, http.StatusBadRequest)
+			return
+		}
+
+		stateMu.Lock()
+		defer stateMu.Unlock()
+
+		switch r.Method {
+		case http.MethodGet:
+			for _, rs := range rulesets {
+				if rs.ID == id {
+					writeJSON(w, map[string]any{"id": rs.ID, "name": rs.Name})
+					return
+				}
+			}
+			writeJSONError(w, `{"message":"ruleset not found"}`, http.StatusNotFound)
+		case http.MethodPut:
+			var body struct {
+				Name        string `json:"name"`
+				Enforcement string `json:"enforcement"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSONError(w, `{"message":"invalid request body"}`, http.StatusBadRequest)
+				return
+			}
+			for i, rs := range rulesets {
+				if rs.ID == id {
+					if body.Name != "" {
+						rulesets[i].Name = body.Name
+					}
+					writeJSON(w, map[string]any{"id": rulesets[i].ID, "name": rulesets[i].Name, "enforcement": body.Enforcement})
+					return
+				}
+			}
+			writeJSONError(w, `{"message":"ruleset not found"}`, http.StatusNotFound)
+		case http.MethodDelete:
+			for i, rs := range rulesets {
+				if rs.ID == id {
+					rulesets = append(rulesets[:i], rulesets[i+1:]...)
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+			}
+			writeJSONError(w, `{"message":"ruleset not found"}`, http.StatusNotFound)
+		default:
+			writeJSONError(w, `{"message":"method not allowed"}`, http.StatusMethodNotAllowed)
 		}
 	})
 

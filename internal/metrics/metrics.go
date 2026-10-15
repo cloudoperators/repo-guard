@@ -183,6 +183,27 @@ var (
 		[]string{"github", "organization"},
 	)
 
+	// GithubOrganizationRuleset metrics
+	GithubOrganizationRulesetStatus = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganizationruleset",
+			Name:      "status",
+			Help:      "Current status of a GithubOrganizationRuleset resource (one-hot gauge).",
+		},
+		[]string{"github", "organization", "ruleset", "status"},
+	)
+
+	RulesetSyncFailuresTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "repo_guard",
+			Subsystem: "githuborganizationruleset",
+			Name:      "sync_failures_total",
+			Help:      "Cumulative count of reconcile cycles that ended in a failed state for this ruleset.",
+		},
+		[]string{"github", "organization", "ruleset"},
+	)
+
 	// Status payload size gauge
 	OrgStatusPayloadBytes = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -249,6 +270,8 @@ func init() {
 		EtagCacheHitsTotal,
 		EtagCacheMissesTotal,
 		OrgStatusPayloadBytes,
+		GithubOrganizationRulesetStatus,
+		RulesetSyncFailuresTotal,
 	)
 }
 
@@ -504,4 +527,30 @@ func ObserveRateLimitHit(controller, limitType string, backoff time.Duration) {
 	if backoff > 0 {
 		RateLimitBackoffSeconds.WithLabelValues(controller).Observe(backoff.Seconds())
 	}
+}
+
+// SetGithubOrganizationRulesetMetrics sets the one-hot status gauge for a GithubOrganizationRuleset.
+func SetGithubOrganizationRulesetMetrics(rs *v1.GithubOrganizationRuleset) {
+	if rs == nil {
+		return
+	}
+	github := strings.TrimSpace(rs.Spec.Github)
+	organization := strings.TrimSpace(rs.Spec.Organization)
+	ruleset := strings.TrimSpace(rs.Spec.Name)
+	for _, st := range []string{
+		string(v1.GithubOrganizationRulesetStatePending),
+		string(v1.GithubOrganizationRulesetStateReady),
+		string(v1.GithubOrganizationRulesetStateFailed),
+	} {
+		val := 0.0
+		if st == string(rs.Status.State) {
+			val = 1.0
+		}
+		GithubOrganizationRulesetStatus.WithLabelValues(github, organization, ruleset, st).Set(val)
+	}
+}
+
+// IncRulesetSyncFailure increments the sync failure counter for the given ruleset.
+func IncRulesetSyncFailure(github, organization, ruleset string) {
+	RulesetSyncFailuresTotal.WithLabelValues(github, organization, ruleset).Inc()
 }

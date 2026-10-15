@@ -216,6 +216,7 @@ var _ = BeforeSuite(func() {
 	Expect((&ClusterGenericExternalMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&StaticMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
 	Expect((&ClusterStaticMemberProviderReconciler{Client: k8sManager.GetClient()}).SetupWithManager(k8sManager)).To(Succeed())
+	Expect((&GithubOrganizationRulesetReconciler{Client: k8sManager.GetClient(), MaxConcurrentReconciles: 5}).SetupWithManager(k8sManager)).To(Succeed())
 
 	started := make(chan struct{})
 	go func() {
