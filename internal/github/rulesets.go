@@ -98,7 +98,8 @@ func SpecToGitHub(spec v1.GithubOrganizationRulesetSpec) gogithub.RepositoryRule
 		Enforcement: enforcement,
 	}
 
-	// bypass actors
+	// bypass actors — always send an explicit slice so clearing all actors sends [] not nil.
+	rs.BypassActors = []*gogithub.BypassActor{}
 	for _, ba := range spec.BypassActors {
 		mode := gogithub.BypassMode(ba.BypassMode)
 		actor := &gogithub.BypassActor{
@@ -127,17 +128,25 @@ func SpecToGitHub(spec v1.GithubOrganizationRulesetSpec) gogithub.RepositoryRule
 			}
 		}
 		if c.RepositoryName != nil {
+			repoInclude := c.RepositoryName.Include
+			if repoInclude == nil {
+				repoInclude = []string{}
+			}
+			repoExclude := c.RepositoryName.Exclude
+			if repoExclude == nil {
+				repoExclude = []string{}
+			}
 			rs.Conditions.RepositoryName = &gogithub.RepositoryRulesetRepositoryNamesConditionParameters{
-				Include:   c.RepositoryName.Include,
-				Exclude:   c.RepositoryName.Exclude,
+				Include:   repoInclude,
+				Exclude:   repoExclude,
 				Protected: c.RepositoryName.Protected,
 			}
 		}
 	}
 
-	// rules
+	// rules — always send an explicit struct so clearing spec.rules sends empty rules not nil.
+	rs.Rules = &gogithub.RepositoryRulesetRules{}
 	if r := spec.Rules; r != nil {
-		rs.Rules = &gogithub.RepositoryRulesetRules{}
 		if r.Creation != nil && *r.Creation {
 			e := gogithub.EmptyRuleParameters{}
 			rs.Rules.Creation = &e

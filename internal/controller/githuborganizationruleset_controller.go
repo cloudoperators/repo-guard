@@ -121,6 +121,12 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 			}); removeErr != nil {
 				return reconcile.Result{}, removeErr
 			}
+			// Clean up Prometheus label sets so deleted rulesets are not reported as stale series.
+			ghmetrics.DeleteGithubOrganizationRulesetMetrics(
+				strings.TrimSpace(rs.Spec.Github),
+				strings.TrimSpace(rs.Spec.Organization),
+				strings.TrimSpace(rs.Spec.Name),
+			)
 		}
 		return reconcile.Result{}, nil
 	}
@@ -201,14 +207,23 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 			return r.fail(ctx, rs, "list rulesets: "+listErr.Error())
 		}
 		for _, e := range existing {
-			if e.GetName() == rs.Spec.Name {
-				id := e.GetID()
-				if updateErr := r.setRulesetID(ctx, rs, id); updateErr != nil {
-					return reconcile.Result{}, updateErr
-				}
-				l.Info("adopted existing ruleset", "rulesetID", id, "name", rs.Spec.Name)
-				break
+			// Only adopt org-owned rulesets — inherited enterprise rulesets
+			// share names but cannot be updated via the org endpoint.
+			if e.GetName() != rs.Spec.Name {
+				continue
 			}
+			if e.SourceType == nil || *e.SourceType != gogithub.RulesetSourceTypeOrganization {
+				continue
+			}
+			if e.GetSource() != orgName {
+				continue
+			}
+			id := e.GetID()
+			if updateErr := r.setRulesetID(ctx, rs, id); updateErr != nil {
+				return reconcile.Result{}, updateErr
+			}
+			l.Info("adopted existing ruleset", "rulesetID", id, "name", rs.Spec.Name)
+			break
 		}
 	}
 

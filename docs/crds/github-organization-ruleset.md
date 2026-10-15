@@ -77,7 +77,7 @@ spec:
 |---|---|---|
 | `include` | []string | Repository name patterns to include. Use `~ALL` for all repositories. |
 | `exclude` | []string | Repository name patterns to exclude. |
-| `protected` | bool | Restrict to protected repositories only. |
+| `protected` | bool | Prevent matching repositories from being renamed (does not restrict matching to already-protected repositories). |
 
 ### Rules
 

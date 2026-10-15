@@ -83,7 +83,7 @@ type RulesetRepositoryNameCondition struct {
 	// +listType=set
 	// +optional
 	Exclude []string `json:"exclude,omitempty"`
-	// Protected restricts the condition to protected repositories only.
+	// Protected prevents matching repositories from being renamed (it does not restrict matching to already-protected repositories).
 	// +optional
 	Protected *bool `json:"protected,omitempty"`
 }

@@ -132,8 +132,9 @@ spec:
                         type: array
                         x-kubernetes-list-type: set
                       protected:
-                        description: Protected restricts the condition to protected
-                          repositories only.
+                        description: Protected prevents matching repositories from
+                          being renamed (it does not restrict matching to already-protected
+                          repositories).
                         type: boolean
                     type: object
                 type: object

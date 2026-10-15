@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -242,7 +243,7 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 		Eventually(func() bool {
 			cur := &repoguardsapv1.GithubOrganizationRuleset{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)
-			return err != nil // NotFound once deleted
+			return apierrors.IsNotFound(err)
 		}, 3*timeout, interval).Should(BeTrue())
 	})
 

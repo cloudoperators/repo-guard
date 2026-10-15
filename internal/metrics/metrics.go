@@ -554,3 +554,15 @@ func SetGithubOrganizationRulesetMetrics(rs *v1.GithubOrganizationRuleset) {
 func IncRulesetSyncFailure(github, organization, ruleset string) {
 	RulesetSyncFailuresTotal.WithLabelValues(github, organization, ruleset).Inc()
 }
+
+// DeleteGithubOrganizationRulesetMetrics removes the label set for a deleted or renamed ruleset
+// so stale series are not reported after the resource is gone.
+func DeleteGithubOrganizationRulesetMetrics(github, organization, ruleset string) {
+	for _, st := range []string{
+		string(v1.GithubOrganizationRulesetStatePending),
+		string(v1.GithubOrganizationRulesetStateReady),
+		string(v1.GithubOrganizationRulesetStateFailed),
+	} {
+		GithubOrganizationRulesetStatus.DeleteLabelValues(github, organization, ruleset, st)
+	}
+}
