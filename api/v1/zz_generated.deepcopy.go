@@ -645,6 +645,11 @@ func (in *GithubOrganizationRulesetStatus) DeepCopyInto(out *GithubOrganizationR
 		*out = new(int64)
 		**out = **in
 	}
+	if in.InstallationID != nil {
+		in, out := &in.InstallationID, &out.InstallationID
+		*out = new(int64)
+		**out = **in
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))

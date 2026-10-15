@@ -67,20 +67,31 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	// Handle deletion: remove the GitHub ruleset before removing the finalizer.
 	if !rs.DeletionTimestamp.IsZero() {
 		if containsString(rs.Finalizers, rulesetFinalizer) {
-			if rs.Status.RulesetID != nil {
+			// Respect dry-run during deletion too — skip the GitHub DELETE.
+			if rs.Labels[GITHUB_ORG_LABEL_DRY_RUN] == GITHUB_ORG_LABEL_DRY_RUN_ENABLED_VALUE {
+				l.Info("dry-run mode: skipping GitHub ruleset deletion", "name", rs.Spec.Name)
+			} else if rs.Status.RulesetID != nil {
 				cc := GithubClients[githubName]
 				if cc == nil {
 					l.Info("waiting for github to be initialised before deleting ruleset", "github", githubName)
 					return reconcile.Result{RequeueAfter: time.Second}, nil
 				}
-				orgCRName := fmt.Sprintf("%s--%s", strings.ToLower(githubName), strings.ToLower(orgName))
-				githubOrg := &v1.GithubOrganization{}
-				if getErr := r.Get(ctx, types.NamespacedName{Name: orgCRName, Namespace: req.Namespace}, githubOrg); getErr != nil {
-					// Can't look up the org — retain the finalizer and retry.
-					l.Error(getErr, "cannot look up GithubOrganization for ruleset deletion; retaining finalizer")
-					return reconcile.Result{}, getErr
+				// Use the persisted InstallationID so deletion succeeds even when the
+				// GithubOrganization CR has already been removed (e.g. namespace teardown).
+				var installationID int64
+				if rs.Status.InstallationID != nil {
+					installationID = *rs.Status.InstallationID
+				} else {
+					// Fall back to looking up the GithubOrganization CR on first-time deletion.
+					orgCRName := fmt.Sprintf("%s--%s", strings.ToLower(githubName), strings.ToLower(orgName))
+					githubOrg := &v1.GithubOrganization{}
+					if getErr := r.Get(ctx, types.NamespacedName{Name: orgCRName, Namespace: req.Namespace}, githubOrg); getErr != nil {
+						l.Error(getErr, "cannot look up GithubOrganization for ruleset deletion; retaining finalizer")
+						return reconcile.Result{}, getErr
+					}
+					installationID = githubOrg.Spec.InstallationID
 				}
-				rulesetProvider, provErr := github.NewRulesetProvider(cc, githubOrg.Spec.InstallationID, orgName)
+				rulesetProvider, provErr := github.NewRulesetProvider(cc, installationID, orgName)
 				if provErr != nil {
 					l.Error(provErr, "cannot create ruleset provider for deletion; retaining finalizer")
 					return reconcile.Result{}, provErr
@@ -89,11 +100,15 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 					if resetAt, ok := parseGitHubRateLimitReset(delErr.Error()); ok {
 						return reconcile.Result{RequeueAfter: time.Until(resetAt) + time.Second}, nil
 					}
-					// Retain the finalizer so the deletion is retried on the next reconcile.
-					l.Error(delErr, "failed to delete ruleset from GitHub; retaining finalizer", "rulesetID", *rs.Status.RulesetID)
-					return reconcile.Result{}, delErr
+					// 404 means the ruleset was already deleted — treat as success.
+					if ghErr, ok := stderrors.AsType[*gogithub.ErrorResponse](delErr); !ok || ghErr.Response == nil || ghErr.Response.StatusCode != 404 {
+						l.Error(delErr, "failed to delete ruleset from GitHub; retaining finalizer", "rulesetID", *rs.Status.RulesetID)
+						return reconcile.Result{}, delErr
+					}
+					l.Info("ruleset already absent on GitHub; proceeding with finalizer removal", "rulesetID", *rs.Status.RulesetID)
+				} else {
+					l.Info("deleted ruleset from GitHub", "rulesetID", *rs.Status.RulesetID, "name", rs.Spec.Name)
 				}
-				l.Info("deleted ruleset from GitHub", "rulesetID", *rs.Status.RulesetID, "name", rs.Spec.Name)
 			}
 			// Remote ruleset is gone (or never existed); remove the finalizer.
 			if removeErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -152,6 +167,22 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	rulesetProvider, err := github.NewRulesetProvider(cc, githubOrg.Spec.InstallationID, orgName)
 	if err != nil {
 		return r.fail(ctx, rs, "create ruleset provider: "+err.Error())
+	}
+
+	// Persist the installation ID so the deletion path works even when the
+	// GithubOrganization CR is gone (e.g. namespace teardown ordering).
+	if rs.Status.InstallationID == nil || *rs.Status.InstallationID != githubOrg.Spec.InstallationID {
+		iid := githubOrg.Spec.InstallationID
+		if persistErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &v1.GithubOrganizationRuleset{}
+			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr != nil {
+				return getErr
+			}
+			latest.Status.InstallationID = &iid
+			return r.Client.Status().Update(ctx, latest)
+		}); persistErr != nil {
+			return reconcile.Result{}, persistErr
+		}
 	}
 
 	// Respect the dry-run label — log what would happen but skip GitHub mutations.

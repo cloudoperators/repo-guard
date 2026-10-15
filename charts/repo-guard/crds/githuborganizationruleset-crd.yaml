@@ -301,6 +301,12 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              installationId:
+                description: |-
+                  InstallationID is the GitHub App installation ID, persisted so the deletion
+                  path does not depend on the GithubOrganization CR still being present.
+                format: int64
+                type: integer
               message:
                 description: Message holds a human-readable description of the last
                   reconciliation result.

@@ -183,6 +183,10 @@ type GithubOrganizationRulesetStatus struct {
 	// RulesetID is the numeric GitHub ID of the managed ruleset, set once created or adopted.
 	// +optional
 	RulesetID *int64 `json:"rulesetId,omitempty"`
+	// InstallationID is the GitHub App installation ID, persisted so the deletion
+	// path does not depend on the GithubOrganization CR still being present.
+	// +optional
+	InstallationID *int64 `json:"installationId,omitempty"`
 	// State is the current reconciliation state.
 	// +optional
 	State GithubOrganizationRulesetState `json:"state,omitempty"`

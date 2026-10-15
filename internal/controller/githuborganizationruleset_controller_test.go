@@ -13,6 +13,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("GithubOrganizationRuleset controller", func() {
@@ -83,6 +84,23 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 		}, 3*timeout, interval).Should(BeTrue())
 
 		DeferCleanup(func() {
+			// Delete all rulesets in this namespace first and wait for their finalizers
+			// to complete before removing the org/credentials — otherwise the finalizer
+			// can't call the GitHub API and the namespace stalls during teardown.
+			rsList := &repoguardsapv1.GithubOrganizationRulesetList{}
+			if err := k8sClient.List(ctx, rsList, client.InNamespace(uniqueNamespace)); err == nil {
+				for i := range rsList.Items {
+					_ = deleteIgnoreNotFound(ctx, k8sClient, &rsList.Items[i])
+				}
+				// Wait for all rulesets to be fully gone before deleting credentials.
+				Eventually(func() int {
+					cur := &repoguardsapv1.GithubOrganizationRulesetList{}
+					if err := k8sClient.List(ctx, cur, client.InNamespace(uniqueNamespace)); err != nil {
+						return -1
+					}
+					return len(cur.Items)
+				}, 3*timeout, interval).Should(Equal(0))
+			}
 			_ = deleteIgnoreNotFound(ctx, k8sClient, org)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, ghCR)
 			_ = deleteIgnoreNotFound(ctx, k8sClient, secret)
