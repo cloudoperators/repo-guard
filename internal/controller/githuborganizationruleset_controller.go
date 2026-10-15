@@ -211,7 +211,7 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 					rs.Status.RulesetID = nil
 				}
 				l.Info("ruleset no longer exists on GitHub; clearing ID to trigger re-creation", "name", rs.Spec.Name)
-				return reconcile.Result{Requeue: true}, nil
+				return reconcile.Result{RequeueAfter: time.Second}, nil
 			}
 			return r.fail(ctx, rs, "update ruleset: "+updateErr.Error())
 		}
