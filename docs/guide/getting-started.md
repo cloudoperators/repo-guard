@@ -12,7 +12,7 @@
 Install Repo Guard using the Helm chart published to GHCR:
 
 ```bash
-helm install repo-guard oci://ghcr.io/cloudoperators/charts/repo-guard \
+helm install repo-guard oci://ghcr.io/cloudoperators/repo-guard/charts/repo-guard \
   --namespace repo-guard \
   --create-namespace \
   --set manager.enabled=true
