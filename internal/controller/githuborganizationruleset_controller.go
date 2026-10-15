@@ -215,7 +215,9 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 			if e.SourceType == nil || *e.SourceType != gogithub.RulesetSourceTypeOrganization {
 				continue
 			}
-			if e.GetSource() != orgName {
+			// GitHub org names are case-insensitive; use EqualFold to avoid
+			// skipping adoption when the API returns a differently-cased name.
+			if !strings.EqualFold(e.GetSource(), orgName) {
 				continue
 			}
 			id := e.GetID()
