@@ -4,74 +4,20 @@ on:
   release:
     types: [published]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  docker:
-    runs-on: ubuntu-latest
+  docker-release:
+    uses: cloudoperators/common/.github/workflows/shared-docker-release.yaml@main
     permissions:
       contents: read
       packages: write
+    with:
+      image-name: ghcr.io/cloudoperators/repo-guard
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v3
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  helm:
-    runs-on: ubuntu-latest
+  helm-release:
+    uses: cloudoperators/common/.github/workflows/shared-helm-release.yaml@main
     permissions:
       contents: read
       packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Install Helm
-        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
-        with:
-          version: v3.21.2
-
-      - name: Package and push Helm chart to GHCR
-        run: |
-          CHART_NAME=$(grep '^name:' charts/repo-guard/Chart.yaml | awk '{print $2}')
-          CHART_VERSION=$(grep '^version:' charts/repo-guard/Chart.yaml | awk '{print $2}')
-
-          echo "Packaging chart $CHART_NAME version $CHART_VERSION"
-          helm package charts/repo-guard
-
-          echo "Logging in to GHCR"
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
-
-          echo "Pushing chart to GHCR"
-          helm push "${CHART_NAME}-${CHART_VERSION}.tgz" oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+    with:
+      chart-dir: charts/repo-guard
+      chart-name: repo-guard
