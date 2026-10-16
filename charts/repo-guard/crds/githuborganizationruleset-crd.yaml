@@ -326,6 +326,8 @@ spec:
                 description: State is the current reconciliation state.
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

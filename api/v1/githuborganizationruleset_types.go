@@ -217,6 +217,7 @@ type GithubOrganizationRuleset struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:Required
 	Spec   GithubOrganizationRulesetSpec   `json:"spec,omitempty"`
 	Status GithubOrganizationRulesetStatus `json:"status,omitempty"`
 }

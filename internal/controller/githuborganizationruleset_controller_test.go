@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -332,5 +333,28 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 			}
 			return cur.Status.State
 		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationRulesetStateFailed))
+	})
+
+	It("requires spec in the CRD schema to protect immutability constraints", func() {
+		// envtest does not enforce CRD required-field validation at admission time,
+		// so we verify the schema directly: read the installed CRD and assert that
+		// "spec" appears in the top-level required list.
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{
+			Name: "githuborganizationrulesets.repo-guard.cloudoperators.dev",
+		}, crd)).To(Succeed())
+		var specRequired bool
+		for _, ver := range crd.Spec.Versions {
+			if ver.Schema == nil || ver.Schema.OpenAPIV3Schema == nil {
+				continue
+			}
+			for _, f := range ver.Schema.OpenAPIV3Schema.Required {
+				if f == "spec" {
+					specRequired = true
+					break
+				}
+			}
+		}
+		Expect(specRequired).To(BeTrue(), "spec must be in required so XValidation immutability rules cannot be bypassed by omitting it")
 	})
 })
