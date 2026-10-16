@@ -255,8 +255,8 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 			// If GitHub returns 404 the ruleset was deleted externally. Clear the
 			// stored ID so the next reconcile re-adopts or re-creates it.
 			if ghErr, ok := stderrors.AsType[*gogithub.ErrorResponse](updateErr); ok && ghErr.Response != nil && ghErr.Response.StatusCode == 404 {
-				if clearErr := r.setRulesetID(ctx, rs, 0); clearErr == nil {
-					rs.Status.RulesetID = nil
+				if clearErr := r.setRulesetID(ctx, rs, 0); clearErr != nil {
+					return reconcile.Result{}, clearErr
 				}
 				l.Info("ruleset no longer exists on GitHub; clearing ID to trigger re-creation", "name", rs.Spec.Name)
 				return reconcile.Result{RequeueAfter: time.Second}, nil

@@ -4,8 +4,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -245,6 +248,62 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)
 			return apierrors.IsNotFound(err)
 		}, 3*timeout, interval).Should(BeTrue())
+	})
+
+	It("adopts an existing organization-owned ruleset by name without creating a duplicate", func() {
+		if !isMockMode() {
+			Skip("adopt-by-name pre-seeding requires the mock server")
+		}
+
+		rulesetName := "test-adopt-rs-" + uniqueID
+		rsResourceName := "ruleset-adopt-" + uniqueID
+
+		// Pre-create a ruleset on the mock server so the controller can adopt it.
+		body, err := json.Marshal(map[string]any{
+			"name":        rulesetName,
+			"enforcement": "active",
+			"target":      "branch",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		url := mockGitHubServer.URL + "/api/v3/orgs/" + orgName + "/rulesets"
+		resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+		Expect(err).NotTo(HaveOccurred())
+		defer resp.Body.Close()
+		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+		var created map[string]any
+		Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+		preExistingID := int64(created["id"].(float64))
+		Expect(preExistingID).To(BeNumerically(">", 0))
+
+		// Create the CR with the same name — controller should adopt, not create anew.
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rsResourceName,
+				Namespace: uniqueNamespace,
+			},
+			Spec: repoguardsapv1.GithubOrganizationRulesetSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Name:         rulesetName,
+				Target:       repoguardsapv1.RulesetTargetBranch,
+				Enforcement:  repoguardsapv1.RulesetEnforcementActive,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, rs) })
+
+		// Wait for Ready and confirm the pre-existing ID was reused.
+		Eventually(func() *int64 {
+			cur := &repoguardsapv1.GithubOrganizationRuleset{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur); err != nil {
+				return nil
+			}
+			if cur.Status.State != repoguardsapv1.GithubOrganizationRulesetStateReady {
+				return nil
+			}
+			return cur.Status.RulesetID
+		}, 3*timeout, interval).Should(HaveValue(Equal(preExistingID)))
 	})
 
 	It("fails gracefully when Github CR does not exist", func() {
