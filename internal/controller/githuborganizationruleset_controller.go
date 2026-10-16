@@ -305,6 +305,9 @@ func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.G
 
 // succeed marks the resource as Ready.
 func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v1.GithubOrganizationRuleset) (reconcile.Result, error) {
+	// Capture the generation of the reconciled snapshot before fetching latest,
+	// so ObservedGeneration reflects the spec that was actually applied.
+	reconciledGeneration := rs.Generation
 	updateErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &v1.GithubOrganizationRuleset{}
 		if err := r.Get(ctx, types.NamespacedName{Name: rs.Name, Namespace: rs.Namespace}, latest); err != nil {
@@ -312,6 +315,7 @@ func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v
 		}
 		latest.Status.State = v1.GithubOrganizationRulesetStateReady
 		latest.Status.Message = "ruleset synced"
+		latest.Status.ObservedGeneration = reconciledGeneration
 		setRulesetCondition(latest, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,

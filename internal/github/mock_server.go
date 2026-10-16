@@ -864,7 +864,12 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 		case http.MethodGet:
 			result := make([]map[string]any, 0, len(rulesets))
 			for _, rs := range rulesets {
-				result = append(result, map[string]any{"id": rs.ID, "name": rs.Name})
+				result = append(result, map[string]any{
+					"id":          rs.ID,
+					"name":        rs.Name,
+					"source_type": "Organization",
+					"source":      org,
+				})
 			}
 			writeJSON(w, result)
 		case http.MethodPost:

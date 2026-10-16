@@ -187,6 +187,9 @@ type GithubOrganizationRulesetStatus struct {
 	// path does not depend on the GithubOrganization CR still being present.
 	// +optional
 	InstallationID *int64 `json:"installationId,omitempty"`
+	// ObservedGeneration is the .metadata.generation of the spec that was last successfully reconciled.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// State is the current reconciliation state.
 	// +optional
 	State GithubOrganizationRulesetState `json:"state,omitempty"`

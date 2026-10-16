@@ -312,6 +312,11 @@ spec:
                 description: Message holds a human-readable description of the last
                   reconciliation result.
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the .metadata.generation of the
+                  spec that was last successfully reconciled.
+                format: int64
+                type: integer
               rulesetId:
                 description: RulesetID is the numeric GitHub ID of the managed ruleset,
                   set once created or adopted.
