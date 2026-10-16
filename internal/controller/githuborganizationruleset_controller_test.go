@@ -132,7 +132,9 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 						Include: []string{"~DEFAULT_BRANCH"},
 					},
 					RepositoryName: &repoguardsapv1.RulesetRepositoryNameCondition{
-						Include: []string{"~ALL"},
+						// Use a uniquely-scoped pattern so this ruleset never applies to
+						// real repositories in live mode; "~ALL" would affect every repo.
+						Include: []string{"rg-test-" + uniqueID + "*"},
 					},
 				},
 				Rules: &repoguardsapv1.RulesetRules{
