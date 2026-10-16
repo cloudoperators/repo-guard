@@ -202,3 +202,34 @@ perses:
 #         repositories:
 #           -
 #         permission:
+#
+#     # rulesets creates GithubOrganizationRuleset CRs for this organization.
+#     rulesets:
+#       - name: Protect default branch   # human-readable name shown in GitHub; also used to name the CR
+#         target: branch                  # branch | tag | push | repository (default: branch)
+#         enforcement: active             # active | evaluate | disabled (default: active)
+#         # bypassActors: actors that can bypass this ruleset
+#         # bypassActors:
+#         #   - actorType: OrganizationAdmin   # Integration | OrganizationAdmin | RepositoryRole | Team | DeployKey
+#         #     bypassMode: always             # always | pull_request
+#         #   - actorId: 12345                 # GitHub numeric ID of the team or app (omit for DeployKey)
+#         #     actorType: Team
+#         #     bypassMode: pull_request
+#         conditions:
+#           refName:
+#             include:
+#               - "~DEFAULT_BRANCH"   # ~DEFAULT_BRANCH | ~ALL | refs/heads/main | refs/heads/release/*
+#           repositoryName:
+#             include:
+#               - "~ALL"              # ~ALL | ~PUBLIC | ~PRIVATE | ~INTERNAL | exact name or fnmatch pattern
+#         rules:
+#           deletion: true
+#           nonFastForward: true
+#           requiredSignatures: true
+#           requiredLinearHistory: false
+#           pullRequest:
+#             dismissStaleReviewsOnPush: true
+#             requireCodeOwnerReview: false
+#             requireLastPushApproval: true
+#             requiredApprovingReviewCount: 1
+#             requiredReviewThreadResolution: false

@@ -119,3 +119,58 @@ spec:
 ## Prerequisites
 
 The namespace must contain a `GithubOrganization` CR named `<github>--<organization>` (e.g. `com--greenhouse-sandbox`). The controller reads the `installationID` from that CR.
+
+## Helm Chart Configuration
+
+Rulesets can be declared directly under each organization entry in `values.yaml` using the `rulesets` key:
+
+```yaml
+githubOrganizations:
+  - github: wdf
+    organization: sap-cloud-infrastructure
+    installationID: 7731
+    # ... other org fields ...
+    rulesets:
+      - name: Protect default branch
+        target: branch          # branch | tag | push | repository (default: branch)
+        enforcement: active     # active | evaluate | disabled (default: active)
+        conditions:
+          refName:
+            include:
+              - "~DEFAULT_BRANCH"
+          repositoryName:
+            include:
+              - "~ALL"
+        rules:
+          deletion: true
+          nonFastForward: true
+          requiredSignatures: true
+          pullRequest:
+            dismissStaleReviewsOnPush: true
+            requireCodeOwnerReview: false
+            requireLastPushApproval: true
+            requiredApprovingReviewCount: 1
+            requiredReviewThreadResolution: false
+```
+
+The Helm chart generates a `GithubOrganizationRuleset` CR named `<github>--<organization>--<ruleset-name-slug>` (e.g. `wdf--sap-cloud-infrastructure--protect-default-branch`) for each entry.
+
+`bypassActors` is also supported:
+
+```yaml
+rulesets:
+  - name: Protect main
+    enforcement: active
+    bypassActors:
+      - actorType: OrganizationAdmin
+        bypassMode: always
+      - actorId: 12345      # GitHub numeric team ID
+        actorType: Team
+        bypassMode: pull_request
+    conditions:
+      refName:
+        include:
+          - "~DEFAULT_BRANCH"
+    rules:
+      deletion: true
+```
