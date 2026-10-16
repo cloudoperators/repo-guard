@@ -268,7 +268,7 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 		url := mockGitHubServer.URL + "/api/v3/orgs/" + orgName + "/rulesets"
 		resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
 		Expect(err).NotTo(HaveOccurred())
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
 		var created map[string]any
