@@ -10,8 +10,8 @@ metadata:
   {{- $rsSlug := trimAll "-" (regexReplaceAll "[^a-z0-9]+" ($rs.name | toString | lower) "-") }}
   name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}--{{ $rsSlug }}
   labels:
-    repo-guard.cloudoperators.dev/addRuleset: "{{ $rs.addRuleset | default "true" }}"
-    repo-guard.cloudoperators.dev/removeRuleset: "{{ $rs.removeRuleset | default "true" }}"
+    repo-guard.cloudoperators.dev/addRuleset: "{{ $rs.addRuleset | default ($org.addRuleset | default "true") }}"
+    repo-guard.cloudoperators.dev/removeRuleset: "{{ $rs.removeRuleset | default ($org.removeRuleset | default "true") }}"
     repo-guard.cloudoperators.dev/dryRun: "{{ $rs.dryRun | default ($org.dryRun | default "false") }}"
     {{- $ttl := (get $rs "ttl") -}}
     {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
