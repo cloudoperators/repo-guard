@@ -83,6 +83,20 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	githubName := strings.TrimSpace(rs.Spec.Github)
 	orgName := strings.TrimSpace(rs.Spec.Organization)
 
+	// Short-circuit if the CR is up-to-date and the TTL has not yet elapsed.
+	// Status writes (e.g. stamping LastSyncTime) also trigger a reconcile via the
+	// informer watch. Without this guard the controller would set up a GitHub client
+	// and make API calls on every such event. Instead, when the spec has not changed
+	// since the last successful sync and there is TTL time remaining, return the
+	// remainder directly without touching GitHub.
+	if rs.DeletionTimestamp.IsZero() &&
+		rs.Status.State == v1.GithubOrganizationRulesetStateReady &&
+		rs.Status.ObservedGeneration == rs.Generation {
+		if d := rulesetTTLRequeue(rs); d > 0 {
+			return reconcile.Result{RequeueAfter: d}, nil
+		}
+	}
+
 	// Handle deletion: remove the GitHub ruleset before removing the finalizer.
 	if !rs.DeletionTimestamp.IsZero() {
 		if containsString(rs.Finalizers, rulesetFinalizer) {
@@ -337,7 +351,7 @@ func rulesetTTLRequeue(rs *v1.GithubOrganizationRuleset) time.Duration {
 func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.GithubOrganizationRuleset, msg string) (reconcile.Result, error) {
 	origErr := fmt.Errorf("%s", msg)
 	log.FromContext(ctx).Error(origErr, "ruleset reconcile failed")
-	_ = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	statusErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &v1.GithubOrganizationRuleset{}
 		if err := r.Get(ctx, types.NamespacedName{Name: rs.Name, Namespace: rs.Namespace}, latest); err != nil {
 			return err
@@ -366,6 +380,9 @@ func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.G
 		rs.Labels = latest.Labels
 		return nil
 	})
+	if statusErr != nil {
+		return reconcile.Result{}, statusErr
+	}
 	// If failedTTL is set, schedule a fixed requeue instead of returning an error
 	// (which would trigger exponential backoff and eventually stop retrying).
 	if d := rulesetTTLRequeue(rs); d > 0 {
