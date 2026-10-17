@@ -106,15 +106,32 @@ spec:
 | Field | Type | Description |
 |---|---|---|
 | `rulesetId` | integer | GitHub numeric ID of the managed ruleset. Set once created or adopted. |
+| `installationId` | integer | GitHub App installation ID, persisted so the deletion path works even if the `GithubOrganization` CR is removed first. |
+| `observedGeneration` | integer | The `.metadata.generation` of the spec that was last successfully reconciled. |
 | `state` | string | One of `Pending`, `Ready`, `Failed`. |
 | `message` | string | Human-readable description of the last reconciliation result. |
+| `lastSyncTime` | timestamp | Time of the most recent completed reconcile attempt (Ready or dryRun). Used by TTL scheduling. |
 | `conditions` | []Condition | Standard Kubernetes conditions. The `Ready` condition is set on each reconcile. |
 
 ## Lifecycle
 
-1. **Create**: On first reconcile the controller lists existing rulesets. If one with the declared `name` exists it is **adopted** (its ID is stored in `status.rulesetId`) without recreation. Otherwise a new ruleset is created.
+1. **Create**: On first reconcile the controller lists existing rulesets. If one with the declared `name` and `Organization` source exists it is **adopted** (its ID is stored in `status.rulesetId`) without recreation. Otherwise a new ruleset is created.
 2. **Update**: On every subsequent reconcile the controller calls GitHub's update API to keep the ruleset in sync with the spec.
-3. **Delete**: A finalizer (`repo-guard.cloudoperators.dev/ruleset`) prevents the CR from being garbage collected until the controller successfully removes the ruleset from GitHub.
+3. **Delete**: A finalizer (`repo-guard.cloudoperators.dev/ruleset`) prevents the CR from being garbage collected until the controller successfully removes the ruleset from GitHub (or the `removeRuleset` label is `"false"`, in which case the finalizer is removed without calling GitHub).
+
+## Behaviour Labels
+
+Labels on the CR control mutation and lifecycle behaviour. These are set by the Helm chart and can also be applied manually.
+
+| Label | Values | Default | Description |
+|---|---|---|---|
+| `repo-guard.cloudoperators.dev/addRuleset` | `"true"` / `"false"` | `"false"` | When `"false"` the controller skips create and update operations and marks the CR Ready without touching GitHub. Set to `"true"` to enable active management. |
+| `repo-guard.cloudoperators.dev/removeRuleset` | `"true"` / `"false"` | `"false"` | When `"false"` the controller removes the finalizer on CR deletion without deleting the ruleset from GitHub (orphan). Set to `"true"` to delete the GitHub ruleset when the CR is removed. |
+| `repo-guard.cloudoperators.dev/dryRun` | `"true"` / `"false"` | `"false"` | When `"true"` all GitHub mutations (create, update, delete) are skipped. The CR reaches Ready state without any API calls. |
+| `repo-guard.cloudoperators.dev/completedTTL` | duration string (e.g. `"72h"`) | unset | When set, the controller re-reconciles (drifts correct) the ruleset after this duration. Uses `status.lastSyncTime` as the clock so consecutive same-state reconciles each get a fresh full interval. |
+| `repo-guard.cloudoperators.dev/failedTTL` | duration string (e.g. `"24h"`) | unset | When set and the CR is in `Failed` state, the controller retries on a fixed schedule instead of exponential backoff. |
+
+> **Safe defaults**: `addRuleset` and `removeRuleset` both default to `"false"` in the Helm chart. You must explicitly opt in to `"true"` to allow the controller to create, update, or delete rulesets in GitHub.
 
 ## Prerequisites
 
@@ -122,18 +139,27 @@ The namespace must contain a `GithubOrganization` CR named `<github>--<organizat
 
 ## Helm Chart Configuration
 
-Rulesets can be declared directly under each organization entry in `values.yaml` using the `rulesets` key:
+Rulesets are declared under each organization entry in `values.yaml` using the `rulesets` key. The `addRuleset` and `removeRuleset` defaults can be set at org level and overridden per ruleset.
 
 ```yaml
 githubOrganizations:
   - github: wdf
     organization: sap-cloud-infrastructure
     installationID: 7731
-    # ... other org fields ...
+    # Opt in to active management for all rulesets in this org.
+    # Per-ruleset addRuleset/removeRuleset override these.
+    addRuleset: "true"
+    removeRuleset: "true"
     rulesets:
       - name: Protect default branch
         target: branch          # branch | tag | push | repository (default: branch)
         enforcement: active     # active | evaluate | disabled (default: active)
+        # addRuleset: "true"    # inherits org-level "true" above
+        # removeRuleset: "false" # override: orphan this specific ruleset on deletion
+        # dryRun: "false"       # "true": log but skip all GitHub mutations
+        # ttl:
+        #   completed: "72h"    # re-reconcile after this duration when Ready
+        #   failed: "24h"       # retry after this duration when Failed
         conditions:
           refName:
             include:
@@ -161,6 +187,7 @@ The Helm chart generates a `GithubOrganizationRuleset` CR named `<github>--<orga
 rulesets:
   - name: Protect main
     enforcement: active
+    addRuleset: "true"
     bypassActors:
       - actorType: OrganizationAdmin
         bypassMode: always
