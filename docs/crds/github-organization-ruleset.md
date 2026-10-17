@@ -10,6 +10,9 @@ kind: GithubOrganizationRuleset
 metadata:
   name: com--greenhouse-sandbox--require-pr-review
   namespace: default
+  labels:
+    repo-guard.cloudoperators.dev/addRuleset: "true"
+    repo-guard.cloudoperators.dev/removeRuleset: "false"  # orphan on deletion
 spec:
   github: com
   organization: greenhouse-sandbox
@@ -123,15 +126,15 @@ spec:
 
 Labels on the CR control mutation and lifecycle behaviour. These are set by the Helm chart and can also be applied manually.
 
-| Label | Values | Default | Description |
-|---|---|---|---|
-| `repo-guard.cloudoperators.dev/addRuleset` | `"true"` / `"false"` | `"false"` | When `"false"` the controller skips create and update operations and marks the CR Ready without touching GitHub. Set to `"true"` to enable active management. |
-| `repo-guard.cloudoperators.dev/removeRuleset` | `"true"` / `"false"` | `"false"` | When `"false"` the controller removes the finalizer on CR deletion without deleting the ruleset from GitHub (orphan). Set to `"true"` to delete the GitHub ruleset when the CR is removed. |
-| `repo-guard.cloudoperators.dev/dryRun` | `"true"` / `"false"` | `"false"` | When `"true"` all GitHub mutations (create, update, delete) are skipped. The CR reaches Ready state without any API calls. |
-| `repo-guard.cloudoperators.dev/completedTTL` | duration string (e.g. `"72h"`) | unset | When set, the controller re-reconciles (drifts correct) the ruleset after this duration. Uses `status.lastSyncTime` as the clock so consecutive same-state reconciles each get a fresh full interval. |
-| `repo-guard.cloudoperators.dev/failedTTL` | duration string (e.g. `"24h"`) | unset | When set and the CR is in `Failed` state, the controller retries on a fixed schedule instead of exponential backoff. |
+| Label | Values | Controller default (label absent) | Helm chart default | Description |
+|---|---|---|---|---|
+| `repo-guard.cloudoperators.dev/addRuleset` | `"true"` / `"false"` | `"true"` (active management) | `"false"` (opt-in) | When `"false"` the controller skips create and update operations and marks the CR Ready without touching GitHub. |
+| `repo-guard.cloudoperators.dev/removeRuleset` | `"true"` / `"false"` | `"true"` (delete on removal) | `"false"` (orphan) | When `"false"` the controller removes the finalizer on CR deletion without deleting the ruleset from GitHub (orphan). |
+| `repo-guard.cloudoperators.dev/dryRun` | `"true"` / `"false"` | `"false"` | `"false"` | When `"true"` all GitHub mutations (create, update, delete) are skipped. The CR reaches Ready state without any API calls. |
+| `repo-guard.cloudoperators.dev/completedTTL` | duration string (e.g. `"72h"`) | unset | `"72h"` | When set, the controller re-reconciles (drift-corrects) the ruleset after this duration. Uses `status.lastSyncTime` as the clock so consecutive same-state reconciles each get a fresh full interval. |
+| `repo-guard.cloudoperators.dev/failedTTL` | duration string (e.g. `"24h"`) | unset | `"24h"` | When set and the CR is in `Failed` state, the controller retries on a fixed schedule instead of exponential backoff. |
 
-> **Safe defaults**: `addRuleset` and `removeRuleset` both default to `"false"` in the Helm chart. You must explicitly opt in to `"true"` to allow the controller to create, update, or delete rulesets in GitHub.
+> **Controller vs Helm defaults**: When labels are absent the controller behaves as if `addRuleset="true"` and `removeRuleset="true"` — manually applied CRs without these labels will actively manage and delete GitHub rulesets. The Helm chart flips both to `"false"` as a safe default so operators must explicitly opt in. Always set these labels when applying CRs outside Helm.
 
 ## Prerequisites
 
