@@ -201,6 +201,10 @@ type GithubOrganizationRulesetStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// LastSyncTime is the time of the most recent successful reconcile attempt.
+	// Used by TTL-based requeue scheduling; updated on every Ready or dryRun result.
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

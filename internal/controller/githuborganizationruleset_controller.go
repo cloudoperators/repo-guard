@@ -297,8 +297,9 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	return r.succeed(ctx, rs)
 }
 
-// rulesetTTLRequeue returns a non-zero RequeueAfter if a TTL label is set and the
-// ruleset has been in its current state long enough to trigger a requeue.
+// rulesetTTLRequeue returns a non-zero RequeueAfter based on TTL labels.
+// It uses LastSyncTime as the clock so repeated same-state reconciles each get
+// a full interval rather than immediately firing again.
 // failedTTL fires when State==Failed; completedTTL fires when State==Ready.
 func rulesetTTLRequeue(rs *v1.GithubOrganizationRuleset) time.Duration {
 	var ttlStr string
@@ -315,16 +316,16 @@ func rulesetTTLRequeue(rs *v1.GithubOrganizationRuleset) time.Duration {
 	if err != nil || ttl <= 0 {
 		return 0
 	}
-	// Find the last transition time of the Ready condition as the state clock.
-	for _, c := range rs.Status.Conditions {
-		if c.Type == "Ready" {
-			elapsed := time.Since(c.LastTransitionTime.Time)
-			if elapsed < ttl {
-				return ttl - elapsed
-			}
-			// TTL already elapsed — requeue immediately.
-			return time.Millisecond
+	// Use LastSyncTime as the clock. This is stamped on every reconcile
+	// completion, so each attempt gets a fresh full interval regardless of
+	// whether the state changed (avoids the tight-loop from condition
+	// LastTransitionTime being preserved across same-state reconciles).
+	if rs.Status.LastSyncTime != nil {
+		elapsed := time.Since(rs.Status.LastSyncTime.Time)
+		if elapsed < ttl {
+			return ttl - elapsed
 		}
+		return ttl
 	}
 	return 0
 }
@@ -343,6 +344,8 @@ func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.G
 		}
 		latest.Status.State = v1.GithubOrganizationRulesetStateFailed
 		latest.Status.Message = msg
+		now := metav1.Now()
+		latest.Status.LastSyncTime = &now
 		setRulesetCondition(latest, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionFalse,
@@ -385,6 +388,8 @@ func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v
 		latest.Status.State = v1.GithubOrganizationRulesetStateReady
 		latest.Status.Message = "ruleset synced"
 		latest.Status.ObservedGeneration = reconciledGeneration
+		now := metav1.Now()
+		latest.Status.LastSyncTime = &now
 		setRulesetCondition(latest, metav1.Condition{
 			Type:               "Ready",
 			Status:             metav1.ConditionTrue,

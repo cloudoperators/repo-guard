@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -356,5 +357,205 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 			}
 		}
 		Expect(specRequired).To(BeTrue(), "spec must be in required so XValidation immutability rules cannot be bypassed by omitting it")
+	})
+
+	It("dryRun=true skips GitHub mutations and still reaches Ready state", func() {
+		if !isMockMode() {
+			Skip("mock server required to verify no GitHub calls are made")
+		}
+		rulesetName := "test-dryrun-" + uniqueID
+		rsResourceName := "ruleset-dryrun-" + uniqueID
+
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rsResourceName,
+				Namespace: uniqueNamespace,
+				Labels: map[string]string{
+					"repo-guard.cloudoperators.dev/dryRun": "true",
+				},
+			},
+			Spec: repoguardsapv1.GithubOrganizationRulesetSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Name:         rulesetName,
+				Enforcement:  repoguardsapv1.RulesetEnforcementActive,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, rs) })
+
+		Eventually(func() repoguardsapv1.GithubOrganizationRulesetState {
+			cur := &repoguardsapv1.GithubOrganizationRuleset{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationRulesetStateReady))
+
+		// Verify no ruleset was actually created in GitHub (RulesetID must remain nil).
+		cur := &repoguardsapv1.GithubOrganizationRuleset{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)).To(Succeed())
+		Expect(cur.Status.RulesetID).To(BeNil(), "dryRun must not create a ruleset in GitHub")
+	})
+
+	It("addRuleset=false skips GitHub create and still reaches Ready state", func() {
+		if !isMockMode() {
+			Skip("mock server required to verify no GitHub calls are made")
+		}
+		rulesetName := "test-add-false-" + uniqueID
+		rsResourceName := "ruleset-add-false-" + uniqueID
+
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rsResourceName,
+				Namespace: uniqueNamespace,
+				Labels: map[string]string{
+					"repo-guard.cloudoperators.dev/addRuleset": "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubOrganizationRulesetSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Name:         rulesetName,
+				Enforcement:  repoguardsapv1.RulesetEnforcementActive,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, rs) })
+
+		Eventually(func() repoguardsapv1.GithubOrganizationRulesetState {
+			cur := &repoguardsapv1.GithubOrganizationRuleset{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur); err != nil {
+				return ""
+			}
+			return cur.Status.State
+		}, 3*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationRulesetStateReady))
+
+		cur := &repoguardsapv1.GithubOrganizationRuleset{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)).To(Succeed())
+		Expect(cur.Status.RulesetID).To(BeNil(), "addRuleset=false must not create a ruleset in GitHub")
+	})
+
+	It("removeRuleset=false orphans the GitHub ruleset instead of deleting it on CR removal", func() {
+		if !isMockMode() {
+			Skip("mock server required to inspect mock ruleset list after CR deletion")
+		}
+		rulesetName := "test-remove-false-" + uniqueID
+		rsResourceName := "ruleset-remove-false-" + uniqueID
+
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rsResourceName,
+				Namespace: uniqueNamespace,
+				Labels: map[string]string{
+					"repo-guard.cloudoperators.dev/removeRuleset": "false",
+				},
+			},
+			Spec: repoguardsapv1.GithubOrganizationRulesetSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Name:         rulesetName,
+				Enforcement:  repoguardsapv1.RulesetEnforcementActive,
+			},
+		}
+		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
+
+		// Wait for ruleset to be created in GitHub.
+		var rulesetID int64
+		Eventually(func() *int64 {
+			cur := &repoguardsapv1.GithubOrganizationRuleset{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur); err != nil {
+				return nil
+			}
+			if cur.Status.State != repoguardsapv1.GithubOrganizationRulesetStateReady {
+				return nil
+			}
+			return cur.Status.RulesetID
+		}, 3*timeout, interval).Should(Not(BeNil()))
+
+		cur := &repoguardsapv1.GithubOrganizationRuleset{}
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)).To(Succeed())
+		rulesetID = *cur.Status.RulesetID
+
+		// Delete the CR — the controller should remove the finalizer without calling DELETE on GitHub.
+		Expect(k8sClient.Delete(ctx, rs)).To(Succeed())
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, &repoguardsapv1.GithubOrganizationRuleset{})
+			return apierrors.IsNotFound(err)
+		}, 3*timeout, interval).Should(BeTrue())
+
+		// The ruleset must still exist in the mock GitHub (not been deleted).
+		url := mockGitHubServer.URL + fmt.Sprintf("/api/v3/orgs/%s/rulesets/%d", orgName, rulesetID)
+		resp, err := http.Get(url) //nolint:noctx
+		Expect(err).NotTo(HaveOccurred())
+		defer func() { _ = resp.Body.Close() }()
+		Expect(resp.StatusCode).To(Equal(http.StatusOK), "ruleset should still exist in GitHub after CR deletion with removeRuleset=false")
+	})
+})
+
+var _ = Describe("rulesetTTLRequeue", func() {
+	makeRS := func(state repoguardsapv1.GithubOrganizationRulesetState, labels map[string]string, syncAge string) *repoguardsapv1.GithubOrganizationRuleset {
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{Labels: labels},
+			Status:     repoguardsapv1.GithubOrganizationRulesetStatus{State: state},
+		}
+		if syncAge != "" {
+			d, _ := time.ParseDuration(syncAge)
+			t := metav1.NewTime(time.Now().Add(-d))
+			rs.Status.LastSyncTime = &t
+		}
+		return rs
+	}
+
+	It("returns 0 when no TTL labels are set", func() {
+		rs := makeRS(repoguardsapv1.GithubOrganizationRulesetStateReady, nil, "10m")
+		Expect(rulesetTTLRequeue(rs)).To(Equal(time.Duration(0)))
+	})
+
+	It("returns 0 when LastSyncTime is nil", func() {
+		rs := makeRS(repoguardsapv1.GithubOrganizationRulesetStateReady, map[string]string{
+			rulesetLabelCompletedTTL: "1h",
+		}, "")
+		Expect(rulesetTTLRequeue(rs)).To(Equal(time.Duration(0)))
+	})
+
+	It("returns remaining duration when TTL has not yet elapsed", func() {
+		rs := makeRS(repoguardsapv1.GithubOrganizationRulesetStateReady, map[string]string{
+			rulesetLabelCompletedTTL: "1h",
+		}, "30m")
+		d := rulesetTTLRequeue(rs)
+		Expect(d).To(BeNumerically(">", 29*time.Minute))
+		Expect(d).To(BeNumerically("<=", 30*time.Minute))
+	})
+
+	It("returns the full TTL interval after a completed reconcile so same-state repeats get a fresh window", func() {
+		// Simulates the case where LastSyncTime was just stamped (elapsed ≈ 0).
+		rs := makeRS(repoguardsapv1.GithubOrganizationRulesetStateReady, map[string]string{
+			rulesetLabelCompletedTTL: "72h",
+		}, "1s")
+		d := rulesetTTLRequeue(rs)
+		Expect(d).To(BeNumerically(">", 71*time.Hour+59*time.Minute))
+	})
+
+	It("returns the full TTL interval when TTL has already elapsed (no tight loop)", func() {
+		rs := makeRS(repoguardsapv1.GithubOrganizationRulesetStateFailed, map[string]string{
+			rulesetLabelFailedTTL: "24h",
+		}, "25h")
+		d := rulesetTTLRequeue(rs)
+		// Must return the full TTL (24h), not 0 or 1ms.
+		Expect(d).To(Equal(24 * time.Hour))
+	})
+
+	It("uses failedTTL when state is Failed and completedTTL when state is Ready", func() {
+		labels := map[string]string{
+			rulesetLabelFailedTTL:    "6h",
+			rulesetLabelCompletedTTL: "72h",
+		}
+		failed := makeRS(repoguardsapv1.GithubOrganizationRulesetStateFailed, labels, "1s")
+		ready := makeRS(repoguardsapv1.GithubOrganizationRulesetStateReady, labels, "1s")
+		dFailed := rulesetTTLRequeue(failed)
+		dReady := rulesetTTLRequeue(ready)
+		Expect(dFailed).To(BeNumerically(">", 5*time.Hour+59*time.Minute))
+		Expect(dReady).To(BeNumerically(">", 71*time.Hour+59*time.Minute))
 	})
 })

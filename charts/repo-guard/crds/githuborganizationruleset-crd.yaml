@@ -311,6 +311,12 @@ spec:
                   path does not depend on the GithubOrganization CR still being present.
                 format: int64
                 type: integer
+              lastSyncTime:
+                description: |-
+                  LastSyncTime is the time of the most recent successful reconcile attempt.
+                  Used by TTL-based requeue scheduling; updated on every Ready or dryRun result.
+                format: date-time
+                type: string
               message:
                 description: Message holds a human-readable description of the last
                   reconciliation result.
