@@ -39,6 +39,13 @@ Repo Guard exposes Prometheus metrics under the `repo_guard_*` namespace, a `Pod
 | `repo_guard_githubteam_managed_members_total` | Gauge | `organization`, `team` | Number of members currently managed in this team. |
 | `repo_guard_githubteam_sync_failures_total` | Counter | `organization`, `team` | Cumulative reconcile cycles that ended in a failed state. |
 
+### GithubOrganizationRuleset metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `repo_guard_githuborganizationruleset_status` | Gauge | `github`, `organization`, `ruleset`, `status` | One-hot gauge for the ruleset's current reconcile status (`Pending`, `Ready`, `Failed`). |
+| `repo_guard_githuborganizationruleset_sync_failures_total` | Counter | `github`, `organization`, `ruleset` | Cumulative reconcile cycles that ended in a failed state for this ruleset. |
+
 ### GitHub API metrics
 
 | Metric | Type | Labels | Description |

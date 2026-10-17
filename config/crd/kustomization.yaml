@@ -16,6 +16,7 @@ resources:
 - bases/repo-guard.cloudoperators.dev_clusterldapgroupproviders.yaml
 - bases/repo-guard.cloudoperators.dev_clustergenericexternalmemberproviders.yaml
 - bases/repo-guard.cloudoperators.dev_clusterstaticmemberproviders.yaml
+- bases/repo-guard.cloudoperators.dev_githuborganizationrulesets.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
