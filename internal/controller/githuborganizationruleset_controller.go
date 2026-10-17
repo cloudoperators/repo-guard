@@ -103,6 +103,10 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 		if ttlStr != "" {
 			if ttl, parseErr := time.ParseDuration(ttlStr); parseErr == nil && ttl > 0 {
 				if remaining := ttl - time.Since(rs.Status.LastSyncTime.Time); remaining > 0 {
+					// Repopulate the Prometheus gauge from persisted status so metrics
+					// are correct after a controller restart (succeed() is not called on
+					// this path, so the gauge would otherwise be empty until TTL expires).
+					ghmetrics.SetGithubOrganizationRulesetMetrics(rs)
 					return reconcile.Result{RequeueAfter: remaining}, nil
 				}
 			}
