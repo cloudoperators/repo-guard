@@ -83,7 +83,7 @@ spec:
     {{- if hasKey $rs.rules "nonFastForward" }}
     nonFastForward: {{ $rs.rules.nonFastForward }}
     {{- end }}
-    {{- if $rs.rules.pullRequest }}
+    {{- if hasKey $rs.rules "pullRequest" }}
     pullRequest:
       dismissStaleReviewsOnPush: {{ $rs.rules.pullRequest.dismissStaleReviewsOnPush | default false }}
       requireCodeOwnerReview: {{ $rs.rules.pullRequest.requireCodeOwnerReview | default false }}
