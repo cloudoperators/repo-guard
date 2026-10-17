@@ -29,6 +29,25 @@ import (
 
 const rulesetFinalizer = "repo-guard.cloudoperators.dev/ruleset"
 
+const (
+	// rulesetLabelDryRun skips all GitHub mutations when set to "true".
+	rulesetLabelDryRun = "repo-guard.cloudoperators.dev/dryRun"
+	// rulesetLabelAddRuleset controls whether the controller creates or updates the ruleset in GitHub.
+	// Defaults to true; set to "false" to prevent creation/update.
+	rulesetLabelAddRuleset = "repo-guard.cloudoperators.dev/addRuleset"
+	// rulesetLabelRemoveRuleset controls whether the finalizer deletes the ruleset from GitHub on CR deletion.
+	// Defaults to true; set to "false" to orphan the GitHub ruleset on CR deletion.
+	rulesetLabelRemoveRuleset = "repo-guard.cloudoperators.dev/removeRuleset"
+	// rulesetLabelFailedTTL schedules a requeue after this duration when the ruleset is in Failed state,
+	// clearing the error so a subsequent reconcile retries from scratch.
+	rulesetLabelFailedTTL = "repo-guard.cloudoperators.dev/failedTTL"
+	// rulesetLabelCompletedTTL schedules a periodic re-reconcile after this duration when the ruleset is Ready.
+	rulesetLabelCompletedTTL = "repo-guard.cloudoperators.dev/completedTTL"
+
+	rulesetLabelEnabled  = "true"
+	rulesetLabelDisabled = "false"
+)
+
 // GithubOrganizationRulesetReconciler reconciles GithubOrganizationRuleset objects.
 type GithubOrganizationRulesetReconciler struct {
 	client.Client
@@ -67,9 +86,12 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	// Handle deletion: remove the GitHub ruleset before removing the finalizer.
 	if !rs.DeletionTimestamp.IsZero() {
 		if containsString(rs.Finalizers, rulesetFinalizer) {
-			// Respect dry-run during deletion too — skip the GitHub DELETE.
-			if rs.Labels[GITHUB_ORG_LABEL_DRY_RUN] == GITHUB_ORG_LABEL_DRY_RUN_ENABLED_VALUE {
+			removeDisabled := rs.Labels[rulesetLabelRemoveRuleset] == rulesetLabelDisabled
+			dryRun := rs.Labels[rulesetLabelDryRun] == rulesetLabelEnabled
+			if dryRun {
 				l.Info("dry-run mode: skipping GitHub ruleset deletion", "name", rs.Spec.Name)
+			} else if removeDisabled {
+				l.Info("removeRuleset=false: orphaning GitHub ruleset on deletion", "name", rs.Spec.Name)
 			} else if rs.Status.RulesetID != nil {
 				cc := GithubClients[githubName]
 				if cc == nil {
@@ -192,8 +214,14 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Respect the dry-run label — log what would happen but skip GitHub mutations.
-	if rs.Labels[GITHUB_ORG_LABEL_DRY_RUN] == GITHUB_ORG_LABEL_DRY_RUN_ENABLED_VALUE {
+	if rs.Labels[rulesetLabelDryRun] == rulesetLabelEnabled {
 		l.Info("dry-run mode: skipping GitHub ruleset mutations", "name", rs.Spec.Name)
+		return r.succeed(ctx, rs)
+	}
+
+	// Respect addRuleset=false — skip create/update but still track TTL and status.
+	if rs.Labels[rulesetLabelAddRuleset] == rulesetLabelDisabled {
+		l.Info("addRuleset=false: skipping GitHub ruleset create/update", "name", rs.Spec.Name)
 		return r.succeed(ctx, rs)
 	}
 
@@ -269,8 +297,42 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	return r.succeed(ctx, rs)
 }
 
+// rulesetTTLRequeue returns a non-zero RequeueAfter if a TTL label is set and the
+// ruleset has been in its current state long enough to trigger a requeue.
+// failedTTL fires when State==Failed; completedTTL fires when State==Ready.
+func rulesetTTLRequeue(rs *v1.GithubOrganizationRuleset) time.Duration {
+	var ttlStr string
+	switch rs.Status.State {
+	case v1.GithubOrganizationRulesetStateFailed:
+		ttlStr = rs.Labels[rulesetLabelFailedTTL]
+	case v1.GithubOrganizationRulesetStateReady:
+		ttlStr = rs.Labels[rulesetLabelCompletedTTL]
+	}
+	if ttlStr == "" {
+		return 0
+	}
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil || ttl <= 0 {
+		return 0
+	}
+	// Find the last transition time of the Ready condition as the state clock.
+	for _, c := range rs.Status.Conditions {
+		if c.Type == "Ready" {
+			elapsed := time.Since(c.LastTransitionTime.Time)
+			if elapsed < ttl {
+				return ttl - elapsed
+			}
+			// TTL already elapsed — requeue immediately.
+			return time.Millisecond
+		}
+	}
+	return 0
+}
+
 // fail marks the resource as Failed with the given message and returns an error
 // so controller-runtime applies exponential backoff on the next reconcile.
+// If failedTTL is set and has already elapsed, a RequeueAfter is returned instead
+// of an error so the controller retries on a fixed schedule rather than backing off.
 func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.GithubOrganizationRuleset, msg string) (reconcile.Result, error) {
 	origErr := fmt.Errorf("%s", msg)
 	log.FromContext(ctx).Error(origErr, "ruleset reconcile failed")
@@ -297,13 +359,20 @@ func (r *GithubOrganizationRulesetReconciler) fail(ctx context.Context, rs *v1.G
 			strings.TrimSpace(latest.Spec.Organization),
 			strings.TrimSpace(latest.Spec.Name),
 		)
+		rs.Status = latest.Status
+		rs.Labels = latest.Labels
 		return nil
 	})
+	// If failedTTL is set, schedule a fixed requeue instead of returning an error
+	// (which would trigger exponential backoff and eventually stop retrying).
+	if d := rulesetTTLRequeue(rs); d > 0 {
+		return reconcile.Result{RequeueAfter: d}, nil
+	}
 	// Return the original error so controller-runtime applies retry backoff.
 	return reconcile.Result{}, origErr
 }
 
-// succeed marks the resource as Ready.
+// succeed marks the resource as Ready and schedules a TTL requeue if configured.
 func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v1.GithubOrganizationRuleset) (reconcile.Result, error) {
 	// Capture the generation of the reconciled snapshot before fetching latest,
 	// so ObservedGeneration reflects the spec that was actually applied.
@@ -327,9 +396,18 @@ func (r *GithubOrganizationRulesetReconciler) succeed(ctx context.Context, rs *v
 			return err
 		}
 		ghmetrics.SetGithubOrganizationRulesetMetrics(latest)
+		// Keep rs in sync so TTL check below sees the updated conditions.
+		rs.Status = latest.Status
+		rs.Labels = latest.Labels
 		return nil
 	})
-	return reconcile.Result{}, updateErr
+	if updateErr != nil {
+		return reconcile.Result{}, updateErr
+	}
+	if d := rulesetTTLRequeue(rs); d > 0 {
+		return reconcile.Result{RequeueAfter: d}, nil
+	}
+	return reconcile.Result{}, nil
 }
 
 // setRulesetID persists the adopted/created GitHub ruleset ID to status.

@@ -34,6 +34,9 @@ ttl:
   organization:
     failed: "24h"
     completed: "72h"
+  ruleset:
+    failed: "24h"
+    completed: "72h"
 
 monitoring:
   # When enabled, install PrometheusRule alerts for the controller
@@ -208,6 +211,13 @@ perses:
 #       - name: Protect default branch   # human-readable name shown in GitHub; also used to name the CR
 #         target: branch                  # branch | tag | push | repository (default: branch)
 #         enforcement: active             # active | evaluate | disabled (default: active)
+#         addRuleset: "true"              # "true" (default): create/update ruleset in GitHub; "false": skip mutations
+#         removeRuleset: "true"           # "true" (default): delete ruleset from GitHub on CR deletion; "false": orphan it
+#         dryRun: "false"                 # "true": log actions but skip all GitHub API mutations (inherits org dryRun if unset)
+#         # Per-ruleset TTL overrides; falls back to .Values.ttl.ruleset if omitted
+#         ttl:
+#           failed: "24h"                 # requeue after this duration when ruleset is in Failed state
+#           completed: "72h"              # requeue (re-reconcile) after this duration when ruleset is Ready
 #         # bypassActors: actors that can bypass this ruleset
 #         # bypassActors:
 #         #   - actorType: OrganizationAdmin   # Integration | OrganizationAdmin | RepositoryRole | Team | DeployKey
