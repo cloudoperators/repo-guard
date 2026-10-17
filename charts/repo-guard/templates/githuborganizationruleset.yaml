@@ -7,7 +7,8 @@
 apiVersion: repo-guard.cloudoperators.dev/v1
 kind: GithubOrganizationRuleset
 metadata:
-  name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}--{{ $rs.name | toString | replace "_" "-" | replace " " "-" | lower }}
+  {{- $rsSlug := trimAll "-" (regexReplaceAll "[^a-z0-9]+" ($rs.name | toString | lower) "-") }}
+  name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}--{{ $rsSlug }}
 spec:
   github: {{ $org.github }}
   organization: {{ $org.organization }}
@@ -16,7 +17,15 @@ spec:
   enforcement: {{ $rs.enforcement | default "active" }}
   {{- if $rs.bypassActors }}
   bypassActors:
-{{ toYaml $rs.bypassActors | indent 4 }}
+    {{- range $rs.bypassActors }}
+    - actorType: {{ .actorType }}
+      bypassMode: {{ .bypassMode }}
+      {{- if hasKey . "actorId" }}
+      actorId: {{ .actorId }}
+      {{- else if eq .actorType "OrganizationAdmin" }}
+      actorId: 1
+      {{- end }}
+    {{- end }}
   {{- end }}
   {{- if $rs.conditions }}
   conditions:
@@ -71,7 +80,7 @@ spec:
       dismissStaleReviewsOnPush: {{ $rs.rules.pullRequest.dismissStaleReviewsOnPush | default false }}
       requireCodeOwnerReview: {{ $rs.rules.pullRequest.requireCodeOwnerReview | default false }}
       requireLastPushApproval: {{ $rs.rules.pullRequest.requireLastPushApproval | default false }}
-      requiredApprovingReviewCount: {{ $rs.rules.pullRequest.requiredApprovingReviewCount | default 1 }}
+      requiredApprovingReviewCount: {{ if hasKey $rs.rules.pullRequest "requiredApprovingReviewCount" }}{{ $rs.rules.pullRequest.requiredApprovingReviewCount }}{{ else }}1{{ end }}
       requiredReviewThreadResolution: {{ $rs.rules.pullRequest.requiredReviewThreadResolution | default false }}
     {{- end }}
   {{- end }}
