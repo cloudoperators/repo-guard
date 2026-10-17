@@ -126,10 +126,10 @@ perses:
 #     removeRepositoryTeam:
 #     dryRun:
 #     # Default addRuleset for all rulesets in this organization. Per-ruleset addRuleset overrides this.
-#     # "true" (default): create/update rulesets in GitHub; "false": skip mutations for all rulesets.
+#     # "false" (default): skip GitHub mutations; set to "true" to enable create/update for all rulesets.
 #     addRuleset:
 #     # Default removeRuleset for all rulesets in this organization. Per-ruleset removeRuleset overrides this.
-#     # "true" (default): delete rulesets from GitHub on CR deletion; "false": orphan all rulesets on deletion.
+#     # "false" (default): orphan rulesets on CR deletion; set to "true" to delete from GitHub on removal.
 #     removeRuleset:
 #     # Opt-in: remove org members that are not in any GitHub team.
 #     # Values: "true" (calculate + execute), "dryRun" (calculate only, ops appear in status but not executed), "false"/unset (disabled).
@@ -217,8 +217,8 @@ perses:
 #       - name: Protect default branch   # human-readable name shown in GitHub; also used to name the CR
 #         target: branch                  # branch | tag | push | repository (default: branch)
 #         enforcement: active             # active | evaluate | disabled (default: active)
-#         addRuleset: "true"              # "true" (default): create/update ruleset in GitHub; "false": skip mutations (inherits org addRuleset if unset)
-#         removeRuleset: "true"           # "true" (default): delete ruleset from GitHub on CR deletion; "false": orphan it (inherits org removeRuleset if unset)
+#         addRuleset: "false"             # "false" (default): skip GitHub mutations; set to "true" to create/update (inherits org addRuleset if unset)
+#         removeRuleset: "false"          # "false" (default): orphan ruleset on CR deletion; set to "true" to delete from GitHub (inherits org removeRuleset if unset)
 #         dryRun: "false"                 # "true": log actions but skip all GitHub API mutations (inherits org dryRun if unset)
 #         # Per-ruleset TTL overrides; falls back to .Values.ttl.ruleset if omitted
 #         ttl:
