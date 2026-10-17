@@ -86,14 +86,26 @@ func (r *GithubOrganizationRulesetReconciler) Reconcile(ctx context.Context, req
 	// Short-circuit if the CR is up-to-date and the TTL has not yet elapsed.
 	// Status writes (e.g. stamping LastSyncTime) also trigger a reconcile via the
 	// informer watch. Without this guard the controller would set up a GitHub client
-	// and make API calls on every such event. Instead, when the spec has not changed
-	// since the last successful sync and there is TTL time remaining, return the
-	// remainder directly without touching GitHub.
+	// and make API calls on every such event. Skip when:
+	//   • not being deleted
+	//   • spec has not changed (ObservedGeneration == Generation)
+	//   • state is Ready
+	//   • TTL has not yet elapsed (LastSyncTime + TTL is in the future)
+	//   • neither dryRun nor addRuleset=false is set (label changes don't bump
+	//     Generation so we must re-evaluate labels on every reconcile for those paths)
 	if rs.DeletionTimestamp.IsZero() &&
 		rs.Status.State == v1.GithubOrganizationRulesetStateReady &&
-		rs.Status.ObservedGeneration == rs.Generation {
-		if d := rulesetTTLRequeue(rs); d > 0 {
-			return reconcile.Result{RequeueAfter: d}, nil
+		rs.Status.ObservedGeneration == rs.Generation &&
+		rs.Labels[rulesetLabelDryRun] != rulesetLabelEnabled &&
+		rs.Labels[rulesetLabelAddRuleset] != rulesetLabelDisabled &&
+		rs.Status.LastSyncTime != nil {
+		ttlStr := rs.Labels[rulesetLabelCompletedTTL]
+		if ttlStr != "" {
+			if ttl, parseErr := time.ParseDuration(ttlStr); parseErr == nil && ttl > 0 {
+				if remaining := ttl - time.Since(rs.Status.LastSyncTime.Time); remaining > 0 {
+					return reconcile.Result{RequeueAfter: remaining}, nil
+				}
+			}
 		}
 	}
 
