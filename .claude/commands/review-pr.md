@@ -114,7 +114,8 @@ After replying, resolve the thread via the GraphQL API (there is no REST endpoin
 
 ```bash
 # Step 1 — get the thread node IDs and their resolved state (paginate until hasNextPage is false)
-CURSOR=""
+# Use -F (not -f) for the cursor so the initial null value is sent as GraphQL null, not an empty string.
+CURSOR="null"
 while true; do
   RESULT=$(gh api graphql -f query='
   query($cursor: String) {
@@ -132,7 +133,7 @@ while true; do
         }
       }
     }
-  }' -f cursor="$CURSOR")
+  }' -F cursor="$CURSOR")
   echo "$RESULT"
   HAS_NEXT=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
   [ "$HAS_NEXT" = "true" ] || break
@@ -176,7 +177,7 @@ The reliable approach is:
 
 ```bash
 gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/reviews' \
-  | jq '[.[] | select(.user.login == "Copilot")] | length'
+  | jq -s '[.[][] | select(.user.login == "Copilot")] | length'
 ```
 
 If the count is > 0 and Copilot was the only reviewer, re-request by dismissing its last review or simply pushing a new commit (Copilot re-triggers automatically on new pushes to the PR branch in most configurations).
@@ -189,7 +190,7 @@ After re-requesting, poll until a new Copilot review appears:
 # Poll every 30 seconds, up to 20 minutes
 for i in $(seq 1 40); do
   NEW_COUNT=$(gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/comments' \
-    | jq '[.[] | select(.user.login == "Copilot")] | length')
+    | jq -s '[.[][] | select(.user.login == "Copilot")] | length')
   echo "Attempt $i: $NEW_COUNT Copilot comments found"
   [ "$NEW_COUNT" -gt "$PREVIOUS_COUNT" ] && break
   sleep 30
