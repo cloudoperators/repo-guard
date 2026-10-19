@@ -34,6 +34,9 @@ ttl:
   organization:
     failed: "24h"
     completed: "72h"
+  ruleset:
+    failed: "24h"
+    completed: "72h"
 
 monitoring:
   # When enabled, install PrometheusRule alerts for the controller
@@ -122,6 +125,12 @@ perses:
 #     addRepositoryTeam:
 #     removeRepositoryTeam:
 #     dryRun:
+#     # Default addRuleset for all rulesets in this organization. Per-ruleset addRuleset overrides this.
+#     # "false" (default): skip GitHub mutations; set to "true" to enable create/update for all rulesets.
+#     addRuleset:
+#     # Default removeRuleset for all rulesets in this organization. Per-ruleset removeRuleset overrides this.
+#     # "false" (default): orphan rulesets on CR deletion; set to "true" to delete from GitHub on removal.
+#     removeRuleset:
 #     # Opt-in: remove org members that are not in any GitHub team.
 #     # Values: "true" (calculate + execute), "dryRun" (calculate only, ops appear in status but not executed), "false"/unset (disabled).
 #     removeOrganizationMember:
@@ -202,3 +211,41 @@ perses:
 #         repositories:
 #           -
 #         permission:
+#
+#     # rulesets creates GithubOrganizationRuleset CRs for this organization.
+#     rulesets:
+#       - name: Protect default branch   # human-readable name shown in GitHub; also used to name the CR
+#         target: branch                  # branch | tag | push | repository (default: branch)
+#         enforcement: active             # active | evaluate | disabled (default: active)
+#         addRuleset: "false"             # "false" (default): skip GitHub mutations; set to "true" to create/update (inherits org addRuleset if unset)
+#         removeRuleset: "false"          # "false" (default): orphan ruleset on CR deletion; set to "true" to delete from GitHub (inherits org removeRuleset if unset)
+#         dryRun: "false"                 # "true": log actions but skip all GitHub API mutations (inherits org dryRun if unset)
+#         # Per-ruleset TTL overrides; falls back to .Values.ttl.ruleset if omitted
+#         ttl:
+#           failed: "24h"                 # requeue after this duration when ruleset is in Failed state
+#           completed: "72h"              # requeue (re-reconcile) after this duration when ruleset is Ready
+#         # bypassActors: actors that can bypass this ruleset
+#         # bypassActors:
+#         #   - actorType: OrganizationAdmin   # Integration | OrganizationAdmin | RepositoryRole | Team | DeployKey
+#         #     bypassMode: always             # always | pull_request
+#         #   - actorId: 12345                 # GitHub numeric ID of the team or app (omit for DeployKey)
+#         #     actorType: Team
+#         #     bypassMode: pull_request
+#         conditions:
+#           refName:
+#             include:
+#               - "~DEFAULT_BRANCH"   # ~DEFAULT_BRANCH | ~ALL | refs/heads/main | refs/heads/release/*
+#           repositoryName:
+#             include:
+#               - "~ALL"              # ~ALL | ~PUBLIC | ~PRIVATE | ~INTERNAL | exact name or fnmatch pattern
+#         rules:
+#           deletion: true
+#           nonFastForward: true
+#           requiredSignatures: true
+#           requiredLinearHistory: false
+#           pullRequest:
+#             dismissStaleReviewsOnPush: true
+#             requireCodeOwnerReview: false
+#             requireLastPushApproval: true
+#             requiredApprovingReviewCount: 1
+#             requiredReviewThreadResolution: false

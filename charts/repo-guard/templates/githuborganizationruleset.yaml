@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+{{- range $org := .Values.githubOrganizations }}
+  {{- if $org.rulesets }}
+    {{- range $rs := $org.rulesets }}
+apiVersion: repo-guard.cloudoperators.dev/v1
+kind: GithubOrganizationRuleset
+metadata:
+  {{- $rsSlug := trimAll "-" (regexReplaceAll "[^a-z0-9]+" ($rs.name | toString | lower) "-") }}
+  name: {{ $org.github }}--{{ $org.organization | toString | replace "/" "-" | lower }}--{{ $rsSlug }}
+  labels:
+    repo-guard.cloudoperators.dev/addRuleset: "{{ $rs.addRuleset | default ($org.addRuleset | default "false") }}"
+    repo-guard.cloudoperators.dev/removeRuleset: "{{ $rs.removeRuleset | default ($org.removeRuleset | default "false") }}"
+    repo-guard.cloudoperators.dev/dryRun: "{{ $rs.dryRun | default ($org.dryRun | default "false") }}"
+    {{- $ttl := (get $rs "ttl") -}}
+    {{- if not (kindIs "map" $ttl) }}{{- $ttl = dict -}}{{- end }}
+    repo-guard.cloudoperators.dev/failedTTL: "{{ ((get $ttl "failed") | default $.Values.ttl.ruleset.failed) }}"
+    repo-guard.cloudoperators.dev/completedTTL: "{{ ((get $ttl "completed") | default $.Values.ttl.ruleset.completed) }}"
+spec:
+  github: {{ $org.github }}
+  organization: {{ $org.organization }}
+  name: {{ $rs.name | quote }}
+  target: {{ $rs.target | default "branch" }}
+  enforcement: {{ $rs.enforcement | default "active" }}
+  {{- if $rs.bypassActors }}
+  bypassActors:
+    {{- range $rs.bypassActors }}
+    - actorType: {{ .actorType }}
+      bypassMode: {{ .bypassMode }}
+      {{- if hasKey . "actorId" }}
+      actorId: {{ .actorId }}
+      {{- else if eq .actorType "OrganizationAdmin" }}
+      actorId: 1
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if $rs.conditions }}
+  conditions:
+    {{- if $rs.conditions.refName }}
+    refName:
+      {{- if $rs.conditions.refName.include }}
+      include:
+{{ toYaml $rs.conditions.refName.include | indent 8 }}
+      {{- end }}
+      {{- if $rs.conditions.refName.exclude }}
+      exclude:
+{{ toYaml $rs.conditions.refName.exclude | indent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if $rs.conditions.repositoryName }}
+    repositoryName:
+      {{- if $rs.conditions.repositoryName.include }}
+      include:
+{{ toYaml $rs.conditions.repositoryName.include | indent 8 }}
+      {{- end }}
+      {{- if $rs.conditions.repositoryName.exclude }}
+      exclude:
+{{ toYaml $rs.conditions.repositoryName.exclude | indent 8 }}
+      {{- end }}
+      {{- if hasKey $rs.conditions.repositoryName "protected" }}
+      protected: {{ $rs.conditions.repositoryName.protected }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if $rs.rules }}
+  rules:
+    {{- if hasKey $rs.rules "creation" }}
+    creation: {{ $rs.rules.creation }}
+    {{- end }}
+    {{- if hasKey $rs.rules "update" }}
+    update: {{ $rs.rules.update }}
+    {{- end }}
+    {{- if hasKey $rs.rules "deletion" }}
+    deletion: {{ $rs.rules.deletion }}
+    {{- end }}
+    {{- if hasKey $rs.rules "requiredLinearHistory" }}
+    requiredLinearHistory: {{ $rs.rules.requiredLinearHistory }}
+    {{- end }}
+    {{- if hasKey $rs.rules "requiredSignatures" }}
+    requiredSignatures: {{ $rs.rules.requiredSignatures }}
+    {{- end }}
+    {{- if hasKey $rs.rules "nonFastForward" }}
+    nonFastForward: {{ $rs.rules.nonFastForward }}
+    {{- end }}
+    {{- if hasKey $rs.rules "pullRequest" }}
+    pullRequest:
+      dismissStaleReviewsOnPush: {{ $rs.rules.pullRequest.dismissStaleReviewsOnPush | default false }}
+      requireCodeOwnerReview: {{ $rs.rules.pullRequest.requireCodeOwnerReview | default false }}
+      requireLastPushApproval: {{ $rs.rules.pullRequest.requireLastPushApproval | default false }}
+      requiredApprovingReviewCount: {{ if hasKey $rs.rules.pullRequest "requiredApprovingReviewCount" }}{{ $rs.rules.pullRequest.requiredApprovingReviewCount }}{{ else }}1{{ end }}
+      requiredReviewThreadResolution: {{ $rs.rules.pullRequest.requiredReviewThreadResolution | default false }}
+    {{- end }}
+  {{- end }}
+---
+    {{- end }}
+  {{- end }}
+{{- end }}

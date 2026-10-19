@@ -32,7 +32,7 @@ This command runs as a **loop**:
 
 6. **Resolve every thread** — mark all comment threads as resolved via the GraphQL API.
 
-7. **Re-request review if Copilot was the reviewer** — if `copilot-pull-request-reviewer[bot]` was among the reviewers, re-request its review so it re-evaluates the updated code.
+7. **Re-request review if Copilot was the reviewer** — if `Copilot` was among the reviewers (note: the bot's `user.login` is `"Copilot"`, not `"copilot-pull-request-reviewer[bot]"`), re-request its review so it re-evaluates the updated code.
 
 8. **Wait and iterate** — poll the PR for new comments. Once Copilot posts its next review, go back to step 1. The loop exits when either:
    - All threads are resolved and Copilot posts no new comments, **or**
@@ -48,8 +48,8 @@ Run all three commands in parallel:
 
 ```bash
 gh pr view <PR> --repo cloudoperators/repo-guard --json title,body,comments,reviews,url
-gh api repos/cloudoperators/repo-guard/pulls/<PR>/reviews
-gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments
+gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/reviews'
+gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/comments'
 ```
 
 Also read the current branch to understand what the PR has already changed:
@@ -113,23 +113,32 @@ Note: use `in_reply_to` (not a `/replies` sub-resource — that endpoint does no
 After replying, resolve the thread via the GraphQL API (there is no REST endpoint for this):
 
 ```bash
-# Step 1 — get the thread node IDs and their resolved state
-gh api graphql -f query='
-{
-  repository(owner: "cloudoperators", name: "repo-guard") {
-    pullRequest(number: <PR>) {
-      reviewThreads(first: 50) {
-        nodes {
-          id
-          isResolved
-          comments(first: 1) {
-            nodes { databaseId body }
+# Step 1 — get the thread node IDs and their resolved state (paginate until hasNextPage is false)
+# Use -F (not -f) for the cursor so the initial null value is sent as GraphQL null, not an empty string.
+CURSOR="null"
+while true; do
+  RESULT=$(gh api graphql -f query='
+  query($cursor: String) {
+    repository(owner: "cloudoperators", name: "repo-guard") {
+      pullRequest(number: <PR>) {
+        reviewThreads(first: 100, after: $cursor) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            id
+            isResolved
+            comments(first: 1) {
+              nodes { databaseId body }
+            }
           }
         }
       }
     }
-  }
-}'
+  }' -F cursor="$CURSOR")
+  echo "$RESULT"
+  HAS_NEXT=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  [ "$HAS_NEXT" = "true" ] || break
+  CURSOR=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
 
 # Step 2 — resolve each unresolved thread by its node ID
 gh api graphql -f query='
@@ -142,7 +151,7 @@ mutation {
 
 ### 7 — Re-request Copilot review (if applicable)
 
-Check whether `copilot-pull-request-reviewer[bot]` appears in the reviewer list:
+Check whether `Copilot` appears in the reviewer list (the bot's `user.login` is `"Copilot"`, not `"copilot-pull-request-reviewer[bot]"`):
 
 ```bash
 gh api repos/cloudoperators/repo-guard/pulls/<PR>/requested_reviewers
@@ -167,8 +176,8 @@ gh pr review <PR> --repo cloudoperators/repo-guard --request-changes --body "" 2
 The reliable approach is:
 
 ```bash
-gh api repos/cloudoperators/repo-guard/pulls/<PR>/reviews \
-  --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length'
+gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/reviews' \
+  | jq -s '[.[][] | select(.user.login == "Copilot")] | length'
 ```
 
 If the count is > 0 and Copilot was the only reviewer, re-request by dismissing its last review or simply pushing a new commit (Copilot re-triggers automatically on new pushes to the PR branch in most configurations).
@@ -180,8 +189,8 @@ After re-requesting, poll until a new Copilot review appears:
 ```bash
 # Poll every 30 seconds, up to 20 minutes
 for i in $(seq 1 40); do
-  NEW_COUNT=$(gh api repos/cloudoperators/repo-guard/pulls/<PR>/comments \
-    --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length')
+  NEW_COUNT=$(gh api --paginate 'repos/cloudoperators/repo-guard/pulls/<PR>/comments' \
+    | jq -s '[.[][] | select(.user.login == "Copilot")] | length')
   echo "Attempt $i: $NEW_COUNT Copilot comments found"
   [ "$NEW_COUNT" -gt "$PREVIOUS_COUNT" ] && break
   sleep 30
