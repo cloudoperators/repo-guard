@@ -1,6 +1,6 @@
 module github.com/cloudoperators/repo-guard
 
-go 1.26.9
+go 1.27.0
 
 require (
 	github.com/cloudoperators/greenhouse v0.13.1
@@ -11,7 +11,7 @@ require (
 	github.com/nmcclain/ldap v0.0.0-20210720162743-7f8d1e44eeba
 	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.44.0
-	github.com/palantir/go-githubapp v0.47.2
+	github.com/palantir/go-githubapp v0.48.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
 	github.com/shurcooL/githubv4 v0.0.0-20260209031235-2402fdf4a9ed
@@ -74,6 +74,7 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v88 v88.0.0 // indirect
+	github.com/google/go-github/v92 v92.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
 	github.com/google/uuid v1.6.0 // indirect
