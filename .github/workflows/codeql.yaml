@@ -17,6 +17,6 @@ jobs:
     with:
       language: "['go']"
       go-check: true
-      go-version: "['1.25']"
+      go-version: "['1.26']"
       node-check: false
       autobuild: true
