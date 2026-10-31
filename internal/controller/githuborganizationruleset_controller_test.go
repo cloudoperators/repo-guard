@@ -45,6 +45,16 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 
 		orgName = requireEnv("ORGANIZATION")
 
+		// Skip all ruleset tests when the GitHub org does not have a Team/Enterprise
+		// plan — the org-level rulesets API returns 403 on free plans.
+		if !isMockMode() {
+			ghClient := newTestGithubClient()
+			_, resp, err := ghClient.Organizations.ListAllRepositoryRulesets(ctx, orgName, nil)
+			if err != nil && resp != nil && resp.StatusCode == 403 {
+				Skip("org " + orgName + " does not support organization-level rulesets (requires GitHub Team/Enterprise plan)")
+			}
+		}
+
 		uniqueID = fmt.Sprintf("%08x", testRand.Uint32())
 		uniqueNamespace = "ns-ruleset-" + uniqueID
 		uniqueGithubName = "gh-ruleset-" + uniqueID
