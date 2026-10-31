@@ -174,9 +174,10 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 	}
 
 	// Create team. GitHub slug is derived from name; keeping name == slugOrName is fine for tests.
+	privacyClosed := "closed"
 	newTeam := githubAPI.CreateTeamRequest{
 		Name:    teamSlugOrName,
-		Privacy: githubAPI.Ptr("closed"),
+		Privacy: &privacyClosed,
 	}
 	_, resp, err = client.Teams.CreateTeam(ctx, org, newTeam)
 	if err == nil {
@@ -235,10 +236,11 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 		return nil
 	}
 
+	isPrivate := visibility != "public"
 	r := githubAPI.CreateRepositoryRequest{
 		Name:       repo,
-		Private:    githubAPI.Ptr(visibility != "public"),
-		Visibility: githubAPI.Ptr(visibility),
+		Private:    &isPrivate,
+		Visibility: &visibility,
 	}
 	_, resp, err = client.Repositories.Create(ctx, org, r)
 	if err == nil {

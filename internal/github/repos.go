@@ -257,7 +257,8 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 }
 func (t *DefaultRepositoryProvider) RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error {
 
-	opts := github.AddTeamRepoRequest{Permission: github.Ptr(string(permission))}
+	perm := string(permission)
+	opts := github.AddTeamRepoRequest{Permission: &perm}
 	response, err := t.teamsService.AddTeamRepoBySlug(ctx, t.organization, team, t.organization, repo, opts)
 	if err != nil {
 		return err

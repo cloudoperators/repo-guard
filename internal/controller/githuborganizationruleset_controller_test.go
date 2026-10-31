@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"time"
 
-	githubAPI "github.com/google/go-github/v93/github"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -484,8 +483,8 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 					},
 				},
 				Rules: &repoguardsapv1.RulesetRules{
-					NonFastForward: githubAPI.Ptr(true),
-				},
+						NonFastForward: func() *bool { v := true; return &v }(),
+					},
 			},
 		}
 		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
