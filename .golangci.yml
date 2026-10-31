@@ -1,0 +1,9 @@
+version: "2"
+
+linters:
+  settings:
+    govet:
+      # The inline analyzer reports false positives for generic functions (e.g.
+      # go-github's Ptr[T]) under Go 1.27 — disable it until upstream fixes it.
+      disable:
+        - inline
