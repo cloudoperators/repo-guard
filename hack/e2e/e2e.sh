@@ -1678,6 +1678,45 @@ cmd_github_cleanup() {
     fi
   fi
 
+  # Optionally delete repositories matching extra prefixes (e.g. controller-test repo-priv-/repo-pub-).
+  # Works independently of E2E_CLEANUP_REPOS — set E2E_CLEANUP_REPO_PREFIXES to a comma-separated list.
+  local repo_prefixes=${E2E_CLEANUP_REPO_PREFIXES:-}
+  if [[ -n "$repo_prefixes" ]]; then
+    local rcode2
+    rcode2=$(github_list_repos_json)
+    if [[ "$rcode2" != "200" ]]; then
+      echo "[$(ts)] ERROR: Failed to list repos for prefix cleanup (HTTP ${rcode2})" >&2
+    else
+      IFS=',' read -ra rprefix_list <<< "$repo_prefixes"
+      for rprefix in "${rprefix_list[@]}"; do
+        [[ -z "$rprefix" ]] && continue
+        local prefix_repos
+        prefix_repos=$(jq -r --arg p "$rprefix" '.[] | select(.name | startswith($p)) | .name' /tmp/repos.json)
+        if [[ -z "$prefix_repos" ]]; then
+          echo "[$(ts)] INFO: No repos found with prefix '${rprefix}'."
+          continue
+        fi
+        echo "[$(ts)] INFO: Repos to delete with prefix '${rprefix}':"
+        echo "$prefix_repos" | sed 's/^/  - /'
+        while IFS= read -r repo; do
+          [[ -z "$repo" ]] && continue
+          if [[ "$dry" == "true" ]]; then
+            echo "[$(ts)] INFO: DRY-RUN would delete repo: ${org}/${repo}"
+            continue
+          fi
+          local delrc2
+          delrc2=$(github_delete_repo "$repo")
+          if [[ "$delrc2" == "204" || "$delrc2" == "200" ]]; then
+            echo "[$(ts)] INFO: Deleted repo: ${org}/${repo}"
+          else
+            echo "[$(ts)] ERROR: Failed to delete repo ${org}/${repo} (HTTP ${delrc2})" >&2
+            cat /tmp/delrepo.json >&2 || true
+          fi
+        done <<< "$prefix_repos"
+      done
+    fi
+  fi
+
     # Revert organization owners to only ORGANIZATION_OWNER_USER
     local OWNER_GH_USER
     OWNER_GH_USER=$(read_env_var ORGANIZATION_OWNER_USER)

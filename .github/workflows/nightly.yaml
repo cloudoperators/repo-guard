@@ -50,6 +50,7 @@ jobs:
           E2E_DRY_RUN: "false"
           E2E_CLEANUP_REPOS: "false"
           E2E_CLEANUP_TEAM_PREFIXES: "tm-"
+          E2E_CLEANUP_REPO_PREFIXES: "repo-priv-,repo-pub-"
           TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: make controller-test-github-cleanup
 

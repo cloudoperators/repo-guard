@@ -163,8 +163,8 @@ e2e-github-cleanup: ## Delete e2e-created GitHub teams (and optionally repos) us
 	bash hack/e2e/e2e.sh github-cleanup
 
 .PHONY: controller-test-github-cleanup
-controller-test-github-cleanup: ## Delete orphan tm- teams left by controller-test-live runs. Env: E2E_DRY_RUN=true|false
-	E2E_CLEANUP_REPOS=false E2E_CLEANUP_TEAM_PREFIXES=tm- bash hack/e2e/e2e.sh github-cleanup
+controller-test-github-cleanup: ## Delete orphan tm- teams and repo-priv-/repo-pub- repos left by controller-test-live runs. Env: E2E_DRY_RUN=true|false
+	E2E_CLEANUP_REPOS=false E2E_CLEANUP_TEAM_PREFIXES=tm- E2E_CLEANUP_REPO_PREFIXES=repo-priv-,repo-pub- bash hack/e2e/e2e.sh github-cleanup
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter & yamllint
