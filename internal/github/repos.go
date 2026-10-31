@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/palantir/go-githubapp/githubapp"
 	githubv4 "github.com/shurcooL/githubv4"
 
@@ -257,8 +257,8 @@ func (t *DefaultRepositoryProvider) RepositoryTeams(ctx context.Context, repo st
 }
 func (t *DefaultRepositoryProvider) RepositoryTeamAdd(ctx context.Context, repo, team string, permission repoguardsapv1.GithubTeamPermission) error {
 
-	opts := github.TeamAddTeamRepoOptions{Permission: string(permission)}
-	response, err := t.teamsService.AddTeamRepoBySlug(ctx, t.organization, team, t.organization, repo, &opts)
+	opts := github.AddTeamRepoRequest{Permission: github.Ptr(string(permission))}
+	response, err := t.teamsService.AddTeamRepoBySlug(ctx, t.organization, team, t.organization, repo, opts)
 	if err != nil {
 		return err
 	}

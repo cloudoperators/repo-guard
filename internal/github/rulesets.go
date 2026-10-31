@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	gogithub "github.com/google/go-github/v90/github"
+	gogithub "github.com/google/go-github/v93/github"
 	"github.com/palantir/go-githubapp/githubapp"
 
 	v1 "github.com/cloudoperators/repo-guard/api/v1"

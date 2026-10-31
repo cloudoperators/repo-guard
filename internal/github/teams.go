@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/http"
 
-	gogithub "github.com/google/go-github/v90/github"
+	gogithub "github.com/google/go-github/v93/github"
 	"github.com/gosimple/slug"
 	"github.com/palantir/go-githubapp/githubapp"
 
@@ -233,7 +233,7 @@ func (t DefaultTeamsProvider) AddTeam(ctx context.Context, team string) error {
 	privacyLevel := "closed"
 	description := "membership to this team is managed by github-guard"
 
-	_, response, err := t.service.CreateTeam(ctx, t.organization, gogithub.NewTeam{Name: team, Privacy: &privacyLevel, Description: &description})
+	_, response, err := t.service.CreateTeam(ctx, t.organization, gogithub.CreateTeamRequest{Name: team, Privacy: &privacyLevel, Description: &description})
 	if err != nil {
 		// Treat 422 "Name must be unique for this org" as success (team already exists)
 		if response != nil && response.StatusCode == 422 {
@@ -267,7 +267,7 @@ func (t DefaultTeamsProvider) RemoveTeam(ctx context.Context, team string) error
 
 func (t DefaultTeamsProvider) AddUser(ctx context.Context, team, user string) (bool, error) {
 
-	_, response, err := t.service.AddTeamMembershipBySlug(ctx, t.organization, slug.Make(team), user, nil)
+	_, response, err := t.service.AddTeamMembershipBySlug(ctx, t.organization, slug.Make(team), user, gogithub.AddTeamMembershipRequest{})
 	if err != nil {
 		if response != nil {
 			if response.StatusCode == 404 {

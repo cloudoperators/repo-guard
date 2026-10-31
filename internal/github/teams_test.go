@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	gogithub "github.com/google/go-github/v90/github"
+	gogithub "github.com/google/go-github/v93/github"
 )
 
 func TestTeamsProvider_AddUser(t *testing.T) {

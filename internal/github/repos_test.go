@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gogithub "github.com/google/go-github/v90/github"
+	gogithub "github.com/google/go-github/v93/github"
 )
 
 // newTestRepositoryProvider creates a DefaultRepositoryProvider backed by a

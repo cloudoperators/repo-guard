@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	githubAPI "github.com/google/go-github/v90/github"
+	githubAPI "github.com/google/go-github/v93/github"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

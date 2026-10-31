@@ -24,7 +24,7 @@ import (
 	v1 "github.com/cloudoperators/repo-guard/api/v1"
 	"github.com/cloudoperators/repo-guard/internal/github"
 	ghmetrics "github.com/cloudoperators/repo-guard/internal/metrics"
-	gogithub "github.com/google/go-github/v90/github"
+	gogithub "github.com/google/go-github/v93/github"
 )
 
 const rulesetFinalizer = "repo-guard.cloudoperators.dev/ruleset"

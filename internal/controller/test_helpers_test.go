@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	githubAPI "github.com/google/go-github/v90/github"
+	githubAPI "github.com/google/go-github/v93/github"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -174,11 +174,11 @@ func githubEnsureTeam(ctx context.Context, client *githubAPI.Client, org, teamSl
 	}
 
 	// Create team. GitHub slug is derived from name; keeping name == slugOrName is fine for tests.
-	newTeam := &githubAPI.NewTeam{
+	newTeam := githubAPI.CreateTeamRequest{
 		Name:    teamSlugOrName,
 		Privacy: githubAPI.Ptr("closed"),
 	}
-	_, resp, err = client.Teams.CreateTeam(ctx, org, *newTeam)
+	_, resp, err = client.Teams.CreateTeam(ctx, org, newTeam)
 	if err == nil {
 		return nil
 	}
@@ -235,8 +235,8 @@ func githubEnsureRepoWithVisibility(ctx context.Context, client *githubAPI.Clien
 		return nil
 	}
 
-	r := &githubAPI.Repository{
-		Name:       githubAPI.Ptr(repo),
+	r := githubAPI.CreateRepositoryRequest{
+		Name:       repo,
 		Private:    githubAPI.Ptr(visibility != "public"),
 		Visibility: githubAPI.Ptr(visibility),
 	}
