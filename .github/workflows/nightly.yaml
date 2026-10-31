@@ -118,5 +118,6 @@ jobs:
           E2E_DRY_RUN: "false"
           E2E_CLEANUP_REPOS: "true"
           E2E_REPO_PREFIX: "e2e-"
+          E2E_CLEANUP_TEAM_PREFIXES: "e2e-ruleset-gh-"
           TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: make e2e-down e2e-github-cleanup

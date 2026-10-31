@@ -1006,6 +1006,7 @@ cmd_test() {
   run_owner_scenario
   run_provider_scenarios
   run_repository_scenarios
+  run_ruleset_scenario
 
   # All steps completed successfully — clear failure trap and print success summary
   trap - ERR
@@ -1740,6 +1741,167 @@ cmd_github_cleanup() {
     fi
 
   echo "[$(ts)] STEP: GitHub cleanup finished (dryRun=${dry})"
+}
+
+# ------------------------------
+# Ruleset scenario
+# ------------------------------
+# Applies a GithubOrganizationRuleset CR targeting a freshly-created repository
+# and verifies the rule is visible on that repository via the GitHub API.
+# In mock mode the API call to verify the repo-level ruleset is skipped because
+# the mock server does not implement GET /repos/{org}/{repo}/rulesets.
+run_ruleset_scenario() {
+  ensure_jq
+  local ORG GITHUB_NAME NS
+  ORG=$(read_env_var ORGANIZATION)
+  NS="${NAMESPACE}"
+  GITHUB_NAME=$(get_github_name "${NS}")
+
+  if [[ -z "$GITHUB_NAME" ]]; then
+    log_info "Ruleset scenario skipped: no Github CR found in ${NS}"
+    return 0
+  fi
+
+  # Derive a unique suffix so parallel/repeated runs don't collide.
+  local SUFFIX
+  SUFFIX=$(tr -dc 'a-f0-9' < /dev/urandom 2>/dev/null | head -c 8 || date +%s | tail -c 8)
+  local REPO_NAME="e2e-rs-${SUFFIX}"
+  local RS_NAME="e2e-ruleset-${SUFFIX}"
+  local RS_GITHUB_NAME="e2e-ruleset-gh-${SUFFIX}"
+
+  section_begin "Ruleset scenario (repo=${REPO_NAME})"
+
+  # Obtain a short-lived GitHub App token (or fall back to mock token).
+  local TOKEN="${GITHUB_TOKEN:-}"
+  if [[ -z "$TOKEN" ]]; then
+    TOKEN=$(github_get_installation_token 2>/dev/null) || TOKEN=""
+  fi
+  if [[ -z "$TOKEN" ]]; then
+    log_info "Ruleset scenario skipped: could not obtain GitHub token"
+    return 0
+  fi
+  GITHUB_TOKEN="$TOKEN"
+
+  # Create a private repo scoped to this run.
+  log_step "Creating repo ${ORG}/${REPO_NAME}"
+  local code
+  code=$(github_create_repo "${REPO_NAME}" "true")
+  if [[ "$code" != "201" && "$code" != "200" ]]; then
+    log_info "Ruleset scenario: failed to create repo (HTTP ${code}); skipping"
+    return 0
+  fi
+
+  # Delete the repo on exit regardless of outcome.
+  local _rs_cleanup_repo="${REPO_NAME}"
+  local _rs_cleanup_org="${ORG}"
+  local _rs_cleanup_token="${GITHUB_TOKEN}"
+  local _rs_cleanup_api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
+  # shellcheck disable=SC2064
+  trap "
+    curl -sS -o /dev/null -w '' -X DELETE \
+      -H 'Authorization: token ${_rs_cleanup_token}' \
+      -H 'Accept: application/vnd.github+json' \
+      '${_rs_cleanup_api}/repos/${_rs_cleanup_org}/${_rs_cleanup_repo}' || true
+  " RETURN
+
+  # Apply the GithubOrganizationRuleset CR.
+  log_step "Applying GithubOrganizationRuleset ${RS_NAME} in ${NS}"
+  kubectl -n "${NS}" apply -f - <<EOF
+apiVersion: repo-guard.cloudoperators.dev/v1
+kind: GithubOrganizationRuleset
+metadata:
+  name: ${RS_NAME}
+  labels:
+    repo-guard.cloudoperators.dev/addRuleset: "true"
+    repo-guard.cloudoperators.dev/removeRuleset: "true"
+spec:
+  github: ${GITHUB_NAME}
+  organization: ${ORG}
+  name: ${RS_GITHUB_NAME}
+  target: branch
+  enforcement: active
+  conditions:
+    refName:
+      include: ["~DEFAULT_BRANCH"]
+    repositoryName:
+      include: ["${REPO_NAME}"]
+  rules:
+    nonFastForward: true
+EOF
+
+  # Wait for the CR to reach Ready state and capture the rulesetId.
+  log_step "Waiting for GithubOrganizationRuleset/${RS_NAME} to be Ready"
+  local timeout_sec=${E2E_TIMEOUT:-180}
+  local interval=${E2E_INTERVAL:-3}
+  local start; start=$(date +%s)
+  local RULESET_ID=""
+  while true; do
+    local state
+    state=$(kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" \
+      -o jsonpath='{.status.state}' 2>/dev/null || true)
+    RULESET_ID=$(kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" \
+      -o jsonpath='{.status.rulesetId}' 2>/dev/null || true)
+    if [[ "$state" == "Ready" && -n "$RULESET_ID" ]]; then break; fi
+    local now; now=$(date +%s)
+    if (( now - start >= timeout_sec )); then
+      echo "[$(ts)] ERROR: Timeout waiting for GithubOrganizationRuleset/${RS_NAME} to be Ready (last state=${state})" >&2
+      kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" -o json >&2 || true
+      kubectl -n "${NS}" delete githuborganizationruleset "${RS_NAME}" --ignore-not-found >/dev/null 2>&1 || true
+      return 1
+    fi
+    sleep "$interval"
+  done
+  log_observe "GithubOrganizationRuleset/${RS_NAME} Ready, rulesetId=${RULESET_ID}"
+
+  # In live mode: verify the ruleset is visible on the targeted repo via GitHub API.
+  if [[ "${USE_MOCK_GITHUB}" != "true" ]]; then
+    log_step "Verifying ruleset ${RULESET_ID} is applied to repo ${REPO_NAME} on GitHub"
+    local found=false
+    start=$(date +%s)
+    while true; do
+      local repo_rulesets_code
+      repo_rulesets_code=$(curl -sS \
+        -o /tmp/repo-rulesets.json \
+        -w "%{http_code}" \
+        -H "Authorization: token ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "${_rs_cleanup_api}/repos/${ORG}/${REPO_NAME}/rulesets")
+      if [[ "$repo_rulesets_code" == "200" ]]; then
+        if jq -e --argjson id "${RULESET_ID}" '.[] | select(.id == $id)' /tmp/repo-rulesets.json >/dev/null 2>&1; then
+          found=true
+          break
+        fi
+      fi
+      local now; now=$(date +%s)
+      if (( now - start >= timeout_sec )); then
+        echo "[$(ts)] ERROR: Ruleset ${RULESET_ID} not found on repo ${REPO_NAME} after ${timeout_sec}s" >&2
+        cat /tmp/repo-rulesets.json >&2 || true
+        kubectl -n "${NS}" delete githuborganizationruleset "${RS_NAME}" --ignore-not-found >/dev/null 2>&1 || true
+        return 1
+      fi
+      sleep "$interval"
+    done
+    if [[ "$found" == "true" ]]; then
+      log_observe "Ruleset ${RULESET_ID} confirmed on repo ${REPO_NAME} ✓"
+    fi
+  else
+    log_info "Mock mode: skipping repo-level ruleset verification (mock server does not implement GET /repos/{org}/{repo}/rulesets)"
+  fi
+
+  # Delete the CR and wait for finalizer cleanup.
+  log_step "Deleting GithubOrganizationRuleset/${RS_NAME}"
+  kubectl -n "${NS}" delete githuborganizationruleset "${RS_NAME}" --ignore-not-found >/dev/null
+  start=$(date +%s)
+  while kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" >/dev/null 2>&1; do
+    local now; now=$(date +%s)
+    if (( now - start >= timeout_sec )); then
+      echo "[$(ts)] WARN: GithubOrganizationRuleset/${RS_NAME} finalizer did not clear within ${timeout_sec}s" >&2
+      break
+    fi
+    sleep "$interval"
+  done
+
+  log_observe "Ruleset scenario completed ✓"
 }
 
 # ------------------------------

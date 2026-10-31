@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	githubAPI "github.com/google/go-github/v90/github"
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -434,6 +435,81 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 		cur := &repoguardsapv1.GithubOrganizationRuleset{}
 		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur)).To(Succeed())
 		Expect(cur.Status.RulesetID).To(BeNil(), "addRuleset=false must not create a ruleset in GitHub")
+	})
+
+	It("applies ruleset rules to a targeted repository (live GitHub only)", func() {
+		if isMockMode() {
+			Skip("requires real GitHub to verify repo-level ruleset enforcement")
+		}
+
+		ghClient := newTestGithubClient()
+		repoName := "rg-test-rs-" + uniqueID
+
+		// Create a private repo scoped to this test run.
+		Expect(githubEnsureRepoWithVisibility(ctx, ghClient, orgName, repoName, "private")).To(Succeed())
+		DeferCleanup(func() {
+			_, _ = ghClient.Repositories.Delete(ctx, orgName, repoName)
+		})
+
+		rulesetName := "test-repo-rule-" + uniqueID
+		rsResourceName := "ruleset-repo-" + uniqueID
+
+		rs := &repoguardsapv1.GithubOrganizationRuleset{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rsResourceName,
+				Namespace: uniqueNamespace,
+			},
+			Spec: repoguardsapv1.GithubOrganizationRulesetSpec{
+				Github:       uniqueGithubName,
+				Organization: orgName,
+				Name:         rulesetName,
+				Target:       repoguardsapv1.RulesetTargetBranch,
+				Enforcement:  repoguardsapv1.RulesetEnforcementActive,
+				Conditions: &repoguardsapv1.RulesetConditions{
+					RefName: &repoguardsapv1.RulesetRefCondition{
+						Include: []string{"~DEFAULT_BRANCH"},
+					},
+					RepositoryName: &repoguardsapv1.RulesetRepositoryNameCondition{
+						Include: []string{repoName},
+					},
+				},
+				Rules: &repoguardsapv1.RulesetRules{
+					NonFastForward: githubAPI.Ptr(true),
+				},
+			},
+		}
+		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())
+		DeferCleanup(func() { _ = deleteIgnoreNotFound(ctx, k8sClient, rs) })
+
+		// Wait for the controller to push it to GitHub.
+		var rulesetID int64
+		Eventually(func() bool {
+			cur := &repoguardsapv1.GithubOrganizationRuleset{}
+			if err := k8sClient.Get(ctx, types.NamespacedName{Namespace: uniqueNamespace, Name: rsResourceName}, cur); err != nil {
+				return false
+			}
+			if cur.Status.RulesetID == nil || cur.Status.State != repoguardsapv1.GithubOrganizationRulesetStateReady {
+				return false
+			}
+			rulesetID = *cur.Status.RulesetID
+			return true
+		}, 3*timeout, interval).Should(BeTrue())
+		Expect(rulesetID).To(BeNumerically(">", 0))
+
+		// Verify the ruleset is visible on the targeted repository via the GitHub API.
+		Eventually(func() bool {
+			rulesets, _, err := ghClient.Repositories.GetAllRulesets(ctx, orgName, repoName, nil)
+			if err != nil {
+				return false
+			}
+			for _, r := range rulesets {
+				if r.GetID() == rulesetID {
+					return true
+				}
+			}
+			return false
+		}, 3*timeout, interval).Should(BeTrue(),
+			"ruleset %d should appear on repo %s after controller reconciles", rulesetID, repoName)
 	})
 
 	It("removeRuleset=false orphans the GitHub ruleset instead of deleting it on CR removal", func() {
