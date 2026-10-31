@@ -44,6 +44,14 @@ jobs:
           # approach is not supported by godotenv.
           TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
         run: make controller-test-live
+      - name: Cleanup controller-test orphan teams
+        if: always()
+        env:
+          E2E_DRY_RUN: "false"
+          E2E_CLEANUP_REPOS: "false"
+          E2E_CLEANUP_TEAM_PREFIXES: "tm-"
+          TEST_GITHUB_PRIVATE_KEY: ${{ secrets.TEST_GITHUB_PRIVATE_KEY }}
+        run: make controller-test-github-cleanup
 
   e2e-live:
     needs: controller-test-live

@@ -1606,6 +1606,38 @@ cmd_github_cleanup() {
     fi
   done
 
+  # Optionally delete teams matching a prefix (e.g. leftover controller-test tm- teams)
+  local team_prefixes=${E2E_CLEANUP_TEAM_PREFIXES:-}
+  if [[ -n "$team_prefixes" ]]; then
+    IFS=',' read -ra prefix_list <<< "$team_prefixes"
+    for prefix in "${prefix_list[@]}"; do
+      [[ -z "$prefix" ]] && continue
+      local prefix_teams
+      prefix_teams=$(jq -r --arg p "$prefix" '.[] | select(.slug | startswith($p)) | .slug' /tmp/teams.json)
+      if [[ -z "$prefix_teams" ]]; then
+        echo "[$(ts)] INFO: No teams found with prefix '${prefix}'."
+        continue
+      fi
+      echo "[$(ts)] INFO: Teams to delete with prefix '${prefix}':"
+      echo "$prefix_teams" | sed 's/^/  - /'
+      while IFS= read -r slug; do
+        [[ -z "$slug" ]] && continue
+        if [[ "$dry" == "true" ]]; then
+          echo "[$(ts)] INFO: DRY-RUN would delete team: ${slug}"
+          continue
+        fi
+        local pcode
+        pcode=$(github_delete_team "$slug")
+        if [[ "$pcode" == "204" || "$pcode" == "200" ]]; then
+          echo "[$(ts)] INFO: Deleted team: ${slug}"
+          deleted_any=true
+        else
+          echo "[$(ts)] WARN: Failed to delete team ${slug} (HTTP ${pcode}); continuing" >&2
+        fi
+      done <<< "$prefix_teams"
+    done
+  fi
+
   # Optionally delete repositories by prefix
   if [[ "$do_repos" == "true" ]]; then
     if [[ -z "$repo_prefix" ]]; then
@@ -1896,9 +1928,24 @@ github_fetch_teams_json() {
   local api="${GITHUB_API:-$(read_env_var GITHUB_V3_API_URL)}"
   local org=$(read_env_var ORGANIZATION)
   local token="${GITHUB_TOKEN:-$(read_env_var GITHUB_TOKEN)}"
-  curl -sS -o /tmp/teams.json -w "%{http_code}" \
-    -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
-    "${api}/orgs/${org}/teams?per_page=100"
+  local page=1 all="[]" batch code
+  while true; do
+    code=$(curl -sS -o /tmp/teams_page.json -w "%{http_code}" \
+      -H "Authorization: token ${token}" -H "Accept: application/vnd.github+json" \
+      "${api}/orgs/${org}/teams?per_page=100&page=${page}")
+    if [[ "$code" != "200" ]]; then
+      echo "$code"
+      return
+    fi
+    batch=$(cat /tmp/teams_page.json)
+    if [[ "$(echo "$batch" | jq 'length')" -eq 0 ]]; then
+      break
+    fi
+    all=$(echo "$all $batch" | jq -s '.[0] + .[1]')
+    page=$((page + 1))
+  done
+  echo "$all" > /tmp/teams.json
+  echo "200"
 }
 
 github_find_team() {

@@ -162,6 +162,10 @@ e2e-live: ## Full e2e flow against real GitHub (requires credentials in test.env
 e2e-github-cleanup: ## Delete e2e-created GitHub teams (and optionally repos) using GitHub App credentials from test.env. Env: E2E_DRY_RUN=true|false, E2E_CLEANUP_REPOS=true|false, E2E_REPO_PREFIX=<prefix>
 	bash hack/e2e/e2e.sh github-cleanup
 
+.PHONY: controller-test-github-cleanup
+controller-test-github-cleanup: ## Delete orphan tm- teams left by controller-test-live runs. Env: E2E_DRY_RUN=true|false
+	E2E_CLEANUP_REPOS=false E2E_CLEANUP_TEAM_PREFIXES=tm- bash hack/e2e/e2e.sh github-cleanup
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter & yamllint
 	$(GOLANGCI_LINT) run --timeout 5m
