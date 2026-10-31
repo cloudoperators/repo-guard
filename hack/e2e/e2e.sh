@@ -1842,6 +1842,17 @@ EOF
     RULESET_ID=$(kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" \
       -o jsonpath='{.status.rulesetId}' 2>/dev/null || true)
     if [[ "$state" == "Ready" && -n "$RULESET_ID" ]]; then break; fi
+    # Detect plan-level 403 and skip gracefully instead of timing out.
+    if [[ "$state" == "Failed" ]]; then
+      local msg
+      msg=$(kubectl -n "${NS}" get githuborganizationruleset "${RS_NAME}" \
+        -o jsonpath='{.status.message}' 2>/dev/null || true)
+      if [[ "$msg" == *"403"* && "$msg" == *"Upgrade to GitHub"* ]]; then
+        log_info "Ruleset scenario skipped: org does not support rulesets (requires GitHub Team/Enterprise plan)"
+        kubectl -n "${NS}" delete githuborganizationruleset "${RS_NAME}" --ignore-not-found >/dev/null 2>&1 || true
+        return 0
+      fi
+    fi
     local now; now=$(date +%s)
     if (( now - start >= timeout_sec )); then
       echo "[$(ts)] ERROR: Timeout waiting for GithubOrganizationRuleset/${RS_NAME} to be Ready (last state=${state})" >&2
