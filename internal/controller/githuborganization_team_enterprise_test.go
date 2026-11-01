@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -97,30 +98,29 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		// must ever be generated for it.
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 
-		// Nudge the controller immediately so we don't rely solely on the
-		// default requeue interval before the first reconcile fires.
-		Eventually(func() error {
-			cur := &repoguardsapv1.GithubOrganization{}
-			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
-				return err
-			}
-			patch := client.MergeFrom(cur.DeepCopy())
-			if cur.Annotations == nil {
-				cur.Annotations = map[string]string{}
-			}
-			cur.Annotations["repo-guard.cloudoperators.dev/reconcile-trigger"] = "1"
-			return k8sClient.Patch(ctx, cur, patch)
-		}, timeout, interval).Should(Succeed())
-
-		// Wait until the controller has fetched the team list at least once
-		// (status.Teams becomes non-empty when the first reconcile completes its
-		// team-list phase, regardless of any pending/skipped operations).
+		// Keep nudging the controller with a monotonically-incrementing annotation so
+		// that a new reconcile event is queued on every interval tick — even if earlier
+		// events are still waiting behind other test resources.  A single one-shot patch
+		// can sit in the queue for 5+ minutes when the controller is busy, so we repeat
+		// until Status.Teams becomes non-empty.
+		nudgeCounter := 0
 		Eventually(func() int {
 			cur := &repoguardsapv1.GithubOrganization{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
 				return 0
 			}
-			return len(cur.Status.Teams)
+			if len(cur.Status.Teams) > 0 {
+				return len(cur.Status.Teams)
+			}
+			// Bump annotation to force a new watch event on every poll cycle.
+			nudgeCounter++
+			patch := client.MergeFrom(cur.DeepCopy())
+			if cur.Annotations == nil {
+				cur.Annotations = map[string]string{}
+			}
+			cur.Annotations["repo-guard.cloudoperators.dev/reconcile-trigger"] = strconv.Itoa(nudgeCounter)
+			_ = k8sClient.Patch(ctx, cur, patch)
+			return 0
 		}, 10*timeout, interval).Should(BeNumerically(">", 0))
 		// Snapshot the status right after the first team-list fetch.
 		cur := &repoguardsapv1.GithubOrganization{}
