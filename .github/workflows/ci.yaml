@@ -11,6 +11,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  build:
+    uses: cloudoperators/common/.github/workflows/shared-go-build.yaml@main
+
   lint:
     uses: cloudoperators/common/.github/workflows/shared-go-lint.yaml@main
     with:

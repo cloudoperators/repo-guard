@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: GHCR Cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Preview deletions without actually deleting'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  cleanup-container:
+    uses: cloudoperators/common/.github/workflows/shared-ghcr-cleanup.yaml@main
+    permissions:
+      packages: write
+    with:
+      package: repo-guard
+      keep-n-tagged: 10
+      delete-untagged: true
+      delete-ghost-images: true
+      delete-partial-images: true
+      dry-run: ${{ inputs.dry-run != false }}
+
+  cleanup-helm:
+    uses: cloudoperators/common/.github/workflows/shared-ghcr-cleanup.yaml@main
+    permissions:
+      packages: write
+    with:
+      package: repo-guard/charts/repo-guard
+      keep-n-tagged: 10
+      delete-untagged: true
+      delete-ghost-images: true
+      dry-run: ${{ inputs.dry-run != false }}
