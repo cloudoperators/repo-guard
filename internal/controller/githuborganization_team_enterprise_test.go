@@ -97,6 +97,21 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		// must ever be generated for it.
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 
+		// Nudge the controller immediately so we don't rely solely on the
+		// default requeue interval before the first reconcile fires.
+		Eventually(func() error {
+			cur := &repoguardsapv1.GithubOrganization{}
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
+				return err
+			}
+			patch := client.MergeFrom(cur.DeepCopy())
+			if cur.Annotations == nil {
+				cur.Annotations = map[string]string{}
+			}
+			cur.Annotations["repo-guard.cloudoperators.dev/reconcile-trigger"] = "1"
+			return k8sClient.Patch(ctx, cur, patch)
+		}, timeout, interval).Should(Succeed())
+
 		// Wait until the controller has fetched the team list at least once
 		// (status.Teams becomes non-empty when the first reconcile completes its
 		// team-list phase, regardless of any pending/skipped operations).
