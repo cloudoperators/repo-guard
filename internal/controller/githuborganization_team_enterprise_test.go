@@ -102,15 +102,15 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		// that a new reconcile event is queued on every interval tick — even if earlier
 		// events are still waiting behind other test resources.  A single one-shot patch
 		// can sit in the queue for 5+ minutes when the controller is busy, so we repeat
-		// until Status.Teams becomes non-empty.
+		// until the reconcile completes.
 		nudgeCounter := 0
-		Eventually(func() int {
+		Eventually(func() repoguardsapv1.GithubOrganizationState {
 			cur := &repoguardsapv1.GithubOrganization{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
-				return 0
+				return ""
 			}
-			if len(cur.Status.Teams) > 0 {
-				return len(cur.Status.Teams)
+			if cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete {
+				return cur.Status.OrganizationStatus
 			}
 			// Bump annotation to force a new watch event on every poll cycle.
 			nudgeCounter++
@@ -120,9 +120,9 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 			}
 			cur.Annotations["repo-guard.cloudoperators.dev/reconcile-trigger"] = strconv.Itoa(nudgeCounter)
 			_ = k8sClient.Patch(ctx, cur, patch)
-			return 0
-		}, 10*timeout, interval).Should(BeNumerically(">", 0))
-		// Snapshot the status right after the first team-list fetch.
+			return ""
+		}, 10*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationStateComplete))
+		// Snapshot the status right after the first reconcile completes.
 		cur := &repoguardsapv1.GithubOrganization{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur)).To(Succeed())
 
