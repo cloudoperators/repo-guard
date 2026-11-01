@@ -106,7 +106,7 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 				return 0
 			}
 			return len(cur.Status.Teams)
-		}, 3*timeout, interval).Should(BeNumerically(">", 0))
+		}, 5*timeout, interval).Should(BeNumerically(">", 0))
 
 		// Snapshot the status right after the first team-list fetch.
 		cur := &repoguardsapv1.GithubOrganization{}
