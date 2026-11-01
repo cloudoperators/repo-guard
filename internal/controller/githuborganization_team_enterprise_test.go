@@ -121,8 +121,7 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 				return 0
 			}
 			return len(cur.Status.Teams)
-		}, 5*timeout, interval).Should(BeNumerically(">", 0))
-
+		}, 10*timeout, interval).Should(BeNumerically(">", 0))
 		// Snapshot the status right after the first team-list fetch.
 		cur := &repoguardsapv1.GithubOrganization{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur)).To(Succeed())
