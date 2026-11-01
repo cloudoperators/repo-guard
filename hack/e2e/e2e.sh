@@ -2283,9 +2283,28 @@ wait_for_org_admin() {
         fi
       fi
       local now=$(date +%s)
+      # Debug: also check mock membership endpoint directly (shows if PUT was received)
+      if e2e_verbose_true; then
+        local mock_api="${GITHUB_API:-}"
+        if [[ -n "$mock_api" ]]; then
+          local mem_role
+          mem_role=$(curl -fsS -H "Authorization: token ${GITHUB_TOKEN:-mock-token}" \
+            -H "Accept: application/vnd.github+json" \
+            "${mock_api}/orgs/$(read_env_var ORGANIZATION)/memberships/${username}" \
+            2>/dev/null | jq -r '.role // "unknown"' 2>/dev/null || echo "unknown")
+          log_observe "mock /memberships/${username} role=${mem_role} (PUT reached mock: $([ "$mem_role" == "admin" ] && echo yes || echo no))"
+        fi
+      fi
       if (( now - start >= timeout_sec )); then
         echo "[$(ts)] ERROR: Timeout waiting for ${username} to be org admin (mock mode)" >&2
-        [[ -n "$org_name" ]] && kubectl -n "${NAMESPACE}" get githuborganization "$org_name" -o json | jq '.status.organizationOwners' >&2 || true
+        if [[ -n "$org_name" ]]; then
+          echo "[$(ts)] DEBUG: GithubOrganization.status.organizationOwners:" >&2
+          kubectl -n "${NAMESPACE}" get githuborganization "$org_name" -o json | jq '.status.organizationOwners' >&2 || true
+          echo "[$(ts)] DEBUG: GithubOrganization.status.operations.organizationOwnerOperations:" >&2
+          kubectl -n "${NAMESPACE}" get githuborganization "$org_name" -o json | jq '.status.operations.organizationOwnerOperations' >&2 || true
+        fi
+        echo "[$(ts)] DEBUG: Last controller logs:" >&2
+        kubectl -n "${NAMESPACE}" logs deploy/repo-guard-controller-manager --tail=60 2>/dev/null | grep -i "owner\|admin\|membership\|organizationOwner\|ChangeToOwner\|organization owner" >&2 || true
         return 1
       fi
       if e2e_verbose_true; then log_observe "${username} not in org owners yet (retrying, mock mode)"; fi
