@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -405,8 +406,32 @@ func registerMockHandlers(mux *http.ServeMux, cfg MockConfig) {
 			snapshot := make([]MockTeam, len(teams))
 			copy(snapshot, teams)
 			stateMu.Unlock()
-			result := make([]map[string]any, 0, len(snapshot))
-			for _, team := range snapshot {
+
+			// Honour per_page / page query params so callers that paginate
+			// (e.g. github_fetch_teams_json in e2e.sh) terminate correctly.
+			perPage := 100
+			if pp := r.URL.Query().Get("per_page"); pp != "" {
+				if n, err := strconv.Atoi(pp); err == nil && n > 0 {
+					perPage = n
+				}
+			}
+			page := 1
+			if p := r.URL.Query().Get("page"); p != "" {
+				if n, err := strconv.Atoi(p); err == nil && n > 0 {
+					page = n
+				}
+			}
+			start := (page - 1) * perPage
+			if start >= len(snapshot) {
+				writeJSON(w, []map[string]any{})
+				return
+			}
+			end := start + perPage
+			if end > len(snapshot) {
+				end = len(snapshot)
+			}
+			result := make([]map[string]any, 0, end-start)
+			for _, team := range snapshot[start:end] {
 				result = append(result, teamToMap(team))
 			}
 			writeJSON(w, result)
