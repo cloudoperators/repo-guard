@@ -483,8 +483,8 @@ var _ = Describe("GithubOrganizationRuleset controller", func() {
 					},
 				},
 				Rules: &repoguardsapv1.RulesetRules{
-						NonFastForward: func() *bool { v := true; return &v }(),
-					},
+					NonFastForward: func() *bool { v := true; return &v }(),
+				},
 			},
 		}
 		Expect(ensureResourceCreated(ctx, rs)).To(Succeed())

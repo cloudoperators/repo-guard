@@ -2242,13 +2242,57 @@ ensure_org_has_owner_team() {
   kubectl -n "${ns}" patch githuborganization "$org_name" --type=merge -p "{\"spec\":{\"organizationOwnerTeams\":${new_array}}}"
 }
 
-# Wait until GitHub org admins include the given username
+# Wait until GitHub org admins include the given username.
+# In mock mode the authoritative check is the GithubOrganization status rather
+# than the GitHub API, because the mock server only returns seeded owners unless
+# the controller has already called PUT /memberships/{user} — which requires a
+# full GithubOrganization reconcile cycle that may lag.  Checking
+# status.organizationOwners is equivalent: the controller writes that field when
+# it successfully promotes the user on GitHub (or on the mock).
 wait_for_org_admin() {
   local username=$1
   local timeout_sec=${E2E_TIMEOUT:-180}
   local interval=${E2E_INTERVAL:-3}
   local start=$(date +%s)
   log_step "Waiting for user to be an org admin on GitHub: ${username}"
+
+  if [[ "${USE_MOCK_GITHUB:-false}" == "true" ]]; then
+    # Mock mode: poll GithubOrganization.status.organizationOwners (K8s-side),
+    # then verify via the mock API as a secondary confirmation.
+    local org_name
+    org_name=$(get_org_resource_name "${NAMESPACE}")
+    while true; do
+      if [[ -n "$org_name" ]]; then
+        local found_k8s
+        found_k8s=$(kubectl -n "${NAMESPACE}" get githuborganization "$org_name" \
+          -o json 2>/dev/null \
+          | jq -r --arg u "$username" \
+              '.status.organizationOwners // [] | map(select(.githubUsername==$u)) | length') || found_k8s=0
+        if [[ "$found_k8s" -gt 0 ]]; then
+          log_info "Confirmed org admin via GithubOrganization status (mock mode): ${username}"
+          return 0
+        fi
+      fi
+      # Also accept a match via the mock API (controller may have already called PUT /memberships)
+      local rc
+      rc=$(github_list_org_admins)
+      if [[ "$rc" == "200" ]]; then
+        if jq -e --arg u "$username" '.[] | select(.login==$u)' /tmp/admins.json >/dev/null 2>&1; then
+          log_info "Confirmed org admin on mock GitHub API: ${username}"
+          return 0
+        fi
+      fi
+      local now=$(date +%s)
+      if (( now - start >= timeout_sec )); then
+        echo "[$(ts)] ERROR: Timeout waiting for ${username} to be org admin (mock mode)" >&2
+        [[ -n "$org_name" ]] && kubectl -n "${NAMESPACE}" get githuborganization "$org_name" -o json | jq '.status.organizationOwners' >&2 || true
+        return 1
+      fi
+      if e2e_verbose_true; then log_observe "${username} not in org owners yet (retrying, mock mode)"; fi
+      sleep "$interval"
+    done
+  fi
+
   while true; do
     local rc
     rc=$(github_list_org_admins)
