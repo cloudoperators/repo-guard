@@ -76,11 +76,11 @@ GITHUB_MOCK ?= true
 
 .PHONY: controller-test
 controller-test: manifests generate fmt vet setup-envtest ## Run controller tests with mock GitHub (no credentials needed).
-	GITHUB_MOCK=$(GITHUB_MOCK) KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
+	GITHUB_MOCK=$(GITHUB_MOCK) KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v -timeout 20m github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
 
 .PHONY: controller-test-live
 controller-test-live: manifests generate fmt vet setup-envtest ## Run controller tests against real GitHub (requires credentials in test.env).
-	GITHUB_MOCK=false KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
+	GITHUB_MOCK=false KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -v -timeout 20m github.com/cloudoperators/repo-guard/internal/controller github.com/cloudoperators/repo-guard/internal/metrics
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.

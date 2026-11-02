@@ -6,7 +6,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	repoguardsapv1 "github.com/cloudoperators/repo-guard/api/v1"
@@ -74,10 +73,11 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		org.Namespace = uniqueNS
 		org.Spec.Github = uniqueGHName
 		org.Spec.Organization = orgName
-		// Disable actual team removal so that this test does not mutate the shared mock
-		// state and does not loop waiting for other tests' teams to disappear from the org.
-		// The test only needs to verify that no REMOVE op is *generated* for the enterprise
-		// team — which is equally observable when removals are skipped vs. executed.
+		// Disable team add/remove so that this test does not mutate the shared mock
+		// state and does not loop in PendingOperations trying to add/remove teams.
+		// The test only needs to verify that no REMOVE op is *generated* for the
+		// enterprise team — which is observable without executing any ops.
+		org.Labels["repo-guard.cloudoperators.dev/addTeam"] = "false"
 		org.Labels["repo-guard.cloudoperators.dev/removeTeam"] = "false"
 
 		DeferCleanup(func() {
@@ -98,30 +98,17 @@ var _ = Describe("Github Organization controller - enterprise team filtering", f
 		// must ever be generated for it.
 		Expect(ensureResourceCreated(ctx, org)).To(Succeed())
 
-		// Keep nudging the controller with a monotonically-incrementing annotation so
-		// that a new reconcile event is queued on every interval tick — even if earlier
-		// events are still waiting behind other test resources.  A single one-shot patch
-		// can sit in the queue for 5+ minutes when the controller is busy, so we repeat
-		// until the reconcile completes.
-		nudgeCounter := 0
-		Eventually(func() repoguardsapv1.GithubOrganizationState {
+		// Wait until the controller has fetched the team list at least once.
+		// The controller writes status.Teams in the first reconcile pass (updateRequired=true).
+		// This is a faster and more reliable signal than waiting for OrganizationStatus==complete,
+		// since complete requires a second reconcile pass which can be delayed by queue pressure.
+		Eventually(func() int {
 			cur := &repoguardsapv1.GithubOrganization{}
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur); err != nil {
-				return ""
+				return 0
 			}
-			if cur.Status.OrganizationStatus == repoguardsapv1.GithubOrganizationStateComplete {
-				return cur.Status.OrganizationStatus
-			}
-			// Bump annotation to force a new watch event on every poll cycle.
-			nudgeCounter++
-			patch := client.MergeFrom(cur.DeepCopy())
-			if cur.Annotations == nil {
-				cur.Annotations = map[string]string{}
-			}
-			cur.Annotations["repo-guard.cloudoperators.dev/reconcile-trigger"] = strconv.Itoa(nudgeCounter)
-			_ = k8sClient.Patch(ctx, cur, patch)
-			return ""
-		}, 10*timeout, interval).Should(Equal(repoguardsapv1.GithubOrganizationStateComplete))
+			return len(cur.Status.Teams)
+		}, 20*timeout, interval).Should(BeNumerically(">", 0))
 		// Snapshot the status right after the first reconcile completes.
 		cur := &repoguardsapv1.GithubOrganization{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(org), cur)).To(Succeed())

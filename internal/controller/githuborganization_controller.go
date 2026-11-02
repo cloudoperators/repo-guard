@@ -517,7 +517,7 @@ func (r *GithubOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.R
 				l.Error(err, "error during status update")
 				return reconcile.Result{}, err
 			}
-			return reconcile.Result{}, nil
+			return reconcile.Result{Requeue: true}, nil
 		}
 
 		// find differences and add actions to status
