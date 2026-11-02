@@ -28,15 +28,3 @@ jobs:
       delete-ghost-images: true
       delete-partial-images: true
       dry-run: ${{ inputs.dry-run != false }}
-
-  cleanup-helm:
-    uses: cloudoperators/common/.github/workflows/shared-ghcr-cleanup.yaml@main
-    permissions:
-      packages: write
-    with:
-      runs-on: ubuntu-latest
-      package: repo-guard/charts/repo-guard
-      keep-n-tagged: 10
-      delete-untagged: true
-      delete-ghost-images: true
-      dry-run: ${{ inputs.dry-run != false }}
