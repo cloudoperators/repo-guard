@@ -21,6 +21,7 @@ jobs:
     permissions:
       packages: write
     with:
+      runs-on: ubuntu-latest
       package: repo-guard
       keep-n-tagged: 10
       delete-untagged: true
@@ -33,6 +34,7 @@ jobs:
     permissions:
       packages: write
     with:
+      runs-on: ubuntu-latest
       package: repo-guard/charts/repo-guard
       keep-n-tagged: 10
       delete-untagged: true
