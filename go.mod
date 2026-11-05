@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/cloudoperators/greenhouse v0.13.1
-	github.com/go-ldap/ldap/v3 v3.4.14
+	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/google/go-github/v93 v93.0.0
 	github.com/gosimple/slug v1.15.0
 	github.com/joho/godotenv v1.5.1
